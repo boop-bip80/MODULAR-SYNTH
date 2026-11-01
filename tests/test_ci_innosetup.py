@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 import textwrap
@@ -32,6 +33,7 @@ class InnoSetupSourceTests(unittest.TestCase):
 
     def test_installer_invokes_fetcher_before_wine(self) -> None:
         script = INSTALLER.read_text(encoding="utf-8")
+        self.assertTrue(INSTALLER.stat().st_mode & stat.S_IXUSR)
         self.assertIn('sh utils/fetch-inno-setup.sh "${dlfile}"', script)
         self.assertLess(script.index("sh utils/fetch-inno-setup.sh"), script.index("wineboot -u"))
         self.assertNotIn("jrsoftware.org/download.php", script)
