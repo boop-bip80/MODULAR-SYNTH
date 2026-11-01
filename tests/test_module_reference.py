@@ -150,7 +150,9 @@ class ModuleQuickReferenceTests(unittest.TestCase):
         linked = [path for path, _ in rows]
         self.assertEqual(len(linked), len(set(linked)), "Duplicate factory-patch references")
         self.assertEqual(actual, set(linked), "Update quick reference when factory patches change")
-        self.assertEqual(11, len(actual))
+        self.assertEqual(12, len(actual))
+        self.assertIn("## Twelve factory patches", self.document)
+        self.assertIn("[Cinematic Pulse Score]", self.document)
         for path, classification in rows:
             with self.subTest(path=path):
                 patch = json.loads((ROOT / path).read_text(encoding="utf-8"))
@@ -222,7 +224,7 @@ class ModuleQuickReferenceTests(unittest.TestCase):
             "MODULAR_-_Echo_Motion_Performance.vcv)", self.document
         )
         self.assertIn("Macro8 A–D", self.document)
-        self.assertIn("remaining nine", self.document)
+        self.assertIn("remaining ten", self.document)
 
     def test_documented_factory_menu_matches_actual_source_label(self) -> None:
         menu = (ROOT / "src/override/MenuBar.cpp").read_text(encoding="utf-8")
