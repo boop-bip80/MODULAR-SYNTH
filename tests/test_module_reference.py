@@ -139,7 +139,7 @@ class ModuleQuickReferenceTests(unittest.TestCase):
         linked = [path for path, _ in rows]
         self.assertEqual(len(linked), len(set(linked)), "Duplicate factory-patch references")
         self.assertEqual(actual, set(linked), "Update quick reference when factory patches change")
-        self.assertEqual(9, len(actual))
+        self.assertEqual(10, len(actual))
         for path, classification in rows:
             with self.subTest(path=path):
                 patch = json.loads((ROOT / path).read_text(encoding="utf-8"))
@@ -168,6 +168,65 @@ class ModuleQuickReferenceTests(unittest.TestCase):
         ):
             self.assertIn(route, routes)
         self.assertIn("**LP\nand HP**", self.document)
+
+    def test_echo_motion_performance_has_four_scenes_and_exact_cv_routes(self) -> None:
+        path = PATCH_DIR / "MODULAR_-_Echo_Motion_Performance.vcv"
+        patch = json.loads(path.read_text(encoding="utf-8"))
+        modules_by_id = {m["id"]: m for m in patch["modules"]}
+        modules = {
+            m["model"]: m for m in patch["modules"] if m["plugin"] == "ModularSynth"
+        }
+        routes = {
+            ((modules_by_id[c["outputModuleId"]]["plugin"],
+              modules_by_id[c["outputModuleId"]]["model"]), c["outputId"],
+             (modules_by_id[c["inputModuleId"]]["plugin"],
+              modules_by_id[c["inputModuleId"]]["model"]), c["inputId"])
+            for c in patch["cables"]
+        }
+        expected = (
+            (("ModularSynth", "Macro8"), 0, ("ModularSynth", "StereoEcho"), 2),
+            (("ModularSynth", "Macro8"), 1, ("ModularSynth", "StereoEcho"), 3),
+            (("ModularSynth", "Macro8"), 2, ("ModularSynth", "StereoEcho"), 4),
+            (("ModularSynth", "Macro8"), 3, ("ModularSynth", "MorphVCO"), 2),
+            (("ModularSynth", "StateFilter"), 0, ("ModularSynth", "StereoEcho"), 0),
+            (("ModularSynth", "StateFilter"), 2, ("ModularSynth", "StereoEcho"), 1),
+            (("ModularSynth", "StereoEcho"), 0, ("Cardinal", "HostAudio2"), 0),
+            (("ModularSynth", "StereoEcho"), 1, ("Cardinal", "HostAudio2"), 1),
+        )
+        for route in expected:
+            with self.subTest(route=route):
+                self.assertIn(route, routes)
+        macro = modules["Macro8"]
+        params = {param["id"]: param["value"] for param in macro["params"]}
+        self.assertEqual(macro["data"]["macro8Version"], 1)
+        self.assertEqual(macro["data"]["selectedSlot"], -1)
+        self.assertEqual(macro["data"]["names"][:4], ["Time", "Feedback", "Wet", "Wave"])
+        self.assertEqual(len(macro["data"]["snapshots"]), 4)
+        self.assertTrue(all(isinstance(scene, list) and len(scene) == 8
+                            for scene in macro["data"]["snapshots"]))
+        self.assertAlmostEqual(params[8], 1.2)
+        self.assertTrue(all(params[15 + index] == 0 for index in range(4)))
+        self.assertIn(
+            "[Echo Motion Performance](../patches/examples/"
+            "MODULAR_-_Echo_Motion_Performance.vcv)", self.document
+        )
+        self.assertIn("Macro8 A–D", self.document)
+        self.assertIn("other nine", self.document)
+
+    def test_documented_factory_menu_matches_actual_source_label(self) -> None:
+        menu = (ROOT / "src/override/MenuBar.cpp").read_text(encoding="utf-8")
+        self.assertIn('createSubmenuItem("Open demo / example project"', menu)
+        self.assertIn('if (!demoPatches.empty())', menu)
+        self.assertIn('DISTRHO_OS_SEP_STR "examples"', menu)
+        for file in (
+            DOC_PATH,
+            ROOT / "docs/FACTORY_PATCHES.md",
+            ROOT / "docs/GETTING_STARTED.md",
+        ):
+            with self.subTest(document=file.name):
+                text = file.read_text(encoding="utf-8")
+                self.assertIn("File → Open demo / example project", text)
+                self.assertNotIn("Demo patches", text)
 
     def test_all_relative_markdown_links_resolve(self) -> None:
         for link in re.findall(r"\]\((?!https?://)([^)#]+)(?:#[^)]*)?\)", self.document):
