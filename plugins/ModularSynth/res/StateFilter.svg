@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Original MODULAR-SYNTH State Filter panel, 14 HP x 3U -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" width="71.12mm" height="128.5mm" viewBox="0 0 210 380">
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
