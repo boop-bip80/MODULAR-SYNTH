@@ -62,6 +62,84 @@ class PanelContrastTests(unittest.TestCase):
         self.assertAlmostEqual(contrast((119, 119, 119), (255, 255, 255)),
                                4.478, delta=0.01)
 
+    def test_rgb_envelope_bound_is_conservative_not_stop_only(self) -> None:
+        module = runpy.run_path(str(CHECKER))
+        lower_bound = module["gradient_rgb_contrast_lower_bound"]
+        contrast = module["contrast_ratio"]
+        stops = [(255, 0, 0), (0, 255, 0)]
+        bound = lower_bound((255, 255, 255), stops)
+        self.assertIsNotNone(bound)
+        # Component-wise max is yellow, a stricter bound than either
+        # individual red/green stop because the gradient's middle is mixed.
+        self.assertAlmostEqual(
+            bound, contrast((255, 255, 255), (255, 255, 0)), places=10
+        )
+        for percent in range(101):
+            t = percent / 100.0
+            pixel = (round(255 * (1 - t)), round(255 * t), 0)
+            self.assertLessEqual(bound, contrast((255, 255, 255), pixel) + 1e-10)
+        self.assertEqual(lower_bound((127, 127, 127),
+                                     [(0, 0, 0), (255, 255, 255)]), 1.0)
+        self.assertAlmostEqual(
+            lower_bound((0, 0, 0), [(100, 100, 100), (200, 200, 200)]),
+            contrast((0, 0, 0), (100, 100, 100)),
+        )
+        self.assertIsNone(lower_bound((255, 255, 255), []))
+
+    def test_original_gradients_have_base_only_bounds_but_no_local_pass(self) -> None:
+        result = self.run_cli(REPO, "--fail-on-low-contrast")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for panel in ("MorphVCO", "StateFilter", "Macro8", "StereoEcho"):
+            with self.subTest(panel=panel):
+                section = result.stdout.split(f"[{panel}] label underlay:", 1)[1]
+                section = section.split("\n[", 1)[0]
+                self.assertIn("UNKNOWN TEXT", section)
+                self.assertIn("opaque base-gradient lower bound ≥", section)
+                self.assertIn("base layer only; local contrast UNKNOWN", section)
+        self.assertIn("source-only gradient-base bounds", result.stdout)
+        self.assertIn("no rendered contrast", result.stdout)
+        self.assertNotIn("MEASURED TEXT", result.stdout)
+
+    def test_translucent_gradient_stop_withholds_base_bound(self) -> None:
+        root = self.fixture()
+        svg = root / "plugins/ModularSynth/res/Macro8.svg"
+        self.replace_once(
+            svg, '<stop offset="0" stop-color="#11182A"/>',
+            '<stop offset="0" stop-color="#11182A" stop-opacity=".5"/>'
+        )
+        result = self.run_cli(root, "--fail-on-low-contrast")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        section = result.stdout.split("[Macro8] label underlay:", 1)[1]
+        section = section.split("\n[", 1)[0]
+        self.assertIn("UNKNOWN TEXT MACRO 8", section)
+        self.assertNotIn("opaque base-gradient lower bound", section)
+
+    def test_unresolved_stop_color_withholds_base_bound(self) -> None:
+        root = self.fixture()
+        svg = root / "plugins/ModularSynth/res/MorphVCO.svg"
+        self.replace_once(svg, 'stop-color="#111726"',
+                          'stop-color="currentColor"')
+        result = self.run_cli(root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        section = result.stdout.split("[MorphVCO] label underlay:", 1)[1]
+        section = section.split("\n[", 1)[0]
+        self.assertIn("UNKNOWN TEXT MORPH VCO", section)
+        self.assertNotIn("opaque base-gradient lower bound", section)
+
+    def test_weak_base_bound_is_inconclusive_not_strict_failure(self) -> None:
+        root = self.fixture()
+        svg = root / "plugins/ModularSynth/res/MorphVCO.svg"
+        self.replace_once(svg, 'stop-color="#111726"',
+                          'stop-color="#F3F1FF"')
+        result = self.run_cli(root, "--fail-on-low-contrast")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        section = result.stdout.split("[MorphVCO] label underlay:", 1)[1]
+        section = section.split("\n[", 1)[0]
+        self.assertIn("UNKNOWN TEXT MORPH VCO", section)
+        self.assertIn("opaque base-gradient lower bound ≥1.00:1", section)
+        self.assertNotIn("MEASURED TEXT MORPH VCO", section)
+        self.assertIn("inconclusive under 4.5:1", result.stdout)
+
     def test_real_panels_are_explicitly_unknown_under_gradients(self) -> None:
         result = self.run_cli(REPO)
         self.assertEqual(result.returncode, 0, result.stderr)
