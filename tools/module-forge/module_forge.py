@@ -12,6 +12,7 @@ import re
 import sys
 from pathlib import Path
 from xml.sax.saxutils import escape
+from xml.etree import ElementTree
 
 SLUG_PATTERN = re.compile(r"[A-Z][A-Za-z0-9]{1,39}\Z")
 NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}\Z")
@@ -215,9 +216,8 @@ def check_module(path: Path) -> list[str]:
             errors.append("source model registration does not match manifest")
         if f'"res/{slug}.svg"' not in source:
             errors.append("source panel path does not match generated SVG")
-        from xml.etree import ElementTree
         ElementTree.parse(path / f"{slug}.svg")
-    except (OSError, ValueError, TypeError) as exc:
+    except (OSError, ValueError, TypeError, ElementTree.ParseError) as exc:
         errors.append(f"invalid generated module: {exc}")
     return errors
 
