@@ -46,30 +46,38 @@ class RackWrapperSmokeTests(unittest.TestCase):
                     f"{name} failed isolated HEADLESS shim compilation:\n"
                     + checked.stdout + checked.stderr,
                 )
-            binary = Path(temp) / "rack-wrapper-smoke"
-            compile_command = [
-                "c++", "-std=c++17", "-O1", "-Wall", "-Wextra", "-Wpedantic",
-                "-DHEADLESS", "-I", str(STUBS), str(HARNESS), "-o", str(binary),
-            ]
-            compiled = subprocess.run(
-                compile_command, cwd=ROOT, capture_output=True, text=True, timeout=90,
-                check=False,
+            profiles = (
+                ("strict", ["-O1"]),
+                ("production", ["-O3", "-ffast-math", "-fno-finite-math-only"]),
+                ("aggressive-fastmath", ["-O3", "-ffast-math"]),
             )
-            self.assertEqual(
-                compiled.returncode, 0,
-                "HEADLESS wrapper shim compilation failed:\n"
-                + compiled.stdout + compiled.stderr,
-            )
-            completed = subprocess.run(
-                [str(binary)], cwd=ROOT, capture_output=True, text=True, timeout=30,
-                check=False,
-            )
-            self.assertEqual(
-                completed.returncode, 0,
-                "HEADLESS wrapper shim process smoke failed:\n"
-                + completed.stdout + completed.stderr,
-            )
-            self.assertIn("PASS: 5 HEADLESS wrapper", completed.stdout)
+            for profile, flags in profiles:
+                with self.subTest(profile=profile):
+                    binary = Path(temp) / f"rack-wrapper-smoke-{profile}"
+                    compile_command = [
+                        "c++", "-std=c++17", *flags,
+                        "-Wall", "-Wextra", "-Wpedantic", "-pthread",
+                        "-DHEADLESS", "-I", str(STUBS), str(HARNESS), "-o", str(binary),
+                    ]
+                    compiled = subprocess.run(
+                        compile_command, cwd=ROOT, capture_output=True, text=True,
+                        timeout=90, check=False,
+                    )
+                    self.assertEqual(
+                        compiled.returncode, 0,
+                        f"HEADLESS wrapper shim compilation failed ({profile}):\n"
+                        + compiled.stdout + compiled.stderr,
+                    )
+                    completed = subprocess.run(
+                        [str(binary)], cwd=ROOT, capture_output=True, text=True,
+                        timeout=30, check=False,
+                    )
+                    self.assertEqual(
+                        completed.returncode, 0,
+                        f"HEADLESS wrapper shim process smoke failed ({profile}):\n"
+                        + completed.stdout + completed.stderr,
+                    )
+                    self.assertIn("PASS: 5 HEADLESS wrapper", completed.stdout)
 
 
 if __name__ == "__main__":
