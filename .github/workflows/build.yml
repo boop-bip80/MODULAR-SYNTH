@@ -297,13 +297,16 @@ jobs:
           name: ${{ github.event.repository.name }}-macOS-universal-${{ github.event.pull_request.number || env.SHA8 }}
           path: |
             ${{ github.event.repository.name }}-*.pkg
+          # Cache-warming main builds may not package; tags must have a .pkg.
+          if-no-files-found: ${{ startsWith(github.ref, 'refs/tags/') && 'error' || 'warn' }}
       - uses: softprops/action-gh-release@v1
-        if: ${{ matrix.debug == '0' && startsWith(github.ref, 'refs/tags/') }}
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
           files: |
             ${{ github.event.repository.name }}-*.pkg
 
