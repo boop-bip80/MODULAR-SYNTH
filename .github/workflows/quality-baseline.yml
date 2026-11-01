@@ -32,6 +32,9 @@ jobs:
       - name: Validate manifests, patches, and Git submodules
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Offline submodule pin and SpeexDSP mirror preflight
+        run: python3 -B tools/ci/preflight_submodules.py
+
       - name: Test Module Forge scaffolder
         run: python3 -m unittest discover -s tools/module-forge -p 'test_*.py' -v
 
