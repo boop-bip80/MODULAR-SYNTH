@@ -2,32 +2,38 @@
 
 > **A Cardinal-derived modular sound-design workstation — early development.** Our direction is to let musicians design original DSP modules, build complete instruments from patches, and use those instruments reliably in professional audio workflows.
 
-**Development status: Phase 1 started. No verified MODULAR-SYNTH build or release is currently available.** The fork initially matched [DISTRHO Cardinal](https://github.com/DISTRHO/Cardinal) exactly at upstream commit [`0a530b7`](https://github.com/DISTRHO/Cardinal/commit/0a530b73273afc914ec71a78e9165cd28c53b599) (July 28, 2026). All inherited Cardinal, Rack, DPF and third-party functionality remains credited to its original authors. New features should be assessed through merged code, CI evidence and tested audio artifacts, not this roadmap.
+**Development status: Phase 1 implementation is advancing; its host-build and DAW acceptance gates remain open. No verified MODULAR-SYNTH build or release is currently available.** The fork initially matched [DISTRHO Cardinal](https://github.com/DISTRHO/Cardinal) exactly at upstream commit [`0a530b7`](https://github.com/DISTRHO/Cardinal/commit/0a530b73273afc914ec71a78e9165cd28c53b599) (July 28, 2026). All inherited Cardinal, Rack, DPF and third-party functionality remains credited to its original authors. New features should be assessed through merged code, CI evidence and tested audio artifacts, not this roadmap.
 
-## First source milestone — 2026-11-01
+## First-party source milestones — 2026-11-01
 
-The first original features have been **merged into source on `main`**:
+The following additions are **merged into this fork's `main` branch**:
 
-- [**Morph VCO**](plugins/ModularSynth/src/MorphVCO.cpp): an original, separately attributed 16-channel sine/saw/pulse morphing oscillator with CV-controlled pitch, FM, shape and pulse width. Its DSP core is [separate and testable](plugins/ModularSynth/src/MorphVCO.hpp).
-- [**Module Forge**](docs/MODULE_FORGE.md): a Python scaffolder for new C++ Rack modules, original SVG panels, JSON manifest entries and reviewed static registration instructions. It is **not** yet an in-app editor or runtime module installer.
-- [**Factory patches**](docs/FACTORY_PATCHES.md): Pulse Bass, Granular Veil and Clockwork Pulses, composed from bundled modules.
+- [**Morph VCO**](plugins/ModularSynth/src/MorphVCO.cpp): original 16-channel sine/saw/pulse oscillator with 1 V/oct tracking, exponential FM, pulse-width modulation and polyBLEP edge correction. [DSP contract and measured limitations](docs/MORPH_VCO.md).
+- [**State Filter**](plugins/ModularSynth/src/StateFilter.cpp): original 16-channel TPT state-variable filter with simultaneous low-pass, band-pass and high-pass outputs, resonance, drive and CV controls. [DSP details](docs/STATE_FILTER.md).
+- [**Macro8**](plugins/ModularSynth/src/Macro8.cpp): eight named performance CV outputs, individual bipolar/unipolar ranges, four recallable snapshots and smooth transitions. This is a **foundation** for the [Instrument Builder](docs/INSTRUMENT_BUILDER.md), not yet a nested patch exporter.
+- [**Module Forge**](docs/MODULE_FORGE.md): generate a 16-voice oscillator **or** stereo CV-controlled low-pass effect with C++/SVG/module manifests and preview static registration through a dry-run diff; explicit `--apply` stages edits with collision checks and recovery safeguards. The effect's DSP header is Rack-independent and tested with normal and strict fast-math. This is not a runtime module loader.
+- [**Patch inspector**](docs/PATCH_WORKFLOW.md): offline `.vcv` JSON, cable graph, module and first-party port/parameter validation. The [getting-started guide](docs/GETTING_STARTED.md) walks through the MIDI-controlled Morph VCO Performance, [Morphing State Pad](patches/examples/MODULAR_-_Morphing_State_Pad.vcv), [Cinematic Drift Pad](patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv) and [Rhythmic Grit Bass](patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv), alongside the three [bundled-module example patches](docs/FACTORY_PATCHES.md). [Factory coverage](docs/PATCH_COVERAGE.md) verifies the seven examples against **63 saved graph/settings claims** and [semantic patch comparison](docs/PATCH_COMPARISON.md) detects control, Macro8 scene and cable changes independent of Rack-assigned module IDs. These are source-only checks, not host auditions.
 - **Cable decluttering:** View → Show patch cables or Ctrl/Cmd+Shift+H, preserving the previous visible-opacity setting.
-- [**Quality baseline**](tests/README.md): lightweight source/patch/manifest tests and a new [GitHub Actions workflow](.github/workflows/quality-baseline.yml). The workflow also runs Module Forge generator tests and a standalone C++ DSP smoke test.
+- [**CI quality work**](docs/CI.md): automatic tests for manifests, patch graphs, the Module Forge generator/integrator, and all standalone first-party DSP suites at three optimization levels. The inherited heavyweight build now runs on `main`/tags/manual instead of duplicating on every PR.
+- [**Panel and interaction QA**](docs/QA_UI.md): executable SVG control-geometry checks for all three original panel assets and a separate manual browser/MIDI/automation/keyboard QA checklist. A [source-color audit](tools/ui-check/contrast_audit.py) reports 31 text underlays as unknown due to gradients, and [nine decorative outlines subsequently brightened](https://github.com/boop-bip80/MODULAR-SYNTH/pull/30) to exceed a 3:1 source-color contrast ratio. These do not establish that a host GUI was opened.
+- [**Measured filter and oscillator QA**](docs/STATE_FILTER.md): 162 LP/BP/HP response measurements across three sample rates with 0.0077 dB maximum reference deviation; [filter modulation stability](docs/FILTER_STABILITY.md) across 786,432 polyphonic processing calls; [polyBLEP alias analysis](docs/OSCILLATOR_ALIASING.md) with all 24 musical saw/pulse spectral comparisons exceeding 13.8 dB alias-energy reduction relative to naive edges.
 
-**Verification status:** These changes are implemented and committed, but a complete fork-owned plugin build, audio audition, DAW save/restore and release artifact are **not yet verified**. Do not interpret this source milestone as completion of Phase 1 or as a downloadable release. Check [the current Actions results](https://github.com/boop-bip80/MODULAR-SYNTH/actions) for pass/fail evidence rather than assuming success.
+**What actually passed (local, 2026-11-01):** On **merged `main` after [PR #32](https://github.com/boop-bip80/MODULAR-SYNTH/pull/32)**, the complete combined suite passed **82 Python repository/patch/CI tests, 37 Module Forge tests and 18 compiled-and-executed C++ DSP profile runs** (six DSP suites × ordinary `-O2`, Cardinal-style optimized and aggressive `-O3 -ffast-math`). This covers the 162-case filter response matrix, 786,432-call filter CV stress regression, and 24 musical oscillator alias-power comparisons. These are core-level tests, not plugin-host tests.
+
+**What has not passed yet:** A completed fork-owned full plugin/standalone build, module-browser visual check, real DAW audio audition, patch save/reload, multi-platform host verification and downloadable fork release. These are mandatory gates, not implied by passing standalone tests. See [Actions](https://github.com/boop-bip80/MODULAR-SYNTH/actions) for current hosted jobs and [the roadmap](docs/DEVELOPMENT_ROADMAP.md) for outstanding criteria.
 
 ## What exists now, and what is planned
 
-| Area | Current codebase (inherited and new) | MODULAR-SYNTH development goal |
+| Area | Implemented in source | Next verification or development goal |
 | --- | --- | --- |
-| Modular patching | VCV Rack graph, bundled modules, three new example patches and cable visibility toggle | Better patch navigation, diagnostics, grouping and performance controls |
-| Synthesis | Cardinal/Rack module collection plus original Morph VCO source (host build unverified) | Original oscillators, filters, FM, wavetable, granular, spectral and physical-modeling modules |
-| Module development | New Module Forge C++/SVG scaffolder; reviewed build-time registration, no arbitrary runtime loading | **Module Forge** C++ templates, validation, authoring tools and an eventual optional experimental loader |
-| Instrument design | Patches and module controls | **Patch-to-Instrument Builder** for macros, custom panel layouts, snapshots and reusable instruments |
-| DAW integration | Existing Cardinal plugin variants and host/MIDI/CV mapping | Richer host automation, expression, stable save/restore and performance testing |
-| Distribution | Upstream build configuration and documentation | Independently verified fork-owned binaries, installers, screenshots, demos and release notes |
+| Modular patching | Inherited Rack graph, cable toggle, seven first-party example patches, offline inspector, semantic patch diff and coverage matrix | Live patch loading, presets, search/navigation and graph diagnostics |
+| Synthesis | Inherited Cardinal modules plus original Morph VCO and State Filter sources; quantitative alias, filter response and CV-stability tests | Host builds, listening tests, analog-inspired refinement, FM/wavetable/granular/spectral engines |
+| Module development | Module Forge oscillator/effect C++/SVG generators, standalone effect-core tests and dry-run/opt-in safe integrator | Build and load a generated oscillator and effect in a real Cardinal host |
+| Instrument design | Macro8 named CV controller, four stored snapshots and smoothing | Group/nest modules, map controls, editable performance panel and package reusable instruments |
+| DAW integration | Inherited plugin formats and MIDI/CV APIs; new module wrappers registered | Validate actual DAW load, automation, note handling, save/reopen and audio performance |
+| Distribution | Improved cross-platform CI configuration and documented test commands | Successful hosted plugin artifacts, original screenshots, demos, release notes and fork download links |
 
-The right-hand column describes broader planned capabilities; it is **not** a claim they have shipped.
+The third column describes planned capabilities; none is a claim of a verified or published release.
 
 ## Development roadmap and acceptance gates
 
@@ -45,7 +51,7 @@ Our [six-phase development roadmap](docs/DEVELOPMENT_ROADMAP.md) defines scope, 
 ## Build and downloads
 
 - **Fork release downloads:** [MODULAR-SYNTH releases](https://github.com/boop-bip80/MODULAR-SYNTH/releases). **None have been verified or published as of 2026-11-01.**
-- **Fork CI:** [MODULAR-SYNTH Actions](https://github.com/boop-bip80/MODULAR-SYNTH/actions). The inherited [build workflow](.github/workflows/build.yml) contains cross-platform build jobs, self-tests and LV2/VST validation, but no completed runs had been recorded on this fork at roadmap initialization.
+- **Fork CI:** [MODULAR-SYNTH Actions](https://github.com/boop-bip80/MODULAR-SYNTH/actions). The inherited [build workflow](.github/workflows/build.yml) targets cross-platform plugin packages and validation. Historical runs encountered third-party checkout/download failures; pinned SpeexDSP mirror and SHA-256-verified official FLAC download mitigations were added, but **no successful fork-owned full build has yet been verified**.
 - **Source checkout:** `git clone --recurse-submodules https://github.com/boop-bip80/MODULAR-SYNTH.git`
 - **Source build:** Follow [Cardinal's inherited build instructions](docs/BUILDING.md). They describe an upstream build process; they are not evidence of a completed fork build.
 
@@ -53,7 +59,7 @@ Our [six-phase development roadmap](docs/DEVELOPMENT_ROADMAP.md) defines scope, 
 
 ## Contributing and engineering rules
 
-Contributions should focus on original capabilities, verified sound quality and a maintainable codebase. Start with [the roadmap and PR acceptance policy](docs/DEVELOPMENT_ROADMAP.md), [project structure](docs/OVERVIEW.md), [build instructions](docs/BUILDING.md) and [third-party license inventory](docs/LICENSES.md). Each PR should include an explicit behavior change, evidence of tests or exact reproduction steps, and accurate limitations. Keep `src/override/` modifications small and justified because they track upstream Rack implementation details.
+Contributions should focus on original capabilities, verified sound quality and a maintainable codebase. Start with the [musician getting-started guide](docs/GETTING_STARTED.md), [the roadmap and PR acceptance policy](docs/DEVELOPMENT_ROADMAP.md), [project structure](docs/OVERVIEW.md), [build instructions](docs/BUILDING.md) and [third-party license inventory](docs/LICENSES.md). Each PR should include an explicit behavior change, evidence of tests or exact reproduction steps, and accurate limitations. Keep `src/override/` modifications small and justified because they track upstream Rack implementation details.
 
 Cardinal is licensed under **GPL-3.0-or-later**, while bundled modules, artwork, fonts and dependencies can have separate licenses. Preserve original copyright notices and obtain any necessary permissions before introducing or redistributing assets. MODULAR-SYNTH does not incorporate VCV Rack Pro proprietary code or proprietary paid modules.
 
