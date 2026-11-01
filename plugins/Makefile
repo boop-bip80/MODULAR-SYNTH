@@ -227,6 +227,7 @@ PLUGIN_FILES += ModularSynth/src/MorphVCO.cpp
 PLUGIN_FILES += ModularSynth/src/StateFilter.cpp
 PLUGIN_FILES += ModularSynth/src/Macro8.cpp
 PLUGIN_FILES += ModularSynth/src/StereoEcho.cpp
+PLUGIN_FILES += ModularSynth/src/ClockedLFO.cpp
 
 # --------------------------------------------------------------
 # Cardinal (built-in)

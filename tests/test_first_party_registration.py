@@ -14,7 +14,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 COLLECTION = REPO / "plugins" / "ModularSynth"
-EXPECTED_ORIGINAL_MODULES = frozenset({"MorphVCO", "StateFilter", "Macro8", "StereoEcho"})
+EXPECTED_ORIGINAL_MODULES = frozenset({"MorphVCO", "StateFilter", "Macro8", "StereoEcho", "ClockedLFO"})
 
 # Strings are consumed as one token so // inside URLs does not become a comment.
 CPP_TOKEN = re.compile(

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Original MODULAR-SYNTH Clocked LFO panel, 16 HP / 240 x 380 px. -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="380"
+     viewBox="0 0 240 380" version="1.1">
+  <rect width="240" height="380" fill="#131f2b"/>
+  <rect x="3" y="3" width="234" height="374" rx="9"
+        fill="#1c2d3c" stroke="#60adad" stroke-width="1.2"/>
+  <rect x="9" y="11" width="222" height="37" rx="5" fill="#233c4b"/>
+  <path d="M14 50 H226" stroke="#65dcc6" stroke-width="1.6"/>
+  <path d="M14 221 H226" stroke="#65dcc6" stroke-width="1.6"/>
+  <path d="M14 298 H226" stroke="#bd8de6" stroke-width="1.6"/>
+
+  <!-- Low-contrast panel decoration stays clear of control/jack centers. -->
+  <g fill="none" stroke="#406879" stroke-width="1">
+    <circle cx="62" cy="91" r="37"/>
+    <circle cx="177" cy="91" r="37"/>
+    <circle cx="62" cy="171" r="37"/>
+    <circle cx="177" cy="171" r="37"/>
+    <rect x="13" y="230" width="214" height="65" rx="8"/>
+    <rect x="13" y="307" width="214" height="66" rx="8"/>
+  </g>
+  <g fill="none" stroke="#4ea5a6" stroke-width="2" stroke-linecap="round">
+    <path d="M21 216 C35 202 48 229 62 216 S89 203 103 216"/>
+    <path d="M138 216 L152 204 L166 228 L181 204 L195 228 L218 216"/>
+  </g>
+  <g fill="#69d9bd">
+    <circle cx="19" cy="19" r="2"/>
+    <circle cx="221" cy="19" r="2"/>
+    <circle cx="19" cy="359" r="2"/>
+    <circle cx="221" cy="359" r="2"/>
+  </g>
+</svg>

@@ -11,7 +11,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "validate_panels.py"
-MODULES = ("MorphVCO", "StateFilter", "Macro8", "StereoEcho")
+MODULES = ("MorphVCO", "StateFilter", "Macro8", "StereoEcho", "ClockedLFO")
 
 
 class PanelGeometryTests(unittest.TestCase):
@@ -41,8 +41,8 @@ class PanelGeometryTests(unittest.TestCase):
     def test_current_repository_panels_pass(self) -> None:
         result = self.run_checker(REPO)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("PASS: 4 SVG panels", result.stdout)
-        self.assertIn("63 conservative candidate widget centers", result.stdout)
+        self.assertIn("PASS: 5 SVG panels", result.stdout)
+        self.assertIn("78 conservative candidate widget centers", result.stdout)
         self.assertIn("visual rendering/overlap not verified", result.stdout)
 
     def test_stereo_echo_bad_16hp_width_rejected(self) -> None:
@@ -81,6 +81,28 @@ class PanelGeometryTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("expected 5 Input centered callsites, found 4", result.stderr)
         self.assertIn("expected 2 Output centered callsites, found 3", result.stderr)
+
+    def test_clocked_lfo_rejects_bad_16hp_width(self) -> None:
+        root = self.fixture()
+        panel = root / "plugins/ModularSynth/res/ClockedLFO.svg"
+        self.replace_one(panel, 'width="240"', 'width="225"')
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("16HP", result.stderr)
+
+    def test_clocked_lfo_center_and_jack_cardinality_are_checked(self) -> None:
+        root = self.fixture()
+        source = root / "plugins/ModularSynth/src/ClockedLFO.cpp"
+        self.replace_one(
+            source,
+            "createOutputCentered<PJ301MPort>(Vec(214.0f, 344.0f)",
+            "createInputCentered<PJ301MPort>(Vec(255.0f, 344.0f)"
+        )
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expected 5 Output centered callsites, found 4", result.stderr)
+        self.assertIn("expected 5 Input centered callsites, found 6", result.stderr)
+        self.assertIn("center (255, 344) outside 240x380 panel", result.stderr)
 
     def test_missing_svg_rejected(self) -> None:
         root = self.fixture()

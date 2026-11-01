@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Originals — musician's quick reference
 
-Four first-party Rack models are **statically registered in source** and expected
+Five first-party Rack models are **statically registered in source** and expected
 under **MODULAR-SYNTH Originals** in the module browser after a successful build.
 This page is a patching cheat sheet for the models actually
 declared in [the collection manifest](../plugins/ModularSynth/plugin.json)
@@ -16,6 +16,7 @@ measured audio or a verified DAW session.
 | **State Filter** (`StateFilter`) | Polyphonic multimode filter; simultaneous LP/BP/HP | **4 in / 3 out** | Cutoff 1 kHz; resonance 0%; drive 0% |
 | **Macro8 Performance Macros** (`Macro8`) | Eight named performer CVs and four A–D scenes | **0 in / 8 out** | All eight macros 0%; unipolar 0 to +10 V; transition 0.25 s; RECALL |
 | **Stereo Echo** (`StereoEcho`) | Polyphonic stereo delay with wet/dry and ping-pong crossfeed | **5 in / 2 out** | Time 250 ms; feedback 35%; wet 40%; crossfeed 50% |
+| **Clocked LFO** (`ClockedLFO`) | Sixteen-lane free/externally clocked modulation; 5 wave/trigger outputs | **5 in / 5 out** | Free rate 0.5 Hz; clock ratio 1:1; phase 0%; width 50% |
 
 ### Morph VCO (`MorphVCO`)
 
@@ -70,7 +71,31 @@ measured audio or a verified DAW session.
   per volt**. The DSP bounds the effective settings. Up to **16 polyphonic
   lanes**; no external sample file is required.
 
-## Three suggested wiring recipes (host-unverified)
+### Clocked LFO (`ClockedLFO`)
+
+[Source/configuration](../plugins/ModularSynth/src/ClockedLFO.cpp) ·
+[Standalone timing and sync tests](../tests/clocked_lfo_dsp_test.cpp)
+
+- **Free mode:** RATE runs from 1/64 to 16 Hz (default 0.5 Hz), plus
+  RATE CV at **1 V/oct**. DSP bounds extreme summed frequency to a safe
+  **1/256…200 Hz**. All five jacks can carry **16 polyphonic lanes**.
+- **External tempo clock:** CLOCK accepts rising triggers at ≥2 V after
+  rearming at ≤1 V. After two pulses separated by 20 ms…10 s, the LFO
+  derives the incoming period. CLOCK x selects **1/4, 1/2, 1, 2 or 4**
+  LFO cycles per pulse interval. RESET hard-aligns phase to zero;
+  after missing four expected pulses the LFO resumes its free rate
+  while maintaining phase. A green LED indicates acquired clock.
+- **Wave outputs:** SIN, TRI, rising RAMP and PULSE are **±5 V**;
+  **EOC** supplies a nominal **1 ms, +10 V** end-of-cycle trigger.
+  PHASE knob/CV rotates the waveform output without resetting the
+  underlying time accumulator. WIDTH knob/CV adjusts PULSE duty
+  from 5…95%, and phase/width CV each adds 10% per volt.
+- **No direct host tempo coupling:** use an external beat/clock pulse;
+  the demo explicitly patches **Cardinal HostTime BEAT → Clocked LFO CLK**.
+  Clock acquisition, beat-time drift and audible modulation quality still
+  require real-host validation.
+
+## Four suggested wiring recipes (host-unverified)
 
 1. **Keyboard subtractive voice:** `Host MIDI pitch → Morph VCO PITCH`;
    `Morph VCO MORPH → State Filter IN → LP → VCA audio IN → Host Audio L/R`.
@@ -87,6 +112,11 @@ measured audio or a verified DAW session.
    or connect a different source to IN R. Send **Echo OUT L/R → Host Audio
    L/R**. Time, feedback and wet defaults are a reasonable place to start;
    no listening-level or clipping result is implied.
+4. **Tempo-aware modulation:** send **HostTime BEAT (output 3) → Clocked LFO
+   CLK**, **HostTime RESET (output 1) → Clocked LFO RESET**, then patch
+   **LFO SIN → Morph VCO MORPH CV**, **TRI → State Filter FREQ CV** and
+   **PULSE → Stereo Echo MIX CV**. EOC can retrigger an ADSR while its
+   MIDI gate is held. With transport stopped, free-rate modulation continues.
 
 For an actual prewired version of (1), start with **Morph VCO Performance**.
 For scenes, start with **Morphing State Pad**. For the stereo signal path,
@@ -94,12 +124,15 @@ open **Stereo Echo Showcase**—that saved patch uses the filter's **LP
 and HP** as separate echo left/right inputs. **Echo Motion Performance**
 adds saved Macro8 A–D modulation of echo time, feedback, wet mix and
 oscillator morph. Those are saved signal/CV routes, not an audio audition.
+**Clocked Modulation Studio** adds eight-voice MIDI, source-grounded
+HostTime beat/reset routing and Clocked LFO modulation to VCO, filter,
+ADSR retrigger and Echo wet mix; it needs host transport for beat lock.
 
-## Ten factory patches
+## Eleven factory patches
 
-All ten links below are actual `.vcv` files under
+All eleven links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
-existing plugin collection and does not require one of these four first-party
+existing plugin collection and does not require one of these five first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
 
 | Patch | Models | Play/try this |
@@ -114,17 +147,19 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Polyphonic Motion Pad](../patches/examples/MODULAR_-_Polyphonic_Motion_Pad.vcv) | Originals | Eight-channel MIDI chord; four Macro8 scenes and filter keytracking |
 | [Stereo Echo Showcase](../patches/examples/MODULAR_-_Stereo_Echo_Showcase.vcv) | Originals | MIDI → VCA → filter LP/HP → stereo echo → host L/R |
 | [Echo Motion Performance](../patches/examples/MODULAR_-_Echo_Motion_Performance.vcv) | Originals | Play MIDI; recall Macro8 A–D to change echo time/feedback/wet and VCO wave morph |
+| [Clocked Modulation Studio](../patches/examples/MODULAR_-_Clocked_Modulation_Studio.vcv) | Originals | Start host transport and play eight-voice MIDI; clocked sine/tri/pulse/EOC modulate VCO, filter, Echo and envelope |
 
 If the examples folder is included in the build, open a patch through
 **File → Open demo / example project**; otherwise load its `.vcv` directly.
-**Clockwork Pulses** is transport-driven; the other nine are designed
-for MIDI note input. Begin at a conservative
+**Clockwork Pulses** is transport-driven; **Clocked Modulation Studio** uses
+host transport beats *and* MIDI notes; the remaining nine accept MIDI notes.
+Begin at a conservative
 monitor level. [Factory-patch details and structural validation](FACTORY_PATCHES.md)
 and [offline patch checks](PATCH_WORKFLOW.md) provide more context.
 
 ## What is—and is not—verified
 
-The manifest, module C++ metadata and all nine saved patch graphs can be
+The manifest, module C++ metadata and all eleven saved patch graphs can be
 checked offline with:
 
 ```sh

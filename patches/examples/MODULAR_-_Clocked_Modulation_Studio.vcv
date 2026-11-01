@@ -1,0 +1,384 @@
+{
+  "version": "2.4.1",
+  "zoom": 0.65,
+  "modules": [
+    {
+      "id": 3,
+      "plugin": "Cardinal",
+      "model": "HostTime",
+      "version": "2.0",
+      "params": [],
+      "pos": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 2,
+      "plugin": "Cardinal",
+      "model": "HostMIDI",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "pwRange": 2,
+        "smooth": true,
+        "channels": 8,
+        "polyMode": 1,
+        "lastPitch": 8192,
+        "lastMod": 0,
+        "inputChannel": 0,
+        "outputChannel": 0
+      },
+      "pos": [
+        7,
+        0
+      ]
+    },
+    {
+      "id": 990000000110,
+      "plugin": "ModularSynth",
+      "model": "ClockedLFO",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": -1
+        },
+        {
+          "id": 1,
+          "value": 2
+        },
+        {
+          "id": 2,
+          "value": 0
+        },
+        {
+          "id": 3,
+          "value": 0.4
+        }
+      ],
+      "pos": [
+        15,
+        0
+      ]
+    },
+    {
+      "id": 990000000101,
+      "plugin": "ModularSynth",
+      "model": "MorphVCO",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0
+        },
+        {
+          "id": 1,
+          "value": 0
+        },
+        {
+          "id": 2,
+          "value": 0.5
+        },
+        {
+          "id": 3,
+          "value": 0.5
+        },
+        {
+          "id": 4,
+          "value": 0
+        }
+      ],
+      "pos": [
+        31,
+        0
+      ]
+    },
+    {
+      "id": 990000000102,
+      "plugin": "Fundamental",
+      "model": "ADSR",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.03
+        },
+        {
+          "id": 1,
+          "value": 0.24
+        },
+        {
+          "id": 2,
+          "value": 0.61
+        },
+        {
+          "id": 3,
+          "value": 0.28
+        },
+        {
+          "id": 4,
+          "value": 0
+        },
+        {
+          "id": 5,
+          "value": 0
+        },
+        {
+          "id": 6,
+          "value": 0
+        },
+        {
+          "id": 7,
+          "value": 0
+        },
+        {
+          "id": 8,
+          "value": 0
+        }
+      ],
+      "pos": [
+        43,
+        0
+      ]
+    },
+    {
+      "id": 990000000103,
+      "plugin": "Fundamental",
+      "model": "VCA-1",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.2
+        },
+        {
+          "id": 1,
+          "value": 1
+        }
+      ],
+      "pos": [
+        52,
+        0
+      ]
+    },
+    {
+      "id": 990000000104,
+      "plugin": "ModularSynth",
+      "model": "StateFilter",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": -0.9
+        },
+        {
+          "id": 1,
+          "value": 0.12
+        },
+        {
+          "id": 2,
+          "value": 0.05
+        }
+      ],
+      "pos": [
+        62,
+        0
+      ]
+    },
+    {
+      "id": 990000000105,
+      "plugin": "ModularSynth",
+      "model": "StereoEcho",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 250
+        },
+        {
+          "id": 1,
+          "value": 0.25
+        },
+        {
+          "id": 2,
+          "value": 0.5
+        },
+        {
+          "id": 3,
+          "value": 0.6
+        }
+      ],
+      "pos": [
+        77,
+        0
+      ]
+    },
+    {
+      "id": 1,
+      "plugin": "Cardinal",
+      "model": "HostAudio2",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.16
+        }
+      ],
+      "data": {
+        "dcFilter": true
+      },
+      "pos": [
+        95,
+        0
+      ]
+    },
+    {
+      "id": 990000000106,
+      "plugin": "Cardinal",
+      "model": "TextEditor",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "filepath": "",
+        "lang": "None",
+        "width": 34,
+        "etext": "MODULAR-SYNTH / ORIGINALS 005\nCLOCKED MODULATION STUDIO\n\n1. Start host TRANSPORT; HostTime BEAT pulse\n   drives CLOCKED LFO CLK. HostTime RESET syncs\n   oscillator phase. LFO clock lock needs 2 beats.\n2. Play HOST MIDI notes in 8-voice Reuse mode.\n   Pitch also feeds LFO RATE CV, making per-note\n   free-run rates while the transport is stopped.\n3. CLOCKED LFO sine modulates MorphVCO color;\n   triangle sweeps StateFilter cutoff; pulse\n   alternates StereoEcho dry/wet modulation.\n4. LFO EOC retriggers ADSR while MIDI gate holds.\n   Gated VCA runs into LP/HP split Echo L/R.\n5. Echo stereo outputs feed HostAudio2 L/R.\n\nCLOCK x selector: 1/4, 1/2, 1, 2, 4 cycles\nper incoming beat; this is EXTERNAL clock sync,\nnot direct BPM/transport coupling in LFO DSP.\nIf the host is stopped, LFO free-runs at RATE.\nHost/VCA gain reduced for polyphonic headroom.\nNo external sound samples or downloads.\n"
+      },
+      "pos": [
+        105,
+        0
+      ]
+    }
+  ],
+  "cables": [
+    {
+      "id": 990000000201,
+      "outputModuleId": 3,
+      "outputId": 3,
+      "inputModuleId": 990000000110,
+      "inputId": 1,
+      "color": "#69f0c4"
+    },
+    {
+      "id": 990000000202,
+      "outputModuleId": 3,
+      "outputId": 1,
+      "inputModuleId": 990000000110,
+      "inputId": 2,
+      "color": "#f5bc66"
+    },
+    {
+      "id": 990000000203,
+      "outputModuleId": 2,
+      "outputId": 0,
+      "inputModuleId": 990000000101,
+      "inputId": 0,
+      "color": "#ff5252"
+    },
+    {
+      "id": 990000000204,
+      "outputModuleId": 2,
+      "outputId": 0,
+      "inputModuleId": 990000000110,
+      "inputId": 0,
+      "color": "#ffad52"
+    },
+    {
+      "id": 990000000205,
+      "outputModuleId": 2,
+      "outputId": 1,
+      "inputModuleId": 990000000102,
+      "inputId": 4,
+      "color": "#ffd452"
+    },
+    {
+      "id": 990000000206,
+      "outputModuleId": 990000000110,
+      "outputId": 4,
+      "inputModuleId": 990000000102,
+      "inputId": 5,
+      "color": "#d68bff"
+    },
+    {
+      "id": 990000000207,
+      "outputModuleId": 990000000101,
+      "outputId": 0,
+      "inputModuleId": 990000000103,
+      "inputId": 1,
+      "color": "#a8ff52"
+    },
+    {
+      "id": 990000000208,
+      "outputModuleId": 990000000102,
+      "outputId": 0,
+      "inputModuleId": 990000000103,
+      "inputId": 0,
+      "color": "#f3b6ff"
+    },
+    {
+      "id": 990000000209,
+      "outputModuleId": 990000000110,
+      "outputId": 0,
+      "inputModuleId": 990000000101,
+      "inputId": 2,
+      "color": "#60d1ff"
+    },
+    {
+      "id": 990000000210,
+      "outputModuleId": 990000000103,
+      "outputId": 0,
+      "inputModuleId": 990000000104,
+      "inputId": 0,
+      "color": "#52ff7d"
+    },
+    {
+      "id": 990000000211,
+      "outputModuleId": 990000000110,
+      "outputId": 1,
+      "inputModuleId": 990000000104,
+      "inputId": 1,
+      "color": "#67d7ef"
+    },
+    {
+      "id": 990000000212,
+      "outputModuleId": 990000000104,
+      "outputId": 0,
+      "inputModuleId": 990000000105,
+      "inputId": 0,
+      "color": "#52beff"
+    },
+    {
+      "id": 990000000213,
+      "outputModuleId": 990000000104,
+      "outputId": 2,
+      "inputModuleId": 990000000105,
+      "inputId": 1,
+      "color": "#d5a8ff"
+    },
+    {
+      "id": 990000000214,
+      "outputModuleId": 990000000110,
+      "outputId": 3,
+      "inputModuleId": 990000000105,
+      "inputId": 4,
+      "color": "#fbb6fa"
+    },
+    {
+      "id": 990000000215,
+      "outputModuleId": 990000000105,
+      "outputId": 0,
+      "inputModuleId": 1,
+      "inputId": 0,
+      "color": "#52beff"
+    },
+    {
+      "id": 990000000216,
+      "outputModuleId": 990000000105,
+      "outputId": 1,
+      "inputModuleId": 1,
+      "inputId": 1,
+      "color": "#d5a8ff"
+    }
+  ]
+}
