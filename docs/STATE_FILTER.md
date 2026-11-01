@@ -51,7 +51,7 @@ Compile from repository root:
 
 ```sh
 c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic \
-  tests/statefilter_core_test.cpp -o /tmp/statefilter-core-test
+  tests/statefilter_dsp_test.cpp -o /tmp/statefilter-core-test
 /tmp/statefilter-core-test
 ```
 

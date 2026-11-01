@@ -82,13 +82,13 @@ struct ModularSynthStateFilter : Module {
 
             // Limit the exponent before exp2(), even under malicious/extreme CV.
             const double octave = modular_synth::dsp::StateFilter::finiteClamp(
-                baseOctaves + (std::isfinite(cutoffCV) ? cutoffCV : 0.0),
+                baseOctaves + (modular_synth::dsp::StateFilter::ieeeFinite(cutoffCV) ? cutoffCV : 0.0),
                 0.0, -30.0, 30.0);
             const double frequency = 1000.0 * std::exp2(octave);
             const double resonance = baseResonance
-                + (std::isfinite(resonanceCV) ? resonanceCV * 0.1 : 0.0);
+                + (modular_synth::dsp::StateFilter::ieeeFinite(resonanceCV) ? resonanceCV * 0.1 : 0.0);
             const double drive = baseDrive
-                + (std::isfinite(driveCV) ? driveCV * 0.1 : 0.0);
+                + (modular_synth::dsp::StateFilter::ieeeFinite(driveCV) ? driveCV * 0.1 : 0.0);
 
             const auto sample = voices[c].process(input, args.sampleRate,
                                                    frequency, resonance, drive);

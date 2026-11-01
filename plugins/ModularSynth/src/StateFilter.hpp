@@ -10,6 +10,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
 
 namespace modular_synth {
 namespace dsp {
@@ -26,15 +29,26 @@ struct StateFilter {
     double ic2eq = 0.0;
     double previousSampleRate = 0.0;
 
+    // Do not use std::isfinite here: -ffast-math permits compilers to
+    // assume all floating-point inputs are finite and optimize it away.
+    // Reading IEEE-754 exponent bits via memcpy works under that mode.
+    static bool ieeeFinite(double value) noexcept {
+        static_assert(sizeof(double) == sizeof(std::uint64_t), "Requires binary64 doubles");
+        static_assert(std::numeric_limits<double>::is_iec559, "Requires IEEE-754 doubles");
+        std::uint64_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return (bits & UINT64_C(0x7ff0000000000000)) != UINT64_C(0x7ff0000000000000);
+    }
+
     static double finiteClamp(double value, double fallback,
                               double minimum, double maximum) noexcept {
-        return std::isfinite(value)
+        return ieeeFinite(value)
             ? std::min(maximum, std::max(minimum, value))
             : fallback;
     }
 
     static float boundedVoltage(double normalized) noexcept {
-        if (!std::isfinite(normalized))
+        if (!ieeeFinite(normalized))
             return 0.0f;
         return static_cast<float>(std::min(10.0, std::max(-10.0,
                                                         normalized * 5.0)));
@@ -48,7 +62,7 @@ struct StateFilter {
 
     Sample process(double inputVoltage, double sampleRate, double cutoffHz,
                    double resonance, double drive) noexcept {
-        if (!std::isfinite(sampleRate) || sampleRate < 1000.0) {
+        if (!ieeeFinite(sampleRate) || sampleRate < 1000.0) {
             reset();
             return {0.0f, 0.0f, 0.0f};
         }

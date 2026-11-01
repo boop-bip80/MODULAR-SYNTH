@@ -8,12 +8,20 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <cstdint>
+#include <cstring>
 
 using modular_synth::dsp::StateFilter;
 
 namespace {
 int failures = 0;
 constexpr double kPi = 3.1415926535897932384626433832795;
+bool finiteFloat(float value) {
+    std::uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return (bits & UINT32_C(0x7f800000)) != UINT32_C(0x7f800000);
+}
+
 void expect(bool condition, const char* message) {
     if (!condition) {
         std::fprintf(stderr, "FAIL: %s\n", message);
@@ -88,7 +96,7 @@ void testBoundsAndSampleRateChanges() {
             const auto s = filter.process(a, rate, b, c, a);
             const float channels[] = {s.low, s.band, s.high};
             for (float voltage : channels) {
-                if (!std::isfinite(voltage) || std::abs(voltage) > 10.0001f) {
+                if (!finiteFloat(voltage) || std::abs(voltage) > 10.0001f) {
                     expect(false, "extreme control/audio values produce bounded finite output");
                     return;
                 }
@@ -104,7 +112,7 @@ void testBoundsAndSampleRateChanges() {
     for (double rate : {44100.0, 192000.0, 48000.0}) {
         for (int i = 0; i < 3000; ++i) {
             const auto s = filter.process(std::sin(i * 0.04), rate, 18000.0, 1.0, 1.0);
-            if (!std::isfinite(s.low) || !std::isfinite(s.band) || !std::isfinite(s.high)) {
+            if (!finiteFloat(s.low) || !finiteFloat(s.band) || !finiteFloat(s.high)) {
                 expect(false, "sample-rate changes remain finite");
                 return;
             }
