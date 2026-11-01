@@ -59,6 +59,14 @@ jobs:
           curl -sLO https://launchpad.net/~kxstudio-debian/+archive/ubuntu/toolchain/+files/git-man_2.34.1-1ubuntu1~bpo20.04.1~ppa1_all.deb
           dpkg -i *.deb
           rm *.deb
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -169,6 +177,14 @@ jobs:
   linux-x86_64-debug:
     runs-on: ubuntu-22.04
     steps:
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -204,6 +220,14 @@ jobs:
       contents: write
     runs-on: macos-14
     steps:
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -296,6 +320,14 @@ jobs:
             target: moddwarf
     runs-on: ubuntu-22.04
     steps:
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -345,6 +377,14 @@ jobs:
         target: [simd, nosimd]
     runs-on: ubuntu-22.04
     steps:
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -446,6 +486,14 @@ jobs:
       - name: Install git
         run: |
           apt-get update -qq && apt-get install -yqq --no-install-recommends ca-certificates git openssl
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -534,6 +582,14 @@ jobs:
   headless:
     runs-on: ubuntu-22.04
     steps:
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -551,6 +607,14 @@ jobs:
   lto:
     runs-on: ubuntu-22.04
     steps:
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -568,6 +632,14 @@ jobs:
   sysdeps:
     runs-on: ubuntu-22.04
     steps:
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -587,6 +659,14 @@ jobs:
       contents: write
     runs-on: ubuntu-22.04
     steps:
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -627,6 +707,14 @@ jobs:
   plugin-validation:
     runs-on: ubuntu-22.04
     steps:
+      - name: Verify SpeexDSP Git mirror before recursive checkout
+        shell: bash
+        run: |
+          resolved="$(git ls-remote --get-url https://gitlab.xiph.org/xiph/speexdsp.git)"
+          if [ "$resolved" != "https://github.com/xiph/speexdsp.git" ]; then
+            echo "Expected official Xiph GitHub mirror, got: $resolved" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
