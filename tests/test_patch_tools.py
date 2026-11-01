@@ -119,6 +119,83 @@ class PatchInspectorTests(unittest.TestCase):
         self.assertTrue(any("outputs index 3 exceeds known count 3" in message
                             for message in result["errors"]))
 
+    def test_cinematic_drift_and_rhythmic_grit_factory_patches(self) -> None:
+        cases = {
+            "MODULAR_-_Cinematic_Drift_Pad.vcv": {
+                "morph_time": 4.0, "vco_octave": 0.0, "host_max": 0.24,
+            },
+            "MODULAR_-_Rhythmic_Grit_Bass.vcv": {
+                "morph_time": 0.20, "vco_octave": -2.0, "host_max": 0.23,
+            },
+        }
+        for filename, expected in cases.items():
+            with self.subTest(patch=filename):
+                path = ROOT / "patches" / "examples" / filename
+                report = inspector.inspect_patch(path, ROOT)
+                self.assertTrue(report["ok"], report["errors"])
+                self.assertEqual(report["cables"], 10)
+                self.assertEqual(len(report["components"]), 2)  # Intentionally isolated note.
+                for model in ("MorphVCO", "StateFilter", "Macro8"):
+                    self.assertEqual(report["module_inventory"][f"ModularSynth/{model}"], 1)
+                # Only pinned Fundamental and Cardinal host model bounds
+                # should remain unverified; all original model bounds are known.
+                self.assertFalse(any("ModularSynth/" in warning for warning in report["warnings"]))
+                patch = json.loads(path.read_text(encoding="utf-8"))
+                models = {module["model"]: module for module in patch["modules"]}
+                macro = models["Macro8"]
+                values = {param["id"]: param["value"] for param in macro["params"]}
+                self.assertAlmostEqual(values[8], expected["morph_time"])
+                self.assertEqual(values[18], 1.0)  # Fourth CV output bipolar.
+                self.assertEqual(len(macro["data"]["snapshots"][0]), 8)
+                self.assertEqual(len(macro["data"]["snapshots"][1]), 8)
+                self.assertEqual(
+                    next(param["value"] for param in models["MorphVCO"]["params"]
+                         if param["id"] == 0),
+                    expected["vco_octave"],
+                )
+                self.assertLessEqual(
+                    next(param["value"] for param in models["HostAudio2"]["params"]
+                         if param["id"] == 0),
+                    expected["host_max"],
+                )
+                self.assertLessEqual(
+                    next(param["value"] for param in models["VCA-1"]["params"]
+                         if param["id"] == 0),
+                    0.35,
+                )
+                # Require all four intended Macro8 CV routes, including the
+                # bipolar cutoff sweep, not just the presence of the module.
+                macro_id = macro["id"]
+                filt_id = models["StateFilter"]["id"]
+                morph_id = models["MorphVCO"]["id"]
+                routes = {
+                    (cable["outputModuleId"], cable["outputId"],
+                     cable["inputModuleId"], cable["inputId"])
+                    for cable in patch["cables"]
+                }
+                self.assertTrue({
+                    (macro_id, 0, morph_id, 2),
+                    (macro_id, 1, filt_id, 2),
+                    (macro_id, 2, filt_id, 3),
+                    (macro_id, 3, filt_id, 1),
+                }.issubset(routes))
+
+    def test_batch_cli_validates_both_new_performance_patches(self) -> None:
+        paths = [
+            ROOT / "patches" / "examples" / "MODULAR_-_Cinematic_Drift_Pad.vcv",
+            ROOT / "patches" / "examples" / "MODULAR_-_Rhythmic_Grit_Bass.vcv",
+        ]
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "patches" / "patch_inspector.py"),
+             "validate", *(str(path) for path in paths), "--json"],
+            cwd=ROOT, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        reports = json.loads(result.stdout)
+        self.assertEqual(len(reports), 2)
+        self.assertTrue(all(report["ok"] for report in reports))
+        self.assertTrue(all(report["cables"] == 10 for report in reports))
+
     def test_reject_out_of_range_param(self) -> None:
         self.patch["modules"][0]["params"][1]["value"] = 1.5
         report = self.check()
