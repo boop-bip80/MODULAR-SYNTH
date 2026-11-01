@@ -378,21 +378,24 @@ def apply_plan(edits: list[FileEdit], repo_root: Path) -> None:
                 applied.append(index)
                 in_flight = None
     except BaseException:
-        # Include a possibly published-but-interrupted registry replacement.
-        # Do not assume an interrupted new-file hard link actually succeeded.
+        # Include an operation interrupted between publication and recording
+        # its success. It may have published or may have failed without a write.
         undo = list(applied)
-        if (in_flight is not None and edits[in_flight].before is not None
-                and in_flight not in undo):
+        if in_flight is not None and in_flight not in undo:
             undo.append(in_flight)
         for index in reversed(undo):
             edit = edits[index]
             try:
-                # Do not undo someone else's changes made after this tool's write.
                 with _parent_handle(root, edit.path) as parent_fd:
-                    if _current_at(edit, parent_fd) != edit.after:
-                        rollback_failed = True
+                    current = _current_at(edit, parent_fd)
+                    if current == edit.before:
+                        # Interrupted publication never changed this target.
                         continue
-                    _undo_at(edit, backups[index], parent_fd)
+                    if current == edit.after:
+                        _undo_at(edit, backups[index], parent_fd)
+                        continue
+                    # Preserve files someone else edited and retain backups.
+                    rollback_failed = True
             except Exception:
                 rollback_failed = True
         if rollback_failed:

@@ -1,8 +1,10 @@
 """Integration transaction and collision tests using isolated temporary fixtures."""
 import json
+import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
 
@@ -259,11 +261,16 @@ class IntegrationTests(unittest.TestCase):
                     raise KeyboardInterrupt()
                 return original_replace(source, target, **kwargs)
 
-            with mock.patch("integrate.os.replace",
-                            side_effect=interrupt_on_second_replace):
-                with self.assertRaises(KeyboardInterrupt):
-                    apply_plan(plan, root)
+            error_output = io.StringIO()
+            with redirect_stderr(error_output):
+                with mock.patch("integrate.os.replace",
+                                side_effect=interrupt_on_second_replace):
+                    with self.assertRaises(KeyboardInterrupt):
+                        apply_plan(plan, root)
             self.assertEqual(registered_files(root), before)
+            self.assertNotIn("Automatic rollback incomplete",
+                             error_output.getvalue())
+            self.assertEqual(list(root.glob(".module-forge-transaction-*")), [])
 
     def test_failure_during_apply_rolls_back_completed_writes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -279,12 +286,18 @@ class IntegrationTests(unittest.TestCase):
                     raise OSError("injected interruption")
                 return original_replace(source, target, **kwargs)
 
-            with mock.patch("integrate.os.replace", side_effect=fail_on_second_replace):
-                with self.assertRaises(OSError):
-                    apply_plan(plan, root)
+            error_output = io.StringIO()
+            with redirect_stderr(error_output):
+                with mock.patch("integrate.os.replace",
+                                side_effect=fail_on_second_replace):
+                    with self.assertRaises(OSError):
+                        apply_plan(plan, root)
             self.assertEqual(registered_files(root), before)
             self.assertFalse((root / "plugins/ModularSynth/src/OrbitSine.cpp").exists())
             self.assertFalse((root / "plugins/ModularSynth/res/OrbitSine.svg").exists())
+            self.assertNotIn("Automatic rollback incomplete",
+                             error_output.getvalue())
+            self.assertEqual(list(root.glob(".module-forge-transaction-*")), [])
 
 
 if __name__ == "__main__":
