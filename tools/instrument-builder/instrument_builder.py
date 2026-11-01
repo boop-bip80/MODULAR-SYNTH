@@ -20,6 +20,7 @@ import sys
 import zipfile
 
 from panel_preview import PreviewError, render_svg
+from compatibility import CompatibilityError, compatibility_report, text_report
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -439,6 +440,31 @@ def preview(bundle_path: Path, svg_path: Path) -> dict:
     return manifest
 
 
+def check(bundle_path: Path, repo_root: Path | None = None) -> dict:
+    """Verify a source bundle, then check only first-party model declarations.
+
+    External plugin/model availability is intentionally never inferred.
+    """
+    if bundle_path.suffix.lower() != ".msinstrument":
+        raise InstrumentError("source bundle must end with .msinstrument")
+    blob = _read_limited(bundle_path, MAX_BUNDLE_BYTES, "instrument bundle")
+    manifest, source_patch = read_bundle(blob)  # Includes SHA/schema checks.
+    root = repo_root if repo_root is not None else Path(__file__).resolve().parents[2]
+    collection_path = root / "plugins" / "ModularSynth" / "plugin.json"
+    registry = _decode_json(
+        _read_limited(collection_path, MAX_MANIFEST_BYTES,
+                      "first-party collection manifest"),
+        "first-party collection manifest")
+    patch = _decode_json(source_patch, "VCV patch")
+    try:
+        return compatibility_report(
+            patch, registry,
+            patch_sha256=manifest["patch"]["sha256"],
+            required_plugins=manifest["requiredPlugins"])
+    except CompatibilityError as exc:
+        raise InstrumentError(f"compatibility preflight: {exc}") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest="command", required=True)
@@ -454,6 +480,16 @@ def main(argv: list[str] | None = None) -> int:
     panel = subs.add_parser("preview", help="create an offline SVG concept panel")
     panel.add_argument("bundle", type=Path)
     panel.add_argument("--out", required=True, type=Path)
+    compatibility = subs.add_parser(
+        "check", help="preflight source model references against ModularSynth")
+    compatibility.add_argument("bundle", type=Path)
+    compatibility.add_argument(
+        "--repo-root", type=Path, default=None,
+        help="repository containing plugins/ModularSynth/plugin.json")
+    compatibility.add_argument(
+        "--format", choices=("text", "json"), default="text")
+    compatibility.add_argument(
+        "--json", action="store_true", help="alias for --format json")
     args = parser.parse_args(argv)
     try:
         if args.command == "pack":
@@ -465,6 +501,13 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "preview":
             preview(args.bundle, args.out)
             print(f"Generated static SVG preview {args.out}")
+        elif args.command == "check":
+            report = check(args.bundle, args.repo_root)
+            if args.json or args.format == "json":
+                print(_canonical_json(report).decode("utf-8"), end="")
+            else:
+                print(text_report(report), end="")
+            return 1 if report["status"] == "FAIL" else 0
         else:
             print(_canonical_json(inspect(args.bundle)).decode("utf-8"), end="")
         return 0
