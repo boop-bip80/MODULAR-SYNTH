@@ -1230,6 +1230,7 @@ static void initStatic__ModularSynth()
         p->addModel(modelMorphVCO);
         p->addModel(modelStateFilter);
         p->addModel(modelMacro8);
+        p->addModel(modelStereoEcho);
     }
 }
 

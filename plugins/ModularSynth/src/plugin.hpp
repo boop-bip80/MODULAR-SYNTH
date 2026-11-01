@@ -13,3 +13,4 @@ extern Plugin* pluginInstance;
 extern Model* modelMorphVCO;
 extern Model* modelStateFilter;
 extern Model* modelMacro8;
+extern Model* modelStereoEcho;

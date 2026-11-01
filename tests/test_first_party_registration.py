@@ -14,7 +14,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 COLLECTION = REPO / "plugins" / "ModularSynth"
-EXPECTED_ORIGINAL_MODULES = frozenset({"MorphVCO", "StateFilter", "Macro8"})
+EXPECTED_ORIGINAL_MODULES = frozenset({"MorphVCO", "StateFilter", "Macro8", "StereoEcho"})
 
 # Strings are consumed as one token so // inside URLs does not become a comment.
 CPP_TOKEN = re.compile(
@@ -114,7 +114,7 @@ class FirstPartyRegistrationTests(unittest.TestCase):
             len({slug.casefold() for slug in slugs}), len(slugs),
             "duplicate or case-insensitively colliding module slugs")
         self.assertTrue(EXPECTED_ORIGINAL_MODULES.issubset(slugs),
-                        "one of the first three original modules is missing")
+                        "one of the original first-party modules is missing")
 
     def test_compiled_sources_match_manifest(self):
         compiled = lines_matching(

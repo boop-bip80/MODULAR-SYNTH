@@ -226,6 +226,7 @@ MINIPLUGIN_FILES = plugins-mini.cpp
 PLUGIN_FILES += ModularSynth/src/MorphVCO.cpp
 PLUGIN_FILES += ModularSynth/src/StateFilter.cpp
 PLUGIN_FILES += ModularSynth/src/Macro8.cpp
+PLUGIN_FILES += ModularSynth/src/StereoEcho.cpp
 
 # --------------------------------------------------------------
 # Cardinal (built-in)

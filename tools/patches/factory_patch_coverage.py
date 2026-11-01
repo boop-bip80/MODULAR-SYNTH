@@ -227,6 +227,35 @@ EXAMPLES: dict[str, Example] = {
         midi_poly_mode=1,
     ),
 
+    "MODULAR_-_Stereo_Echo_Showcase.vcv": Example(
+        "First-party MorphVCO, gated StateFilter LP/HP stereo split and StereoEcho ping-pong delay",
+        ("Cardinal/HostMIDI", "ModularSynth/MorphVCO",
+         "Fundamental/ADSR", "Fundamental/VCA-1",
+         "ModularSynth/StateFilter", "ModularSynth/StereoEcho",
+         "Cardinal/HostAudio2"),
+        (
+            Route("MIDI pitch to Morph VCO", "Cardinal/HostMIDI",
+                  "ModularSynth/MorphVCO", output=0, input=0),
+            Route("MIDI gate to ADSR", "Cardinal/HostMIDI",
+                  "Fundamental/ADSR", output=1, input=4),
+            Route("oscillator to gated VCA", "ModularSynth/MorphVCO",
+                  "Fundamental/VCA-1", output=0, input=1),
+            Route("envelope to VCA CV", "Fundamental/ADSR",
+                  "Fundamental/VCA-1", output=0, input=0),
+            Route("gated VCA to filter", "Fundamental/VCA-1",
+                  "ModularSynth/StateFilter", output=0, input=0),
+            Route("filter LP to StereoEcho left", "ModularSynth/StateFilter",
+                  "ModularSynth/StereoEcho", output=0, input=0),
+            Route("filter HP to StereoEcho right", "ModularSynth/StateFilter",
+                  "ModularSynth/StereoEcho", output=2, input=1),
+            Route("StereoEcho left to host left", "ModularSynth/StereoEcho",
+                  "Cardinal/HostAudio2", output=0, input=0),
+            Route("StereoEcho right to host right", "ModularSynth/StereoEcho",
+                  "Cardinal/HostAudio2", output=1, input=1),
+        ),
+        stereo=True,
+    ),
+
 }
 
 
