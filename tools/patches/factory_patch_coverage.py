@@ -40,6 +40,7 @@ class Example:
     morph_seconds: float | None = None
     bipolar_cutoff: bool = False
     bipolar_width: bool = False
+    unipolar_macro_outputs: tuple[int, ...] = ()
     snapshot_count: int = 2
     midi_channels: int | None = None
     midi_poly_mode: int | None = None
@@ -255,6 +256,46 @@ EXAMPLES: dict[str, Example] = {
         ),
         stereo=True,
     ),
+    "MODULAR_-_Echo_Motion_Performance.vcv": Example(
+        "MIDI-gated first-party LP/HP stereo echo with four Macro8 delay-motion snapshots",
+        ("Cardinal/HostMIDI", "ModularSynth/MorphVCO",
+         "Fundamental/ADSR", "Fundamental/VCA-1",
+         "ModularSynth/StateFilter", "ModularSynth/StereoEcho",
+         "ModularSynth/Macro8", "Cardinal/HostAudio2"),
+        (
+            Route("MIDI pitch to Morph VCO", "Cardinal/HostMIDI",
+                  "ModularSynth/MorphVCO", output=0, input=0),
+            Route("MIDI gate to ADSR", "Cardinal/HostMIDI",
+                  "Fundamental/ADSR", output=1, input=4),
+            Route("oscillator into gated VCA", "ModularSynth/MorphVCO",
+                  "Fundamental/VCA-1", output=0, input=1),
+            Route("ADSR envelope into VCA", "Fundamental/ADSR",
+                  "Fundamental/VCA-1", output=0, input=0),
+            Route("gated VCA into StateFilter", "Fundamental/VCA-1",
+                  "ModularSynth/StateFilter", output=0, input=0),
+            Route("lowpass to StereoEcho left", "ModularSynth/StateFilter",
+                  "ModularSynth/StereoEcho", output=0, input=0),
+            Route("highpass to StereoEcho right", "ModularSynth/StateFilter",
+                  "ModularSynth/StereoEcho", output=2, input=1),
+            Route("Macro8 time CV to Echo input 2", "ModularSynth/Macro8",
+                  "ModularSynth/StereoEcho", output=0, input=2),
+            Route("Macro8 feedback CV to Echo input 3", "ModularSynth/Macro8",
+                  "ModularSynth/StereoEcho", output=1, input=3),
+            Route("Macro8 wet CV to Echo input 4", "ModularSynth/Macro8",
+                  "ModularSynth/StereoEcho", output=2, input=4),
+            Route("Macro8 wave CV to oscillator", "ModularSynth/Macro8",
+                  "ModularSynth/MorphVCO", output=3, input=2),
+            Route("StereoEcho left into host left", "ModularSynth/StereoEcho",
+                  "Cardinal/HostAudio2", output=0, input=0),
+            Route("StereoEcho right into host right", "ModularSynth/StereoEcho",
+                  "Cardinal/HostAudio2", output=1, input=1),
+        ),
+        stereo=True,
+        snapshot_names=("Time", "Feedback", "Wet", "Wave"),
+        snapshot_count=4,
+        morph_seconds=1.2,
+        unipolar_macro_outputs=(0, 1, 2, 3),
+    ),
 
 }
 
@@ -431,7 +472,8 @@ def analyze(root: Path = ROOT, examples_dir: Path | None = None) -> dict:
             else:
                 result["capabilities"].append(
                     f"{spec.snapshot_count} versioned Macro8 snapshots")
-        if spec.morph_seconds is not None or spec.bipolar_cutoff or spec.bipolar_width:
+        if (spec.morph_seconds is not None or spec.bipolar_cutoff
+                or spec.bipolar_width or spec.unipolar_macro_outputs):
             macro = next((module for module in modules_by_id.values()
                           if _key(module) == "ModularSynth/Macro8"), None)
             param_values = {
@@ -462,6 +504,16 @@ def analyze(root: Path = ROOT, examples_dir: Path | None = None) -> dict:
                         "(first-party param 18 == 1)")
                 else:
                     result["capabilities"].append("bipolar Macro8 PWM output range")
+            for output in spec.unipolar_macro_outputs:
+                # Macro8 range params 15..22: 0 means 0..+10 V.
+                range_param = 15 + output
+                if output < 0 or output >= 8 or param_values.get(range_param) != 0:
+                    local_errors.append(
+                        f"macro output {output} CV range must be unipolar "
+                        f"(first-party param {range_param} == 0)")
+                else:
+                    result["capabilities"].append(
+                        f"unipolar Macro8 output {output} CV")
         if spec.midi_channels is not None:
             midi = next((module for module in modules_by_id.values()
                          if _key(module) == "Cardinal/HostMIDI"), None)
