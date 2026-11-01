@@ -120,7 +120,7 @@ python3 -m unittest discover -s tests -p 'test_patch_tools.py' -v
 
 ## Further cinematic presets — controlled motion and rhythmic bass
 
-Two additional first-party performance patches use the same proven host and envelope components as Morphing State Pad: `Cardinal/HostMIDI`, `Fundamental/ADSR`, `Fundamental/VCA-1` and `Cardinal/HostAudio2`. They also use all three original `ModularSynth` models: `MorphVCO`, `StateFilter` and `Macro8`.
+Two additional first-party performance patches use the same source-template host and envelope components as Morphing State Pad: `Cardinal/HostMIDI`, `Fundamental/ADSR`, `Fundamental/VCA-1` and `Cardinal/HostAudio2`. They also use the **three original `ModularSynth` models required by these patches**: `MorphVCO`, `StateFilter` and `Macro8`.
 
 In both patches, the audio path is **MIDI pitch → MorphVCO → StateFilter low-pass → VCA → HostAudio2**, while **MIDI gate → ADSR → VCA CV** provides note-off silence. Macro8 outputs 0/1/2/3 respectively modulate oscillator morph, filter resonance, filter drive and filter cutoff. Output 3 uses its **bipolar -5 to +5 V mode**; the first three outputs are unipolar 0 to 10 V. The templates use conservative VCA and HostAudio gains.
 
@@ -164,4 +164,4 @@ python3 -m unittest discover -s tests -p 'test_patch_tools.py' -v
 
 The tests require each new patch to have eight modules, ten valid cables, four specific Macro8 CV routes, bipolar output 3 for cutoff, finite and range-checked first-party parameters, two eight-value snapshots, and low stored audio gains. The inspector still warns honestly when inherited Cardinal or Fundamental port ranges are not available from checked-in source.
 
-For **actual** acceptance, build this fork with all three original modules, load both patches in Cardinal Synth, verify MIDI note-on/note-off and host output, check A/B/LIVE transitions, confirm no unexpected clipping, and save/reopen the DAW project. **Those listening and host tests are not claimed by these JSON validation steps.**
+For **actual** acceptance, build this fork with the three original modules **required by these patches** (MorphVCO, StateFilter and Macro8), load both patches in Cardinal Synth, verify MIDI note-on/note-off and host output, check A/B/LIVE transitions, confirm no unexpected clipping, and save/reopen the DAW project. **Those listening and host tests are not claimed by these JSON validation steps.**
