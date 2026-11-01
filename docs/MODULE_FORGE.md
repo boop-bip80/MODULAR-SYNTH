@@ -81,6 +81,48 @@ The nonfinite checks inspect raw float exponent bits so strict fast-math
 cannot silently fold the test assertions away. This does **not** compile or
 load the Rack/Cardinal module.
 
+### Generated wrapper compile/process gate (HEADLESS test shim)
+
+The developer gate now generates **both** fresh starters and checks their
+*actual generated* `.cpp` wrappers against the repository's small test-only
+Rack stand-in, without installing modules or editing registry files:
+
+```bash
+python3 -m unittest discover -s tools/module-forge \
+    -p "test_generated_wrappers.py" -v
+```
+
+With a C++17 compiler, the test compiles each complete wrapper as its own
+translation unit using `-DHEADLESS`, the first-party plugin header, the
+`pluginInstance__ModularSynth` compile namespace, and `tests/rack_stub`.
+It also compiles and executes a program including both generated wrappers and
+the stereo effect's Rack-free DSP header. This checks exported model symbols,
+parameter and CV/audio port cardinality, sample processing, two-voice 1 V/oct
+pitch tracking, stereo right-input normalled from left, independent stereo
+inputs, polyphony, resets, nonfinite audio/CV and invalid sample-rate fallback.
+The C++ probe runs under ordinary `-O2`, production-style
+`-O2 -ffast-math -fno-finite-math-only`, and strict `-O2 -ffast-math`;
+the oscillator uses the same IEEE-754 bitwise finite guard as the effect core.
+
+The test also asks the **dry-run** integrator to plan changes against the
+current `plugins/ModularSynth` static collection. It checks both manifest
+fragments, **six** oscillator and **seven** effect edits, the source and
+resource destinations, `plugins/Makefile` compilation entry,
+`plugin.hpp` extern model declaration and exactly-once
+`initStatic__ModularSynth()` registration. Nothing is applied.
+
+The generator's HEADLESS widgets intentionally call only `setModule()`;
+knobs and jacks are created in the ordinary GUI build path. Both generated
+process callbacks use Rack's `getNormalPolyVoltage(0, voice)` API, as existing
+first-party modules do. Invalid or nonfinite sample rates fall back to
+48 kHz in the starters; they still need real-host sample-rate and audio QA.
+
+**Boundary:** `tests/rack_stub` is a narrow stand-in, *not* the Rack SDK.
+Passing this compile/process gate does not prove GUI compilation, upstream
+Rack/Cardinal ABI compatibility, plugin load, DAW playback, or audio quality.
+Real plugin variants still need the production build and host checks before
+shipping.
+
 ## Dry-run integration (explicit opt-in)
 
 The scaffolder now has a separate **safe integration command**. It previews
