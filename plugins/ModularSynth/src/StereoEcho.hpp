@@ -1,0 +1,178 @@
+/*
+ * MODULAR-SYNTH StereoEcho — original, Rack-independent DSP core.
+ * Copyright (C) 2026 boop-bip80 contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Two fractional-delay rings per voice. All memory is allocated in the
+ * constructor; process()/reset() never allocate, lock or clear the rings.
+ */
+#pragma once
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <vector>
+
+namespace modular_synth {
+namespace dsp {
+
+class StereoEchoDSP {
+public:
+    struct Sample {
+        float left;
+        float right;
+    };
+
+    static constexpr double kMinDelayMs = 1.0;
+    static constexpr double kMaxDelayMs = 1000.0;
+    static constexpr double kMaxFeedback = 0.90;
+    static constexpr int kMaxFullRateHz = 192000;
+    static constexpr std::size_t kCapacityFrames =
+        static_cast<std::size_t>(kMaxFullRateHz) + 2u;
+    static constexpr double kSlewSecondsTo99Point9Percent = 0.025;
+
+    static_assert(sizeof(float) == 4 && sizeof(double) == 8
+                  && std::numeric_limits<float>::is_iec559
+                  && std::numeric_limits<double>::is_iec559,
+                  "StereoEcho requires IEEE-754 binary32/binary64");
+
+    // 16 voices consume 16 * 2 * 192002 * sizeof(float) = 24,576,256 bytes
+    // of audio ring memory (23.44 MiB), plus small vector metadata.
+    static constexpr std::size_t reservedBytesPerVoice() noexcept {
+        return 2u * kCapacityFrames * sizeof(float);
+    }
+
+    StereoEchoDSP()
+        : leftBuffer_(kCapacityFrames, 0.0f),
+          rightBuffer_(kCapacityFrames, 0.0f) {}
+
+    StereoEchoDSP(const StereoEchoDSP&) = delete;
+    StereoEchoDSP& operator=(const StereoEchoDSP&) = delete;
+
+    static bool finite(double value) noexcept {
+        std::uint64_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return (bits & UINT64_C(0x7ff0000000000000)) != UINT64_C(0x7ff0000000000000);
+    }
+
+    static double clampFinite(double value, double fallback,
+                              double minValue, double maxValue) noexcept {
+        if (!finite(value))
+            return fallback;
+        return std::min(maxValue, std::max(minValue, value));
+    }
+
+    static float outputVoltage(double value) noexcept {
+        return static_cast<float>(clampFinite(value, 0.0, -10.0, 10.0));
+    }
+
+    void reset() noexcept {
+        // Logical generation reset. Never memset ~1.5 MiB from audio thread.
+        writeIndex_ = 0;
+        validFrames_ = 0;
+        previousSampleRate_ = 0.0;
+        currentDelaySamples_ = 0.0;
+        slewAmount_ = 1.0;
+        initialized_ = false;
+    }
+
+    double currentDelaySamples() const noexcept { return currentDelaySamples_; }
+
+    // The maximum actual milliseconds decreases above 192 kHz rather than
+    // allocating a larger ring in the audio thread.
+    double effectiveMaxMs(double sampleRate) const noexcept {
+        if (!finite(sampleRate) || sampleRate < 1000.0)
+            return kMinDelayMs;
+        return std::min(kMaxDelayMs,
+                        1000.0 * (kCapacityFrames - 2u) / sampleRate);
+    }
+
+    Sample process(double inputL, double inputR, double sampleRate,
+                   double delayMs, double feedback, double wet,
+                   double crossfeed) noexcept {
+        if (!finite(sampleRate) || sampleRate < 1000.0 || sampleRate > 384000.0) {
+            reset();
+            return {0.0f, 0.0f};
+        }
+        if (sampleRate != previousSampleRate_) {
+            // O(1), discards incompatible history without clearing buffers.
+            writeIndex_ = 0;
+            validFrames_ = 0;
+            previousSampleRate_ = sampleRate;
+            initialized_ = false;
+            slewAmount_ = 1.0 - std::exp(
+                -6.907755278982137 / (kSlewSecondsTo99Point9Percent * sampleRate));
+        }
+
+        const double safeL = clampFinite(inputL, 0.0, -20.0, 20.0);
+        const double safeR = clampFinite(inputR, 0.0, -20.0, 20.0);
+        const double maxMs = effectiveMaxMs(sampleRate);
+        const double ms = clampFinite(delayMs, 250.0, kMinDelayMs, maxMs);
+        const double targetSamples = ms * sampleRate / 1000.0;
+        const double fb = clampFinite(feedback, 0.0, 0.0, kMaxFeedback);
+        const double blend = clampFinite(wet, 0.0, 0.0, 1.0);
+        const double swap = clampFinite(crossfeed, 0.0, 0.0, 1.0);
+
+        if (!initialized_) {
+            currentDelaySamples_ = targetSamples;
+            initialized_ = true;
+        } else {
+            currentDelaySamples_ += slewAmount_ * (targetSamples - currentDelaySamples_);
+        }
+        currentDelaySamples_ = std::min(static_cast<double>(kCapacityFrames - 2u),
+                                        std::max(1.0, currentDelaySamples_));
+        const auto whole = static_cast<std::size_t>(currentDelaySamples_);
+        const double fraction = currentDelaySamples_ - whole;
+
+        const double delayedL = (1.0 - fraction) * readAge(leftBuffer_, whole)
+                                 + fraction * readAge(leftBuffer_, whole + 1u);
+        const double delayedR = (1.0 - fraction) * readAge(rightBuffer_, whole)
+                                 + fraction * readAge(rightBuffer_, whole + 1u);
+
+        // This 2x2 crossfeed matrix has row sum 1. Feedback <= 0.90 keeps
+        // the linear echo loop contractive, even at full ping-pong mode.
+        const double nextL = safeL + fb * ((1.0 - swap) * delayedL + swap * delayedR);
+        const double nextR = safeR + fb * ((1.0 - swap) * delayedR + swap * delayedL);
+        leftBuffer_[writeIndex_] = static_cast<float>(
+            clampFinite(nextL, 0.0, -20.0, 20.0));
+        rightBuffer_[writeIndex_] = static_cast<float>(
+            clampFinite(nextR, 0.0, -20.0, 20.0));
+
+        ++writeIndex_;
+        if (writeIndex_ == kCapacityFrames)
+            writeIndex_ = 0;
+        if (validFrames_ < kCapacityFrames - 2u)
+            ++validFrames_;
+
+        return {
+            outputVoltage((1.0 - blend) * safeL + blend * delayedL),
+            outputVoltage((1.0 - blend) * safeR + blend * delayedR)
+        };
+    }
+
+private:
+    double readAge(const std::vector<float>& data, std::size_t samplesAgo) const noexcept {
+        if (samplesAgo == 0u || samplesAgo > validFrames_
+            || samplesAgo >= kCapacityFrames)
+            return 0.0;
+        const auto index = writeIndex_ >= samplesAgo
+            ? writeIndex_ - samplesAgo
+            : kCapacityFrames + writeIndex_ - samplesAgo;
+        return data[index];
+    }
+
+    std::vector<float> leftBuffer_;
+    std::vector<float> rightBuffer_;
+    std::size_t writeIndex_ = 0;
+    std::size_t validFrames_ = 0;
+    double previousSampleRate_ = 0.0;
+    double currentDelaySamples_ = 0.0;
+    double slewAmount_ = 1.0;
+    bool initialized_ = false;
+};
+
+} // namespace dsp
+} // namespace modular_synth

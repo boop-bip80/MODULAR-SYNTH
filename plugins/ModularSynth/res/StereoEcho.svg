@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MODULAR-SYNTH StereoEcho original panel; 16 HP x 3U, GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" width="81.28mm" height="128.5mm" viewBox="0 0 240 380">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#17263a"/>
+      <stop offset="0.57" stop-color="#122038"/>
+      <stop offset="1" stop-color="#171527"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#64dfca"/>
+      <stop offset="0.50" stop-color="#5995ef"/>
+      <stop offset="1" stop-color="#c78cf6"/>
+    </linearGradient>
+    <radialGradient id="dial" cx="0.5" cy="0.5" r="0.7">
+      <stop offset="0" stop-color="#303d59"/>
+      <stop offset="1" stop-color="#1e2742"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="240" height="380" fill="url(#bg)"/>
+  <rect x="0" y="0" width="240" height="3" fill="url(#accent)"/>
+  <rect x="0" y="377" width="240" height="3" fill="url(#accent)"/>
+  <path d="M14 49H226M14 133H226M14 226H226M14 304H226"
+        fill="none" stroke="#48627d" stroke-width="1"/>
+  <circle cx="69" cy="99" r="32" fill="url(#dial)" stroke="#63b7cc" stroke-width="1.6"/>
+  <circle cx="171" cy="99" r="32" fill="url(#dial)" stroke="#9e8bd9" stroke-width="1.6"/>
+  <circle cx="69" cy="184" r="32" fill="url(#dial)" stroke="#5e9dd5" stroke-width="1.6"/>
+  <circle cx="171" cy="184" r="32" fill="url(#dial)" stroke="#ba83cf" stroke-width="1.6"/>
+  <path d="M69 68V72M171 68V72M69 153V157M171 153V157"
+        stroke="#eaf8ff" stroke-width="2" stroke-linecap="round"/>
+  <path d="M21 250H220" stroke="#326d85" stroke-width="2"/>
+  <path d="M20 312H220" stroke="#73518d" stroke-width="2"/>
+  <circle cx="34" cy="273" r="17" fill="#162f42" stroke="#57acb5" stroke-width="1.1"/>
+  <circle cx="91" cy="273" r="17" fill="#162f42" stroke="#57acb5" stroke-width="1.1"/>
+  <circle cx="150" cy="273" r="17" fill="#212b48" stroke="#749bd7" stroke-width="1.1"/>
+  <circle cx="207" cy="273" r="17" fill="#212b48" stroke="#749bd7" stroke-width="1.1"/>
+  <circle cx="35" cy="340" r="17" fill="#212b48" stroke="#749bd7" stroke-width="1.1"/>
+  <circle cx="115" cy="340" r="17" fill="#31274a" stroke="#b389d9" stroke-width="1.1"/>
+  <circle cx="180" cy="340" r="17" fill="#31274a" stroke="#b389d9" stroke-width="1.1"/>
+</svg>
