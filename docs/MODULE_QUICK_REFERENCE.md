@@ -1,7 +1,8 @@
 # MODULAR-SYNTH Originals — musician's quick reference
 
-Four first-party Rack modules appear under **MODULAR-SYNTH Originals** in the
-module browser. This page is a patching cheat sheet for the modules actually
+Four first-party Rack models are **statically registered in source** and expected
+under **MODULAR-SYNTH Originals** in the module browser after a successful build.
+This page is a patching cheat sheet for the models actually
 declared in [the collection manifest](../plugins/ModularSynth/plugin.json)
 and [the checked-in example patches](../patches/examples/). All voltage and
 control ranges below are from their C++ Rack metadata/DSP wrappers, **not**
@@ -69,7 +70,7 @@ measured audio or a verified DAW session.
   per volt**. The DSP bounds the effective settings. Up to **16 polyphonic
   lanes**; no external sample file is required.
 
-## Three playable signal paths
+## Three suggested wiring recipes (host-unverified)
 
 1. **Keyboard subtractive voice:** `Host MIDI pitch → Morph VCO PITCH`;
    `Morph VCO MORPH → State Filter IN → LP → VCA audio IN → Host Audio L/R`.
