@@ -21,7 +21,8 @@ import zipfile
 
 from panel_preview import PreviewError, render_svg
 from compatibility import CompatibilityError, compatibility_report, text_report
-from control_mapping import MappingError, derive_control_mappings
+from control_mapping import (
+    CLOCKED_LFO_CONTRACT, MappingError, derive_control_mappings)
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -234,7 +235,8 @@ def _validate_display_name(name: object) -> str:
 
 
 def build_manifest(patch_bytes: bytes, name: str, *,
-                   format_version: int = FORMAT_VERSION) -> dict:
+                   format_version: int = FORMAT_VERSION,
+                   legacy_v2_mapping: bool = False) -> dict:
     name = _validate_display_name(name)
     if not _is_int(format_version) or format_version not in SUPPORTED_FORMAT_VERSIONS:
         raise InstrumentError("unsupported instrument manifest format/version")
@@ -257,10 +259,20 @@ def build_manifest(patch_bytes: bytes, name: str, *,
         # all third-party ports remain explicitly unverified.
         try:
             mappings = derive_control_mappings(
-                _decode_json(patch_bytes, "VCV patch"), performance)
+                _decode_json(patch_bytes, "VCV patch"), performance,
+                clocked_lfo_known=not legacy_v2_mapping)
         except MappingError as exc:
             raise InstrumentError(f"Macro8 control mapping: {exc}") from exc
         manifest["performance"]["controlMappings"] = mappings
+        if not legacy_v2_mapping and any(
+            route["destination"]["plugin"] == "ModularSynth"
+            and route["destination"]["model"] == "ClockedLFO"
+            for route in mappings
+        ):
+            # The original v2 format had a frozen four-model port contract.
+            # Mark only new ClockedLFO-routed bundles so old unmarked v2 ZIPs
+            # can still be validated using their original unverified semantics.
+            manifest["performance"]["controlMappingContract"] = CLOCKED_LFO_CONTRACT
     return manifest
 
 
@@ -343,8 +355,15 @@ def read_bundle(bundle_bytes: bytes) -> tuple[dict, bytes]:
             or not _is_int(manifest.get("formatVersion"))
             or manifest["formatVersion"] not in SUPPORTED_FORMAT_VERSIONS):
         raise InstrumentError("unsupported instrument manifest format/version")
+    performance = manifest.get("performance")
+    contract = (performance.get("controlMappingContract")
+                if isinstance(performance, dict) else None)
+    if contract is not None and contract != CLOCKED_LFO_CONTRACT:
+        raise InstrumentError("unsupported control mapping contract")
     expected = build_manifest(
-        patch, manifest.get("name"), format_version=manifest["formatVersion"])
+        patch, manifest.get("name"), format_version=manifest["formatVersion"],
+        legacy_v2_mapping=(manifest["formatVersion"] == MAPPING_FORMAT_VERSION
+                           and contract is None))
     if manifest != expected:
         raise InstrumentError("instrument manifest does not match its patch")
     return manifest, patch

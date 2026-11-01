@@ -13,7 +13,7 @@ import unittest
 import xml.etree.ElementTree as ET
 import zipfile
 
-from control_mapping import FIRST_PARTY_INPUTS
+from control_mapping import CLOCKED_LFO_CONTRACT, FIRST_PARTY_INPUTS
 from instrument_builder import (
     InstrumentError, MANIFEST_MEMBER, MAPPING_FORMAT_VERSION, PATCH_MEMBER,
     build_manifest, check, create_bundle, inspect, main, pack, preview,
@@ -50,6 +50,18 @@ def routed_patch() -> dict:
     return patch
 
 
+def clocked_lfo_patch() -> dict:
+    patch = sample_patch()
+    patch["modules"].append(
+        {"id": 90, "plugin": "ModularSynth", "model": "ClockedLFO"})
+    patch["cables"] = [
+        {"id": 120 + input_id, "outputModuleId": 70,
+         "outputId": input_id, "inputModuleId": 90, "inputId": input_id}
+        for input_id in reversed(range(5))
+    ]
+    return patch
+
+
 def manifest_entries(bundle: bytes) -> list[tuple[str, bytes]]:
     with zipfile.ZipFile(BytesIO(bundle)) as archive:
         return [(name, archive.read(name)) for name in archive.namelist()]
@@ -59,7 +71,7 @@ class FirstPartyPortContractTests(unittest.TestCase):
     def test_contract_matches_rack_source_enum_and_config_labels(self) -> None:
         self.assertEqual(
             set(FIRST_PARTY_INPUTS),
-            {"Macro8", "MorphVCO", "StateFilter", "StereoEcho"})
+            {"Macro8", "MorphVCO", "StateFilter", "StereoEcho", "ClockedLFO"})
         for model, ports in FIRST_PARTY_INPUTS.items():
             with self.subTest(model=model):
                 cpp = (ROOT / "plugins/ModularSynth/src" / f"{model}.cpp").read_text()
@@ -90,6 +102,145 @@ class FirstPartyPortContractTests(unittest.TestCase):
 
 
 class MappingV2Tests(unittest.TestCase):
+    def test_clocked_lfo_five_inputs_have_source_backed_labels(self) -> None:
+        manifest = build_manifest(
+            patch_bytes(clocked_lfo_patch()), "Clock Routes", format_version=2)
+        self.assertEqual(manifest["performance"]["controlMappingContract"],
+                         CLOCKED_LFO_CONTRACT)
+        routes = manifest["performance"]["controlMappings"]
+        self.assertEqual(len(routes), 5)
+        self.assertEqual([item["cableId"] for item in routes],
+                         [120, 121, 122, 123, 124])
+        self.assertEqual([item["source"]["outputId"] for item in routes],
+                         [0, 1, 2, 3, 4])
+        destinations = [item["destination"] for item in routes]
+        self.assertEqual([item["inputId"] for item in destinations],
+                         [0, 1, 2, 3, 4])
+        self.assertEqual({item["inputKind"] for item in destinations}, {"cv"})
+        self.assertEqual([item["inputLabel"] for item in destinations], [
+            "Free-rate CV (1 V/oct)",
+            "External tempo pulse (2 V rising threshold)",
+            "Phase reset trigger (2 V rising threshold)",
+            "Output phase CV (10 V per cycle)",
+            "Pulse width CV (10 V full range)",
+        ])
+        self.assertEqual([item["modulatesParameter"] for item in destinations], [
+            {"id": 0, "name": "Free-run frequency"},
+            None,  # Clock edges synchronize timing, not a Rack knob.
+            None,  # Reset triggers are not parameter automation.
+            {"id": 2, "name": "Output phase offset"},
+            {"id": 3, "name": "Pulse width"},
+        ])
+
+    def test_clocked_lfo_known_input_bounds_rejected_before_output(self) -> None:
+        for bad_port in (5, 4096):
+            with self.subTest(inputId=bad_port):
+                patch = clocked_lfo_patch()
+                patch["cables"][0]["inputId"] = bad_port
+                raw = patch_bytes(patch)
+                # v1 schema behavior is deliberately unchanged.
+                self.assertEqual(build_manifest(raw, "Legacy")["formatVersion"], 1)
+                with self.assertRaisesRegex(InstrumentError, "ClockedLFO inputId"):
+                    create_bundle(raw, "Clock Routes", format_version=2)
+                with tempfile.TemporaryDirectory() as temp:
+                    path = Path(temp) / "source.vcv"
+                    output = Path(temp) / "invalid.msinstrument"
+                    path.write_bytes(raw)
+                    with self.assertRaisesRegex(InstrumentError, "ClockedLFO inputId"):
+                        pack(path, output, "Clock Routes", format_version=2)
+                    self.assertFalse(output.exists())
+
+    def test_clocked_lfo_v2_roundtrip_and_tamper_detection(self) -> None:
+        raw = patch_bytes(clocked_lfo_patch())
+        first = create_bundle(raw, "Clock Routes", format_version=2)
+        self.assertEqual(first, create_bundle(raw, "Clock Routes", format_version=2))
+        manifest, recovered = read_bundle(first)
+        self.assertEqual(recovered, raw)
+        self.assertEqual(manifest["formatVersion"], 2)
+        self.assertEqual(len(manifest["performance"]["controlMappings"]), 5)
+        entries = manifest_entries(first)
+        for change, failure in (
+            (lambda m: m["performance"]["controlMappings"][1]["destination"].update(
+                inputLabel="Incorrectly labeled host automation"), "manifest does not match"),
+            (lambda m: m["performance"].pop("controlMappingContract"),
+             "manifest does not match"),
+            (lambda m: m["performance"].update(controlMappingContract="untrusted"),
+             "unsupported control mapping contract"),
+        ):
+            with self.subTest(change=change):
+                modified = json.loads(dict(entries)[MANIFEST_MEMBER])
+                change(modified)
+                tampered_entries = [
+                    (name, json.dumps(modified).encode("utf-8")
+                     if name == MANIFEST_MEMBER else blob)
+                    for name, blob in entries
+                ]
+                with self.assertRaisesRegex(InstrumentError, failure):
+                    read_bundle(custom_archive(tampered_entries))
+
+    def test_legacy_unmarked_v2_clocked_lfo_stays_unverified_and_readable(self) -> None:
+        raw = patch_bytes(clocked_lfo_patch())
+        legacy = build_manifest(
+            raw, "Clock Routes", format_version=2, legacy_v2_mapping=True)
+        self.assertNotIn("controlMappingContract", legacy["performance"])
+        destinations = [route["destination"]
+                        for route in legacy["performance"]["controlMappings"]]
+        self.assertEqual(len(destinations), 5)
+        self.assertTrue(all(item["inputKind"] == "unverified"
+                            and item["inputLabel"] is None
+                            and item["modulatesParameter"] is None
+                            for item in destinations))
+        # Reconstruct the exact two-member v2 ZIP shape emitted before
+        # ClockedLFO was added to the first-party port contract.
+        canonical = (json.dumps(legacy, sort_keys=True, ensure_ascii=True,
+                                allow_nan=False, indent=2) + "\n").encode("utf-8")
+        old_archive = custom_archive([
+            (MANIFEST_MEMBER, canonical), (PATCH_MEMBER, raw)])
+        # Exact ZIP SHA from the pre-extension v2 generator, independently
+        # executed on the same synthetic ClockedLFO destination patch.
+        self.assertEqual(hashlib.sha256(old_archive).hexdigest(),
+                         "40cceaed8ce27ccdd24b6041f16e608648b36e97d7cb02203cd5c22e57bd1567")
+        decoded, original = read_bundle(old_archive)
+        self.assertEqual(decoded, legacy)
+        self.assertEqual(original, raw)
+        self.assertNotEqual(old_archive, create_bundle(
+            raw, "Clock Routes", format_version=2))
+
+    def test_clocked_lfo_v2_source_cli_roundtrip_preserves_contract(self) -> None:
+        raw = patch_bytes(clocked_lfo_patch())
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            patch = root / "clocked.vcv"
+            bundle = root / "clocked.msinstrument"
+            patch.write_bytes(raw)
+            manifest = pack(patch, bundle, "Clock Routes", format_version=2)
+            self.assertEqual(inspect(bundle), manifest)
+            self.assertEqual(manifest["performance"]["controlMappingContract"],
+                             CLOCKED_LFO_CONTRACT)
+            self.assertEqual(check(bundle, ROOT)["status"], "PASS")
+            output = root / "concept.svg"
+            preview(bundle, output)
+            ET.fromstring(output.read_bytes())
+            destination = root / "unpacked"
+            self.assertEqual(unpack(bundle, destination), manifest)
+            self.assertEqual((destination / PATCH_MEMBER).read_bytes(), raw)
+            repacked = root / "repacked.msinstrument"
+            pack(destination / PATCH_MEMBER, repacked, "Clock Routes", format_version=2)
+            self.assertEqual(repacked.read_bytes(), bundle.read_bytes())
+
+    def test_non_clocked_v2_archive_remains_byte_identical(self) -> None:
+        path = EXAMPLES / "MODULAR_-_Echo_Motion_Performance.vcv"
+        if not path.is_file():
+            self.skipTest("factory patch unavailable")
+        raw = path.read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),
+                         "ff77a9206c83f0f9312bbf70c562d3028f33263869a0d92b596c9be248b8bba7")
+        bundle = create_bundle(raw, "Echo Motion Performance", format_version=2)
+        self.assertEqual(hashlib.sha256(bundle).hexdigest(),
+                         "bd3e08c16bc61fcdada53e10dcd6d0454312c68f057e90dbf1adfee9493518a5")
+        manifest, _ = read_bundle(bundle)
+        self.assertNotIn("controlMappingContract", manifest["performance"])
+
     def test_exact_verified_and_unverified_destination_contract(self) -> None:
         manifest = build_manifest(
             patch_bytes(routed_patch()), "Routes", format_version=2)

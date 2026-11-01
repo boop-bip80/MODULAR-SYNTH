@@ -130,10 +130,43 @@ mapping annotations. A matching `modulatesParameter` describes a **known CV
 input's effect on a first-party knob**, not a cable to that Rack parameter,
 automation assignment, or a promise that the host applies a particular value.
 
-For the current four first-party modules, source-backed input contracts come
+For the current five first-party modules, source-backed input contracts come
 from the exact `InputIds` enums, `configInput` descriptors and matching
 `configParam` labels in `plugins/ModularSynth/src/*.cpp`; regression tests keep
-the frozen v2 contract synchronized with those sources. The mapping reports:
+the source-backed port contracts synchronized with those sources.
+
+The `ClockedLFO` source-backed input contract uses its exact zero-based Rack
+`inputId` values:
+
+| Input ID | Saved cable destination | Related Rack knob (if any) |
+| --- | --- | --- |
+| 0 | Free-rate CV (1 V/oct) | Param 0, Free-run frequency |
+| 1 | External tempo pulse (2 V rising threshold) | None — clock edges synchronize timing |
+| 2 | Phase reset trigger (2 V rising threshold) | None — a trigger, not automation |
+| 3 | Output phase CV (10 V per cycle) | Param 2, Output phase offset |
+| 4 | Pulse width CV (10 V full range) | Param 3, Pulse width |
+
+All five are voltage/control inputs (`inputKind: "cv"`). Clock and reset are
+**edge-triggered**, so their mappings contain `modulatesParameter: null`.
+Rate CV changes the free-run oscillator rate; a detected external clock can
+override that free-run rate while clock-locked. These descriptors report the
+saved cable's destination and source-code semantics, **not** a direct
+parameter connection, clock synchronization guarantee, or plugin host test.
+
+To preserve already-created v2 archives, any **new** v2 bundle containing a
+direct Macro8 → ClockedLFO cable includes the immutable marker
+`performance.controlMappingContract = "modular-synth-v2-clockedlfo-inputs-v1"`.
+This selects the five-model
+source-backed contract above. Older **unmarked** v2 archives still replay the
+original four-model contract: a saved ClockedLFO destination stays
+`unverified`, and the ZIP remains readable without rewriting its manifest.
+New v2 archives **without** a ClockedLFO destination omit the marker and keep
+their original byte layout. The marker is authenticated through the same
+patch-derived manifest comparison: removing or substituting it without a
+corresponding valid legacy mapping is rejected. This is an explicit contract
+extension inside format v2, not a silent reinterpretation of older bundles.
+
+Across first-party and external destinations, the mapping reports:
 
 | `destination.inputKind` | Meaning |
 | --- | --- |
@@ -169,9 +202,9 @@ python3 tools/instrument-builder/instrument_builder.py pack \
 ```
 
 The v1 format remains the default and its byte layout is unchanged. Existing
-v1 archives are not silently upgraded. Any future changes to these frozen
-v2 first-party destination semantics require a new schema version; old
-source-bundle claims should not be silently reinterpreted.
+v1 archives are not silently upgraded. Future changes to existing source-backed
+destination semantics require a new format or explicit immutable contract
+identifier; old source-bundle claims must not be silently reinterpreted.
 
 ### Safety and limits
 
