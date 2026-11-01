@@ -26,11 +26,24 @@ The release-producing jobs alone receive GitHub token `contents: write` permissi
 
 The full matrix ignores pushes that change only Markdown/documentation files, to avoid rebuilding every platform for wording-only edits. Every tag push can still trigger a full release build, regardless of changed paths.
 
+## Offline submodule and dependency preflight
+
+Before a costly recursive checkout or full build, run:
+
+```sh
+python3 -B tools/ci/preflight_submodules.py
+```
+
+This **does not contact the network**. It compares every root `.gitmodules` declaration with the committed Gitlink tree, checks initialized submodule HEADs against their exact pinned SHAs, and verifies that Git resolves the GitLab SpeexDSP URL to the official Xiph mirror using `build.yml`'s `GIT_CONFIG_*` environment. When the pinned Rack checkout is initialized, it also checks Rack's nested `dep/speexdsp` Gitlink, URL, and local checkout. Missing local submodule downloads are reported as notes in the default mode so the fast source gate works without fetching a large dependency tree.
+
+For a workspace that **should already contain all recursive submodules**, run `python3 -B tools/ci/preflight_submodules.py --require-populated`. This also fails if any submodule is uninitialized or checked out at the wrong commit. Both modes are strictly local; they cannot prove that a remote host is reachable or that a complete application build succeeds. The CLI has network-free tests under `tests/test_ci_submodule_preflight.py`.
+
 ## Run the fast gate locally
 
 From a checkout with Python 3 and a C++17 compiler:
 
 ```sh
+python3 -B tools/ci/preflight_submodules.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 -m unittest discover -s tools/module-forge -p 'test_*.py' -v
 python3 -B tests/run_dsp_tests.py
@@ -51,7 +64,7 @@ For releases, push the intended version tag and inspect all release jobs and art
 
 ## What passing means
 
-- **Fast quality success:** manifests, patch graphs, Module Forge tests, and the standalone oscillator DSP smoke meet their test assertions.
+- **Fast quality success:** manifest and Gitlink checks, offline SpeexDSP mirror preflight, Module Forge tests, patch graphs, and discovered standalone DSP smokes meet their assertions.
 - **Full build success:** the cross-platform jobs that executed passed compilation and packaging checks.
 - **Audio-host production readiness:** still requires real DAW loading, live MIDI/audio, project save/restore, audio regression, performance, and UI validation; it is not established by source-only tests.
 
