@@ -11,7 +11,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "validate_panels.py"
-MODULES = ("MorphVCO", "StateFilter", "Macro8")
+MODULES = ("MorphVCO", "StateFilter", "Macro8", "StereoEcho")
 
 
 class PanelGeometryTests(unittest.TestCase):
@@ -41,8 +41,46 @@ class PanelGeometryTests(unittest.TestCase):
     def test_current_repository_panels_pass(self) -> None:
         result = self.run_checker(REPO)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("PASS: 3 SVG panels", result.stdout)
+        self.assertIn("PASS: 4 SVG panels", result.stdout)
+        self.assertIn("63 conservative candidate widget centers", result.stdout)
         self.assertIn("visual rendering/overlap not verified", result.stdout)
+
+    def test_stereo_echo_bad_16hp_width_rejected(self) -> None:
+        root = self.fixture()
+        panel = root / "plugins/ModularSynth/res/StereoEcho.svg"
+        self.replace_one(panel, 'width="81.28mm"', 'width="101.6mm"')
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("width", result.stderr)
+        self.assertIn("16HP", result.stderr)
+
+    def test_stereo_echo_missing_svg_rejected(self) -> None:
+        root = self.fixture()
+        (root / "plugins/ModularSynth/res/StereoEcho.svg").unlink()
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing panel SVG", result.stderr)
+
+    def test_stereo_echo_outside_center_rejected(self) -> None:
+        root = self.fixture()
+        source = root / "plugins/ModularSynth/src/StereoEcho.cpp"
+        self.replace_one(source, "Vec(207.0f, 273.0f)", "Vec(241.0f, 273.0f)")
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("center (241, 273) outside 240x380 panel", result.stderr)
+
+    def test_stereo_echo_input_output_cardinality_rejected(self) -> None:
+        root = self.fixture()
+        source = root / "plugins/ModularSynth/src/StereoEcho.cpp"
+        self.replace_one(
+            source,
+            "createInputCentered<PJ301MPort>(Vec(207.0f, 273.0f)",
+            "createOutputCentered<PJ301MPort>(Vec(207.0f, 273.0f)"
+        )
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expected 5 Input centered callsites, found 4", result.stderr)
+        self.assertIn("expected 2 Output centered callsites, found 3", result.stderr)
 
     def test_missing_svg_rejected(self) -> None:
         root = self.fixture()
