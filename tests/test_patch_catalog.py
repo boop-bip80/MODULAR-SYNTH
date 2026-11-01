@@ -71,6 +71,8 @@ class PatchCatalogTests(unittest.TestCase):
         self.assertIn("| Patch | Modules | MIDI / host transport routes |", rendered)
         self.assertIn("Polyphonic Motion Pad", rendered)
         self.assertIn("Host transport", rendered)
+        self.assertIn("MIDI (1 saved channel)", rendered)
+        self.assertIn("MIDI (8 saved channels)", rendered)
         self.assertIn("inspector warnings", rendered)
         self.assertNotIn(str(self.examples), rendered)
         for entry in first["patches"]:

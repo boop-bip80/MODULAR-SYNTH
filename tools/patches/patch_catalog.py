@@ -164,7 +164,8 @@ def markdown(catalog: dict) -> str:
         if entry["midi_routed"]:
             midi = "MIDI"
             if entry["midi_channels_saved"] is not None:
-                midi += f" ({entry['midi_channels_saved']} saved lanes)"
+                channels = entry["midi_channels_saved"]
+                midi += f" ({channels} saved {'channel' if channels == 1 else 'channels'})"
             control.append(midi)
         if entry["host_transport_routed"]:
             control.append("Host transport")
