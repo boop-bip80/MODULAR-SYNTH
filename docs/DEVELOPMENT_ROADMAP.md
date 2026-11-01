@@ -8,7 +8,7 @@ MODULAR-SYNTH aims to become an extensible, professionally reliable modular soun
 
 The baseline repository, prior to project-specific development, matched [DISTRHO Cardinal](https://github.com/DISTRHO/Cardinal) exactly at commit [`0a530b73273afc914ec71a78e9165cd28c53b599`](https://github.com/DISTRHO/Cardinal/commit/0a530b73273afc914ec71a78e9165cd28c53b599) (2026-07-28). At that baseline both repositories had the same Git tree and 730 tree entries. The foundation includes the VCV Rack engine via a pinned submodule, DPF plugin formats, built-in modules and Cardinal host integration. Those capabilities are **upstream work**, not new MODULAR-SYNTH features.
 
-As of this roadmap's initial publication there are **no fork-specific releases and no completed GitHub Actions runs on this fork**. The existing `.github/workflows/build.yml` is substantial but its presence must not be confused with successful verification in this repository. Upstream release downloads, demonstrations and screenshots are **not** MODULAR-SYNTH builds.
+As of the current update there is **no verified fork-specific release and no successful complete fork-owned host/plugin build**. Hosted build jobs have been queued or encountered external dependency/network issues; the existing `.github/workflows/build.yml` must not be confused with a passing production artifact. Upstream release downloads, demonstrations and screenshots are **not** MODULAR-SYNTH builds.
 
 ## Guiding constraints
 
@@ -22,29 +22,54 @@ As of this roadmap's initial publication there are **no fork-specific releases a
 
 ## Status register
 
-| Milestone | Status | Required evidence before marking complete |
+| Milestone | Current status | Remaining exit evidence |
 | --- | --- | --- |
-| Baseline provenance recorded | Documented | Upstream commit/tree comparison and license inventory |
-| Phase 1 — First original module and trustworthy baseline | Source changes merged; verification pending | Original module build, basic audio smoke test, CI results, patch open/save, README |
-| Phase 2 — Module Forge developer workflow | Initial scaffolder merged; full workflow planned | Generated module compiles and passes documented checks on supported systems |
-| Phase 3 — Patch-to-Instrument Builder | Planned | Save, reload, play and automate a generated instrument from a nested patch |
-| Phase 4 — Distinct flagship synthesis engines | Planned | Listening tests, reference renders and stress/performance evidence |
-| Phase 5 — Production workflow and releases | Planned | DAW roundtrips, installers, release artifacts and cross-platform signoff |
-| Phase 6 — Experimental frontier | Planned | Explicit opt-in, performance/security evaluation and fallback path |
+| Baseline provenance | Documented | Preserve upstream attribution and license checks in new contributions |
+| Phase 1 — Original voice and trustworthy baseline | Three original modules registered, seven example patches, structural/routing/semantic patch tooling, static UI geometry/contrast checks and standalone DSP tests pass | Full plugin build, DAW audio/patch save-reload, manual UI/host checks and verified artifact |
+| Phase 2 — Module Forge developer workflow | Oscillator and stereo-effect generators plus opt-in static integrator implemented; 37 integration/scaffolder/core tests pass locally | Generate, compile, load and reload both kinds within real Cardinal hosts |
+| Phase 3 — Patch-to-Instrument Builder | Macro8 CV/snapshot foundation implemented and DSP tested | Patch grouping, macro mapping, custom panel, DAW roundtrip, standalone instrument export |
+| Phase 4 — Flagship synthesis | Original Morph VCO and TPT State Filter foundations added; standalone alias, digital response and polyphonic CV-stability measurements exist | Flagship engines, real audio/host renders and performance benchmarks |
+| Phase 5 — Production workflow and releases | CI traffic/pinned dependency safeguards, source-based geometry checks and contrast improvements | Successful multi-platform builds, actual DAW/UI accessibility checks, installers, release artifacts |
+| Phase 6 — Experimental frontier | Planned, opt-in only | Security/performance evaluation and stable fallback path |
 
-## Initial implementation batch — 2026-11-01
+## Source implementation record — 2026-11-01
 
-Source changes merged into `main`:
+The source changes below were merged through focused pull requests:
 
-- [#1](https://github.com/boop-bip80/MODULAR-SYNTH/pull/1): README identity and six-phase plan.
-- [#3](https://github.com/boop-bip80/MODULAR-SYNTH/pull/3): integrity checks for manifests, patches and pinned gitlinks.
-- [#2](https://github.com/boop-bip80/MODULAR-SYNTH/pull/2): reversible cable-visibility control.
-- [#4](https://github.com/boop-bip80/MODULAR-SYNTH/pull/4): three original example patch arrangements.
-- [#6](https://github.com/boop-bip80/MODULAR-SYNTH/pull/6): original ModularSynth collection and Morph VCO with a standalone DSP smoke test source.
-- [#5](https://github.com/boop-bip80/MODULAR-SYNTH/pull/5): Module Forge generator, tests and developer instructions.
-- [#7](https://github.com/boop-bip80/MODULAR-SYNTH/pull/7): restrict inherited upstream IRC notification job to the upstream repository.
+- [#1](https://github.com/boop-bip80/MODULAR-SYNTH/pull/1): distinct project identity and roadmap.
+- [#2](https://github.com/boop-bip80/MODULAR-SYNTH/pull/2): reversible patch-cable visibility control.
+- [#3](https://github.com/boop-bip80/MODULAR-SYNTH/pull/3), [#8](https://github.com/boop-bip80/MODULAR-SYNTH/pull/8): source integrity, scaffolder and oscillator smoke checks.
+- [#4](https://github.com/boop-bip80/MODULAR-SYNTH/pull/4): three bundled-module example arrangements.
+- [#5](https://github.com/boop-bip80/MODULAR-SYNTH/pull/5), [#10](https://github.com/boop-bip80/MODULAR-SYNTH/pull/10): Module Forge generator and safe dry-run/opt-in registration tool.
+- [#6](https://github.com/boop-bip80/MODULAR-SYNTH/pull/6), [#11](https://github.com/boop-bip80/MODULAR-SYNTH/pull/11): original Morph VCO and compiled DSP hardening.
+- [#7](https://github.com/boop-bip80/MODULAR-SYNTH/pull/7), [#9](https://github.com/boop-bip80/MODULAR-SYNTH/pull/9), [#14](https://github.com/boop-bip80/MODULAR-SYNTH/pull/14): fork-safe CI triggers, standalone DSP profile runner and pinned dependency mirror.
+- [#12](https://github.com/boop-bip80/MODULAR-SYNTH/pull/12): patch inspector and MIDI-controlled Morph VCO example.
+- [#13](https://github.com/boop-bip80/MODULAR-SYNTH/pull/13): original polyphonic State Filter with drive/finite fixes.
+- [#15](https://github.com/boop-bip80/MODULAR-SYNTH/pull/15): Macro8 performance CV and snapshot controller.
+- [#16](https://github.com/boop-bip80/MODULAR-SYNTH/pull/16): static registration, build-source and manifest integration for StateFilter/Macro8.
+- [#17](https://github.com/boop-bip80/MODULAR-SYNTH/pull/17): Macro8 + StateFilter sound-design pad and stronger source-aware patch inspection.
+- [#18](https://github.com/boop-bip80/MODULAR-SYNTH/pull/18): host/manual accessibility and DAW QA checklist—documented, not performed.
+- [#19](https://github.com/boop-bip80/MODULAR-SYNTH/pull/19): first-party registration consistency tests.
+- [#21](https://github.com/boop-bip80/MODULAR-SYNTH/pull/21): 162-case LP/BP/HP digital filter frequency-response regression.
+- [#22](https://github.com/boop-bip80/MODULAR-SYNTH/pull/22): cinematic pad and gritty bass factory sound-design patches.
+- [#23](https://github.com/boop-bip80/MODULAR-SYNTH/pull/23): automated original SVG panel geometry checks.
+- [#24](https://github.com/boop-bip80/MODULAR-SYNTH/pull/24): [musician getting-started guide](GETTING_STARTED.md) grounded in committed code and unverified-host caveats.
+- [#25](https://github.com/boop-bip80/MODULAR-SYNTH/pull/25): 786,432 real TPT-filter calls under polyphonic CV and sample-rate stress; [methods](FILTER_STABILITY.md).
+- [#26](https://github.com/boop-bip80/MODULAR-SYNTH/pull/26): coherent-FFT [polyBLEP alias regression](OSCILLATOR_ALIASING.md), 24 musical comparisons versus naive waveform edges.
+- [#27](https://github.com/boop-bip80/MODULAR-SYNTH/pull/27): [Module Forge](MODULE_FORGE.md) stereo-effect generation, standalone DSP and hardened finite guards.
+- [#28](https://github.com/boop-bip80/MODULAR-SYNTH/pull/28): SHA-256-verified FLAC 1.5.0 dependency pre-seeding in PawPaw CI, including older curl fallback.
+- [#29](https://github.com/boop-bip80/MODULAR-SYNTH/pull/29): [source-backed panel contrast audit](QA_UI.md) of 31 text sites (all rendered underlays unknown) and 31 decorative outlines (nine initially below advisory 3:1); no claim of WCAG or host-GUI conformance.
+- [#30](https://github.com/boop-bip80/MODULAR-SYNTH/pull/30): brighten nine source-measured decorative panel strokes to 3.25–3.30:1 and preserve geometry (actual Rack appearance still untested).
+- [#31](https://github.com/boop-bip80/MODULAR-SYNTH/pull/31): [deterministic patch comparison](PATCH_COMPARISON.md) of control, Macro8 scene and cable state, independent of generated Rack IDs.
+- [#32](https://github.com/boop-bip80/MODULAR-SYNTH/pull/32): [seven-patch coverage matrix](PATCH_COVERAGE.md) with 63 source-backed graph/snapshot claims and complete first-party model coverage.
 
-The quality workflow is being extended to execute the Morph VCO C++ smoke test and Module Forge generator tests on CI. CI results, plugin builds, listening tests, DAW roundtrips and releases are **not implied by code presence**. Phase 1 remains open until the gates below are supported by evidence.
+**Observed local validation:** The exact merged `main` tree after #32 passed **82 standard Python tests, 37 Module Forge tests, and 18 compiled-and-executed standalone C++ DSP runs** (six suites × three compiler profiles), including 162 reference-response measurements, extreme 16-voice CV stress, and oscillator alias-power reduction. Additional measurements are in [FILTER_STABILITY.md](FILTER_STABILITY.md) and [OSCILLATOR_ALIASING.md](OSCILLATOR_ALIASING.md). This **does not** verify full plugin compilation, GUI behavior, actual DAW audio or performance. GitHub full-build jobs have been queued or blocked; no successful fork-owned artifact or host test has been verified.
+
+**Held work:** [PR #20](https://github.com/boop-bip80/MODULAR-SYNTH/pull/20) contains an independently tested standalone core-level WAV renderer, but its merge is **blocked pending explicit review/approval** after the safety reviewer flagged potentially destructive stale-base differences. It has **not** merged into `main`, is **not** a hosted audio-plugin demonstration and must not be described as a released feature.
+
+**Known build/verification risks:** The inherited full build uses dozens of pinned submodules, and historical runs encountered third-party network failures (SpeexDSP GitLab 502/504 and other dependency downloads). The GitHub mirror rewrite retains the exact submodule commit, and a separate official-Xiph FLAC 1.5.0 cache preseed verifies the published checksum. Both are **unverified** on a completed hosted build. The local constrained environment cannot compile the complete Rack wrapper with missing external headers; production evidence must come from real build/host runs.
+
+Phase 1 remains **open** until the acceptance gates below are satisfied.
 
 ## Phase 1 — Ownership, baseline and the first original voice
 
@@ -63,10 +88,10 @@ Implementation workstreams:
 
 - [ ] A fresh recursive checkout builds at least one standalone binary and one DAW plugin variant from this fork through CI; the exact commit and artifact are linked.
 - [ ] The first original oscillator loads from the module browser, produces finite audio at 44.1/48/96 kHz, responds to 1 V/oct and CV inputs, and survives sample-rate changes and reset.
-- [ ] Unit tests or an offline reference-render harness validate representative oscillator outputs, phase continuity and absence of obvious clipping/NaN faults.
+- [x] Unit tests validate representative oscillator waveform behavior, phase/sample-rate continuity and non-finite guards: [Morph VCO regression](../tests/morphvco_dsp_smoke.cpp), [PR #11](https://github.com/boop-bip80/MODULAR-SYNTH/pull/11), executed locally at three compiler profiles on integrated [PR #16](https://github.com/boop-bip80/MODULAR-SYNTH/pull/16).
 - [ ] A patch containing the new module saves, reloads and recalls its controls identically; compatibility with existing Cardinal patches is verified.
 - [ ] All introduced panel assets, dependencies and source code have compatible licensing and recorded attribution.
-- [ ] Any UI and patch additions have reproducible manual or automated validation instructions.
+- [x] UI and patch additions have reproducible **source-level** manual or automated validation instructions: [panel geometry tests](../tools/ui-check/validate_panels.py), [QA checklist](QA_UI.md), [patch inspector](PATCH_WORKFLOW.md), [getting-started guide](GETTING_STARTED.md). Actual GUI and audible host checks remain unverified.
 - [ ] No newly introduced blocker remains in existing Cardinal self-tests/plugin validation. CI results are reported accurately, including skipped platforms.
 - [ ] README status and direct links to **this fork's** verified artifacts are updated; if no artifacts pass, README explicitly says so.
 
