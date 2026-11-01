@@ -108,13 +108,20 @@ each supported host/plugin format.
 
 - [ ] Sustain at least 10 minutes of audio with filter CV and repeated
   snapshot morphs. Record CPU, xruns/dropouts, sample rate and host.
-- [ ] Run the standalone C++ DSP tests
-  `tests/macro8_dsp_test.cpp`,
-  `tests/statefilter_dsp_test.cpp`, and
-  `tests/morphvco_dsp_smoke.cpp`; attach command/output and commit SHA.
+- [ ] Run all discovered standalone C++ DSP suites using
+  `python3 -B tests/run_dsp_tests.py --sanitize=auto`, then run the
+  repository/Module Forge/Instrument Builder Python suites. Attach their
+  exact commit, compiler/sanitizer profile and outputs. The five-original
+  and generated-module HEADLESS wrapper smokes use a **test-only Rack stub**;
+  they do **not** prove a real Rack/DPF plugin build.
 - [ ] Check CI/build status and release archive contents. Attach
   screenshots of actual working UI (including HiDPI), a sample patch,
   saved DAW project, and any bug reports.
+- [ ] For macOS release tags, confirm an **actual matching `.pkg`** was
+  generated and uploaded by the completed tag workflow (not merely that
+  its missing-file YAML guard passed source tests). Install it on a real
+  macOS machine and validate plugin discovery, loading, audio, state and
+  DAW reopens. Apply equivalent artifact/install checks to other targets.
 
 **Release gate:** Keep **UNVERIFIED** until a real tester records successful
 GUI/host results, not just compilation or DSP unit tests. Block a
