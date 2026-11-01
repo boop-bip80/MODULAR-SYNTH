@@ -1226,7 +1226,11 @@ static void initStatic__ModularSynth()
 
     const StaticPluginLoader spl(p, "ModularSynth");
     if (spl.ok())
+    {
         p->addModel(modelMorphVCO);
+        p->addModel(modelStateFilter);
+        p->addModel(modelMacro8);
+    }
 }
 
 static void initStatic__Fundamental()

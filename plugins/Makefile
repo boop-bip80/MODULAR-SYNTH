@@ -224,6 +224,8 @@ MINIPLUGIN_FILES = plugins-mini.cpp
 # MODULAR-SYNTH first-party collection (full variants)
 
 PLUGIN_FILES += ModularSynth/src/MorphVCO.cpp
+PLUGIN_FILES += ModularSynth/src/StateFilter.cpp
+PLUGIN_FILES += ModularSynth/src/Macro8.cpp
 
 # --------------------------------------------------------------
 # Cardinal (built-in)
