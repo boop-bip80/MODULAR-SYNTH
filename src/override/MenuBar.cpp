@@ -75,6 +75,24 @@ void Engine_setRemoteDetails(Engine*, remoteUtils::RemoteDetails*);
 }
 
 namespace app {
+
+// Visual-only cable decluttering. Keep the previous nonzero opacity so a
+// second toggle restores the user's preference instead of resetting it.
+void Cardinal_toggleCableVisibility()
+{
+	static float previousVisibleOpacity = 0.5f;
+
+	if (settings::cableOpacity > 0.f)
+	{
+		previousVisibleOpacity = settings::cableOpacity;
+		settings::cableOpacity = 0.f;
+	}
+	else
+	{
+		settings::cableOpacity = previousVisibleOpacity;
+	}
+}
+
 namespace menuBar {
 
 
@@ -632,6 +650,9 @@ struct ViewButton : MenuButton {
 #endif
 
 		menu->addChild(createBoolPtrMenuItem("Show tooltips", "", &settings::tooltips));
+		menu->addChild(createCheckMenuItem("Show patch cables", RACK_MOD_CTRL_NAME "+" RACK_MOD_SHIFT_NAME "+H",
+			[]() { return settings::cableOpacity > 0.f; },
+			[]() { Cardinal_toggleCableVisibility(); }));
 
 		ZoomSlider* zoomSlider = new ZoomSlider;
 		zoomSlider->box.size.x = 250.0;
