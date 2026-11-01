@@ -17,27 +17,37 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RepositoryIntegrityTests(unittest.TestCase):
-    def test_first_party_module_manifest(self) -> None:
-        path = ROOT / "plugins" / "Cardinal" / "plugin.json"
-        manifest = json.loads(path.read_text(encoding="utf-8"))
+    def test_first_party_module_manifests(self) -> None:
+        paths = [ROOT / "plugins" / "Cardinal" / "plugin.json"]
+        # MODULAR-SYNTH's own collection is optional during bootstrapping.
+        original = ROOT / "plugins" / "ModularSynth" / "plugin.json"
+        if original.is_file():
+            paths.append(original)
 
-        self.assertEqual(manifest.get("slug"), "Cardinal")
-        self.assertIsInstance(manifest.get("license"), str)
-        modules = manifest.get("modules")
-        self.assertIsInstance(modules, list)
-        self.assertGreater(len(modules), 0, "First-party module list is empty")
+        for path in paths:
+            with self.subTest(plugin=path.parent.name):
+                manifest = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    manifest.get("slug"),
+                    path.parent.name,
+                    "Manifest slug must match its plugin directory",
+                )
+                self.assertIsInstance(manifest.get("license"), str)
+                modules = manifest.get("modules")
+                self.assertIsInstance(modules, list)
+                self.assertGreater(len(modules), 0, "First-party module list is empty")
 
-        seen_slugs: set[str] = set()
-        for module in modules:
-            with self.subTest(module=module.get("slug")):
-                slug = module.get("slug")
-                self.assertIsInstance(slug, str)
-                self.assertTrue(slug and slug.strip() == slug)
-                self.assertNotIn(slug, seen_slugs, "Duplicate module slug")
-                seen_slugs.add(slug)
-                self.assertIsInstance(module.get("name"), str)
-                self.assertTrue(module["name"].strip(), "Missing module name")
-                self.assertIsInstance(module.get("tags", []), list)
+                seen_slugs: set[str] = set()
+                for module in modules:
+                    with self.subTest(plugin=path.parent.name, module=module.get("slug")):
+                        slug = module.get("slug")
+                        self.assertIsInstance(slug, str)
+                        self.assertTrue(slug and slug.strip() == slug)
+                        self.assertNotIn(slug, seen_slugs, "Duplicate module slug")
+                        seen_slugs.add(slug)
+                        self.assertIsInstance(module.get("name"), str)
+                        self.assertTrue(module["name"].strip(), "Missing module name")
+                        self.assertIsInstance(module.get("tags", []), list)
 
     def test_bundled_patch_graphs(self) -> None:
         patches = sorted((ROOT / "patches").rglob("*.vcv"))
