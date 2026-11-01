@@ -42,16 +42,16 @@ struct ModularSynthStateFilter : Module {
         configParam(CUTOFF_PARAM, -5.643856f, 4.321928f, 0.0f,
                     "Cutoff", " Hz", 2.0f, 1000.0f);
         configParam(RESONANCE_PARAM, 0.0f, 1.0f, 0.0f,
-                    "Resonance");
+                    "Resonance amount", " %", 0.0f, 100.0f);
         configParam(DRIVE_PARAM, 0.0f, 1.0f, 0.0f,
-                    "Input drive");
-        configInput(AUDIO_INPUT, "Audio");
-        configInput(CUTOFF_CV_INPUT, "Cutoff (1 V/oct)");
-        configInput(RESONANCE_CV_INPUT, "Resonance (10 V full span)");
-        configInput(DRIVE_CV_INPUT, "Drive (10 V full span)");
-        configOutput(LOWPASS_OUTPUT, "Low-pass");
-        configOutput(BANDPASS_OUTPUT, "Band-pass");
-        configOutput(HIGHPASS_OUTPUT, "High-pass");
+                    "Input drive amount", " %", 0.0f, 100.0f);
+        configInput(AUDIO_INPUT, "Audio signal input");
+        configInput(CUTOFF_CV_INPUT, "Cutoff CV (1 V/oct; adds to knob)");
+        configInput(RESONANCE_CV_INPUT, "Resonance CV (10 V full span; adds to knob)");
+        configInput(DRIVE_CV_INPUT, "Drive CV (10 V full span; adds to knob)");
+        configOutput(LOWPASS_OUTPUT, "Low-pass filtered audio");
+        configOutput(BANDPASS_OUTPUT, "Band-pass filtered audio");
+        configOutput(HIGHPASS_OUTPUT, "High-pass filtered audio");
     }
 
     void onReset() override {

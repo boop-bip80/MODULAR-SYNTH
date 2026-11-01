@@ -96,19 +96,22 @@ struct ModularSynthMacro8 : Module {
 
         for (int i = 0; i < 8; ++i) {
             const std::string label = "Macro " + std::to_string(i + 1);
-            configParam(MACRO_1_PARAM + i, 0.0f, 1.0f, 0.0f, label);
-            configOutput(MACRO_1_OUTPUT + i, label + " CV");
+            configParam(MACRO_1_PARAM + i, 0.0f, 1.0f, 0.0f,
+                        label + " position", " %", 0.0f, 100.0f);
+            configOutput(MACRO_1_OUTPUT + i,
+                         label + " CV (0 to +10 V unipolar; -5 to +5 V bipolar)");
             configSwitch(RANGE_1_PARAM + i, 0.0f, 1.0f, 0.0f,
-                         label + " output range", {"0 to 10 V", "-5 to +5 V"});
+                         label + " output range",
+                         {"Unipolar: 0 to +10 V", "Bipolar: -5 to +5 V"});
         }
         configParam(MORPH_TIME_PARAM, 0.0f, 5.0f, 0.25f,
                     "Snapshot transition time (99.9% settling)", " s");
         configSwitch(STORE_MODE_PARAM, 0.0f, 1.0f, 0.0f,
                      "Snapshot button action", {"Recall", "Store"});
-        configButton(SLOT_A_PARAM, "Snapshot A");
-        configButton(SLOT_B_PARAM, "Snapshot B");
-        configButton(SLOT_C_PARAM, "Snapshot C");
-        configButton(SLOT_D_PARAM, "Snapshot D");
+        configButton(SLOT_A_PARAM, "Snapshot A (store or recall per mode)");
+        configButton(SLOT_B_PARAM, "Snapshot B (store or recall per mode)");
+        configButton(SLOT_C_PARAM, "Snapshot C (store or recall per mode)");
+        configButton(SLOT_D_PARAM, "Snapshot D (store or recall per mode)");
         configButton(LIVE_PARAM, "Return to live macro knobs");
 
         configLight(SLOT_A_LIGHT, "Snapshot A active");
