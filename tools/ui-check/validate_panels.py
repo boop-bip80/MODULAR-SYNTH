@@ -16,7 +16,12 @@ import xml.etree.ElementTree as ET
 
 # Rack's panel coordinate grid is 15 px/HP by 380 px high. The shipped SVGs
 # declare conventional Eurorack physical dimensions (5.08 mm/HP, 128.5 mm/3U).
-PANELS = {"MorphVCO": 12, "StateFilter": 14, "Macro8": 20}
+# Deliberately source-backed rather than manifest-driven: a new module can be
+# checked before its registration/packaging PR lands.
+PANELS = {"MorphVCO": 12, "StateFilter": 14, "Macro8": 20, "StereoEcho": 16}
+# This widget uses literal create*Centered() sites, so it can be checked for
+# exact source callsite cardinality as well as in-bounds center coordinates.
+EXPECTED_SITES = {"StereoEcho": {"Param": 4, "Input": 5, "Output": 2}}
 SVG_NS = "{http://www.w3.org/2000/svg}svg"
 GRID_PX_PER_HP = 15.0
 GRID_HEIGHT_PX = 380.0
@@ -198,7 +203,10 @@ def _check_widget(source_path: Path, model: str, hp: int
     width = hp * GRID_PX_PER_HP
     count = 0
     sites = 0
+    kinds: dict[str, int] = {}
     for match in CONTROL.finditer(body):
+        kind = match.group("kind")
+        kinds[kind] = kinds.get(kind, 0) + 1
         sites += 1
         after = body[match.end():body.find(";", match.end())]
         position = VEC.search(after)
@@ -222,6 +230,14 @@ def _check_widget(source_path: Path, model: str, hp: int
                         f"{source_path}:{line}: {match.group('kind')} center "
                         f"({x:g}, {y:g}) outside {width:g}x{GRID_HEIGHT_PX:g} panel"
                     )
+    expected_sites = EXPECTED_SITES.get(model, {})
+    for kind, expected in expected_sites.items():
+        actual = kinds.get(kind, 0)
+        if actual != expected:
+            errors.append(
+                f"{source_path}: expected {expected} {kind} centered callsites, "
+                f"found {actual}"
+            )
     if sites == 0:
         errors.append(f"{source_path}: no centered knob/jack/switch/light creation found")
     if count == 0:

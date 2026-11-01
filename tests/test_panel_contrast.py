@@ -12,7 +12,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "contrast_audit.py"
-MODULES = {"MorphVCO": 12, "StateFilter": 14, "Macro8": 20}
+MODULES = {"MorphVCO": 12, "StateFilter": 14, "Macro8": 20, "StereoEcho": 16}
 
 
 class PanelContrastTests(unittest.TestCase):
@@ -70,6 +70,11 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("UNKNOWN TEXT MORPH VCO #F3F1FF", result.stdout)
         self.assertIn("UNKNOWN TEXT STATE FILTER #F3F1FF", result.stdout)
         self.assertIn("UNKNOWN TEXT MACRO 8 #F6F2FF", result.stdout)
+        self.assertIn("UNKNOWN TEXT STEREO ECHO #ECF4FF", result.stdout)
+        self.assertIn("44 nvgText sites", result.stdout)
+        self.assertIn("38 measured SVG outline shapes", result.stdout)
+        self.assertIn("4 UNKNOWN SVG outline shapes", result.stdout)
+        self.assertIn("UNKNOWN SVG OUTLINE #63b7cc vs fill url(#dial)", result.stdout)
         self.assertIn("gradient-stop swatches", result.stdout)
         self.assertIn("not local contrast", result.stdout)
         self.assertNotIn("WARN SVG OUTLINE", result.stdout)
@@ -84,6 +89,7 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("MEASURED TEXT MORPH VCO", result.stdout)
         self.assertIn("MEASURED TEXT STATE FILTER", result.stdout)
         self.assertIn("MEASURED TEXT MACRO 8", result.stdout)
+        self.assertIn("MEASURED TEXT STEREO ECHO", result.stdout)
         self.assertIn("dynamic label coordinates", result.stdout)
         self.assertNotIn("WARN TEXT", result.stdout)
 
@@ -114,6 +120,32 @@ class PanelContrastTests(unittest.TestCase):
         self.assertEqual(strict.returncode, 2, strict.stdout + strict.stderr)
         self.assertIn("WARN SVG OUTLINE #755D9E vs fill #27213F: 2.77:1 (x5",
                       strict.stdout)
+
+    def test_stereo_gradient_dial_stays_unknown_not_a_false_pass(self) -> None:
+        result = self.run_cli(REPO, "--fail-on-low-contrast")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("[StereoEcho] label underlay: gradient url(#bg)", result.stdout)
+        self.assertIn("UNKNOWN SVG OUTLINE #63b7cc vs fill url(#dial)", result.stdout)
+        self.assertIn("4 UNKNOWN SVG outline shapes", result.stdout)
+        self.assertNotIn("WARN SVG OUTLINE", result.stdout)
+
+    def test_stereo_degraded_input_ring_triggers_strict_warning(self) -> None:
+        root = self.fixture()
+        source = root / "plugins/ModularSynth/res/StereoEcho.svg"
+        self.replace_once(source, 'stroke="#57acb5"', 'stroke="#162f42"')
+        strict = self.run_cli(root, "--fail-on-low-contrast")
+        self.assertEqual(strict.returncode, 2, strict.stdout + strict.stderr)
+        self.assertIn("WARN SVG OUTLINE #162F42 vs fill #162F42: 1.00:1",
+                      strict.stdout)
+
+    def test_stereo_text_color_is_read_from_actual_source(self) -> None:
+        root = self.fixture()
+        source = root / "plugins/ModularSynth/src/StereoEcho.cpp"
+        self.replace_once(source, "nvgRGB(0xEC, 0xF4, 0xFF)",
+                          "nvgRGB(0xFF, 0x00, 0x00)")
+        result = self.run_cli(root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("UNKNOWN TEXT STEREO ECHO #FF0000", result.stdout)
 
     def test_missing_svg_is_a_fatal_audit_error(self) -> None:
         root = self.fixture()

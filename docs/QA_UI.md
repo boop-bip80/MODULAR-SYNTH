@@ -126,10 +126,10 @@ python3 tools/ui-check/validate_panels.py
 python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
 ```
 
-The standard-library-only checker validates that all three original panels
-are parseable SVG documents with an SVG namespace, the expected **12/14/20 HP**
-width and **3U (128.5 mm)** height, and Rack panel viewBoxes of **15 px/HP ×
-380 px**. It cross-checks the exact `setPanel()` asset paths in C++ and
+The standard-library-only checker validates four first-party source panels
+(Morph VCO, State Filter, Macro8, StereoEcho) as parseable SVGs with an SVG
+namespace and expected **12/14/20/16 HP** widths, standard **3U
+(128.5 mm)** height, and Rack viewBoxes of **15 px/HP × 380 px**. It cross-checks the exact `setPanel()` asset paths in C++ and
 checks statically resolvable centered knobs, ports, switches and lights
 against panel coordinate bounds. It conservatively expands simple constant
 arrays and conditional positions; non-constant expressions are reported as
@@ -149,7 +149,7 @@ python3 -m unittest discover -s tests -p 'test_panel_contrast.py' -v
 ```
 
 The audit derives **actual text foreground colors** from NanoVG
-`nvgRGB()` / `nvgText()` calls in the three module widgets, and reads SVG
+`nvgRGB()` / `nvgText()` calls in all four module widgets, and reads SVG
 panel fill and decorative control-outline colors. It computes standard
 sRGB relative luminance and contrast ratios and flags measured swatches
 below **4.5:1** for small text and **3:1** for SVG control outlines as
@@ -173,7 +173,10 @@ actual Rack widget controls after drawing/compositing.
 backgrounds. The tool marks the actual label underlay **UNKNOWN** and
 may report contrast against known gradient *stop swatches* only as
 context; it never treats those stop values as measured local text contrast.
-Macro8's dynamic labels also require manual inspection. Many thin SVG
+Macro8's dynamic labels also require manual inspection. StereoEcho's four
+radial-gradient knob-dial fills are also reported as **UNKNOWN** control
+outline ratios, while its seven flat port-ring fill/stroke pairs are
+measurable. Many thin SVG
 circles/outlined decorations sit **behind** actual Rack knobs and ports;
 their ratios are not proof of interactive control visibility.
 
@@ -214,3 +217,37 @@ python3 -m unittest discover -s tests -p 'test_first_party_tooltips.py' -v
 
 **Status:** not manually verified; passing these text/source checks does
 not prove actual tooltip rendering, localization or host accessibility.
+
+## 10. StereoEcho source-panel acceptance (pending host UI test)
+
+StereoEcho's first-party source/panel is checked independently of static
+plugin loader/manifest registration. Its **16 HP x 3U**
+SVG uses a **240 x 380** viewBox; the C++ widget statically declares
+**4 centered controls**, **5 input jacks**, **2 output jacks**, and
+**13 `nvgText()` call sites**. With the prior 31 label sites, the audit
+now checks **44** source label calls. Since the panel background and four
+knob-dial fills are gradients, those local contrasts remain **UNKNOWN**;
+none are promoted to a contrast pass by inspecting gradient stops.
+
+- [ ] In a build with StereoEcho registered, confirm it appears
+  once in the browser and displays a correctly scaled 16 HP panel.
+- [ ] Inspect TIME, FEEDBACK, DRY/WET, PING-PONG knobs; IN L/R, TIME/FB/MIX CV
+  inputs; L/R outputs and all painted labels at normal and HiDPI zoom.
+- [ ] Patch mono-to-stereo, explicit left/right, all three CV controls and
+  host outputs; verify port mapping, normalled right input and controls.
+- [ ] Save/reopen both a standalone patch and a DAW project with StereoEcho
+  and verify UI, cable routing and audible state. Record host, screenshot
+  and build SHA; actual UI/DAW verification is **not yet executed**.
+
+Source-level checks (independent of registration) are:
+
+```sh
+python3 tools/ui-check/validate_panels.py
+python3 tools/ui-check/contrast_audit.py --fail-on-low-contrast
+python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
+python3 -m unittest discover -s tests -p 'test_panel_contrast.py' -v
+```
+
+The checks do not render StereoEcho, prove jack hitboxes, or determine
+pixel contrast over its gradient panel. Runtime audio/host behavior is
+outside these static geometry and color tools.

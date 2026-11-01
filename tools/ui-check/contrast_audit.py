@@ -16,7 +16,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-MODULES = ("MorphVCO", "StateFilter", "Macro8")
+MODULES = ("MorphVCO", "StateFilter", "Macro8", "StereoEcho")
 TEXT_ADVISORY = 4.5
 OUTLINE_ADVISORY = 3.0
 COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -160,11 +160,18 @@ def _svg_underlay(root: ET.Element) -> tuple[str, tuple[int, int, int] | None,
     return f"unresolved base fill {paint!r}", None, []
 
 
-def _solid_outlines(root: ET.Element) -> Counter[tuple[tuple[int, int, int],
-                                                      tuple[int, int, int]]]:
-    """Collect explicit SVG circle/rect fill-vs-stroke swatches, with inheritance."""
-    result: Counter[tuple[tuple[int, int, int],
-                          tuple[int, int, int]]] = Counter()
+def _svg_outlines(root: ET.Element) -> tuple[
+    Counter[tuple[tuple[int, int, int], tuple[int, int, int]]],
+    Counter[tuple[str, str]]
+]:
+    """Collect measurable SVG fill/stroke pairs and explicitly unknown paints.
+
+    A gradient-filled knob circle with a solid stroke is *not* a measurable
+    local fill-vs-stroke ratio until actual rendering is sampled.
+    """
+    measured: Counter[tuple[tuple[int, int, int],
+                            tuple[int, int, int]]] = Counter()
+    unknown: Counter[tuple[str, str]] = Counter()
 
     def walk(element: ET.Element, fill: str | None, stroke: str | None,
              transparent: bool) -> None:
@@ -178,21 +185,23 @@ def _solid_outlines(root: ET.Element) -> Counter[tuple[tuple[int, int, int],
             # CSS styles can override inherited attributes; do not guess.
             transparent = True
         if _local_name(element.tag) in {"circle", "rect"} and not transparent:
-            f, s = rgb(fill), rgb(stroke)
-            if f is not None and s is not None:
-                result[(f, s)] += 1
+            f, edge = rgb(fill), rgb(stroke)
+            if f is not None and edge is not None:
+                measured[(f, edge)] += 1
+            elif fill is not None and stroke is not None:
+                unknown[(fill, stroke)] += 1
         for child in element:
             walk(child, fill, stroke, transparent)
 
     walk(root, None, None, False)
-    return result
-
+    return measured, unknown
 
 def audit(repo_root: Path) -> tuple[list[str], list[str], dict[str, int]]:
     lines: list[str] = []
     errors: list[str] = []
     stats = {"labels": 0, "unknown_labels": 0, "measured_labels": 0,
-             "outlines": 0, "low_labels": 0, "low_outlines": 0}
+             "outlines": 0, "unknown_outlines": 0,
+             "low_labels": 0, "low_outlines": 0}
     collection = repo_root / "plugins" / "ModularSynth"
     for model in MODULES:
         svg_path = collection / "res" / f"{model}.svg"
@@ -235,7 +244,8 @@ def audit(repo_root: Path) -> tuple[list[str], list[str], dict[str, int]]:
             lines.append(f"  {flag} {name} {foreground} vs {hex_color(solid)}: "
                          f"{ratio:.2f}:1 (advisory {TEXT_ADVISORY:g}:1)")
 
-        for (fill, stroke), count in sorted(_solid_outlines(svg_root).items()):
+        measured, unknown = _svg_outlines(svg_root)
+        for (fill, stroke), count in sorted(measured.items()):
             ratio = contrast_ratio(fill, stroke)
             low = ratio < OUTLINE_ADVISORY
             stats["outlines"] += count
@@ -243,6 +253,12 @@ def audit(repo_root: Path) -> tuple[list[str], list[str], dict[str, int]]:
             flag = "WARN SVG OUTLINE" if low else "SVG OUTLINE"
             lines.append(f"  {flag} {hex_color(stroke)} vs fill {hex_color(fill)}: "
                          f"{ratio:.2f}:1 (x{count}; advisory {OUTLINE_ADVISORY:g}:1)")
+        for (fill, stroke), count in sorted(unknown.items()):
+            stats["unknown_outlines"] += count
+            lines.append(
+                f"  UNKNOWN SVG OUTLINE {stroke} vs fill {fill} (x{count}): "
+                "non-solid paint; local contrast not measured"
+            )
     return lines, errors, stats
 
 
@@ -270,7 +286,8 @@ def main(argv: list[str] | None = None) -> int:
         f"SUMMARY: {len(MODULES)} panels; {stats['labels']} nvgText sites; "
         f"{stats['unknown_labels']} UNKNOWN label backgrounds/positions; "
         f"{stats['measured_labels']} measured text swatches; "
-        f"{stats['outlines']} SVG outline shapes; "
+        f"{stats['outlines']} measured SVG outline shapes; "
+        f"{stats['unknown_outlines']} UNKNOWN SVG outline shapes; "
         f"{stats['low_labels']} low text and {stats['low_outlines']} low outline swatches"
     )
     print("NOTE: swatch ratios are advisory; no rendered contrast, overlap, "
