@@ -6,7 +6,7 @@ This fork inherits the substantial upstream Cardinal build matrix. It also has a
 
 | Workflow | Automatic triggers | Manual trigger | Purpose |
 | --- | --- | --- | --- |
-| `quality-baseline.yml` | Pull requests and pushes to `main` | Yes | Fast repository integrity, Module Forge generator tests, and discovered standalone DSP compile/smoke tests (strict and fast-math) |
+| `quality-baseline.yml` | Pull requests and pushes to `main` | Yes | Fast repository integrity, Module Forge generator tests, and discovered standalone DSP compile/smoke tests (optimization and runtime-probed sanitizers) |
 | `build.yml` | Pushes to `main` (except documentation-only changes) and all tag pushes | Yes | Full cross-platform builds, plugin validation, platform packaging, release uploads |
 | `irc.yml` | None | Yes, but its upstream-only job is skipped on this fork | Prevent derivative activity from posting announcements to Cardinal's upstream IRC channel |
 
@@ -46,12 +46,14 @@ From a checkout with Python 3 and a C++17 compiler:
 python3 -B tools/ci/preflight_submodules.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 -m unittest discover -s tools/module-forge -p 'test_*.py' -v
-python3 -B tests/run_dsp_tests.py
+python3 -B tests/run_dsp_tests.py --sanitize=auto
 ```
 
 The DSP runner discovers only top-level `tests/*_dsp_smoke.cpp` and `tests/*_dsp_test.cpp` entrypoints, excluding names containing `rack` or `wrapper`. Each test is compiled and executed in three profiles: strict `-O2 -Wall -Wextra -Werror`, production-style `-O3 -ffast-math -fno-finite-math-only`, and aggressive `-O3 -ffast-math` (the last deliberately exposes finite-math-only assumptions). All profiles use C++17 and warnings-as-errors. Tests must have their own `main()` and be independent of JUCE/VCV Rack. Temporary executables are automatically removed.
 
 Use `python3 -B tests/run_dsp_tests.py --list` to inspect discovered tests without compiling. The runner fails when none are found; source and runtime failures are printed separately.
+
+The **optional sanitizer profile** is enabled by `--sanitize=auto` (used by the fast Actions workflow). Before any DSP test runs under sanitizers, it compiles *and executes* a tiny runtime probe. It prefers AddressSanitizer plus UndefinedBehaviorSanitizer with `-O1 -g -fno-omit-frame-pointer -fno-sanitize-recover=all`; if that probe cannot run on the compiler/host, it explicitly reports the failure and tries UBSan-only. `--sanitize=ubsan` or `--sanitize=asan-ubsan` requires a specific profile, and an unavailable sanitizer produces a nonzero result—not a silent PASS. Once selected, **an actual DSP sanitizer failure is never treated as a reason to fall back**. Omitting `--sanitize` preserves the original three profiles. This sanitizer pass catches many C++ memory/undefined-behavior defects, but cannot substitute for Rack-wrapper, audio-host, or full cross-platform builds.
 
 ## Manually request a full build
 
