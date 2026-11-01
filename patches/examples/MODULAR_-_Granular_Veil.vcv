@@ -1,0 +1,433 @@
+{
+  "version": "2.4.1",
+  "zoom": 0.85,
+  "modules": [
+    {
+      "id": 2,
+      "plugin": "Cardinal",
+      "model": "HostMIDI",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "pwRange": 0,
+        "smooth": false,
+        "channels": 1,
+        "polyMode": 0,
+        "lastPitch": 8192,
+        "lastMod": 0,
+        "inputChannel": 0,
+        "outputChannel": 0
+      },
+      "pos": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 120200000000010,
+      "plugin": "Bogaudio",
+      "model": "Bogaudio-VCO",
+      "version": "2.0",
+      "params": [
+        {
+          "value": 0,
+          "id": 0
+        },
+        {
+          "value": -0.05,
+          "id": 1
+        },
+        {
+          "value": 0,
+          "id": 2
+        },
+        {
+          "value": -0.15,
+          "id": 3
+        },
+        {
+          "value": 0,
+          "id": 4
+        },
+        {
+          "value": 1,
+          "id": 5
+        },
+        {
+          "value": 0,
+          "id": 6
+        }
+      ],
+      "data": {
+        "poly_input": 0,
+        "dc_correction": true
+      },
+      "pos": [
+        10,
+        0
+      ]
+    },
+    {
+      "id": 120200000000011,
+      "plugin": "Bogaudio",
+      "model": "Bogaudio-VCO",
+      "version": "2.0",
+      "params": [
+        {
+          "value": 0,
+          "id": 0
+        },
+        {
+          "value": 0.05,
+          "id": 1
+        },
+        {
+          "value": 0,
+          "id": 2
+        },
+        {
+          "value": 0,
+          "id": 3
+        },
+        {
+          "value": 0,
+          "id": 4
+        },
+        {
+          "value": 1,
+          "id": 5
+        },
+        {
+          "value": 0,
+          "id": 6
+        }
+      ],
+      "data": {
+        "poly_input": 0,
+        "dc_correction": true
+      },
+      "pos": [
+        20,
+        0
+      ]
+    },
+    {
+      "id": 120200000000012,
+      "plugin": "Bogaudio",
+      "model": "Bogaudio-VCM",
+      "version": "2.0",
+      "params": [
+        {
+          "value": 0,
+          "id": 0
+        },
+        {
+          "value": 0.7,
+          "id": 1
+        },
+        {
+          "value": 0,
+          "id": 2
+        },
+        {
+          "value": 0.7,
+          "id": 3
+        },
+        {
+          "value": 0.8,
+          "id": 4
+        },
+        {
+          "value": 0,
+          "id": 5
+        }
+      ],
+      "data": {
+        "disableOutputLimit": false
+      },
+      "pos": [
+        31,
+        0
+      ]
+    },
+    {
+      "id": 120200000000013,
+      "plugin": "Fundamental",
+      "model": "ADSR",
+      "version": "2.0",
+      "params": [
+        {
+          "value": 0.65,
+          "id": 0
+        },
+        {
+          "value": 0.75,
+          "id": 1
+        },
+        {
+          "value": 0.9,
+          "id": 2
+        },
+        {
+          "value": 0.85,
+          "id": 3
+        },
+        {
+          "value": 0,
+          "id": 4
+        },
+        {
+          "value": 0,
+          "id": 5
+        },
+        {
+          "value": 0,
+          "id": 6
+        },
+        {
+          "value": 0,
+          "id": 7
+        },
+        {
+          "value": 0,
+          "id": 8
+        }
+      ],
+      "pos": [
+        42,
+        0
+      ]
+    },
+    {
+      "id": 120200000000014,
+      "plugin": "Fundamental",
+      "model": "VCA-1",
+      "version": "2.0",
+      "params": [
+        {
+          "value": 1,
+          "id": 0
+        },
+        {
+          "value": 1,
+          "id": 1
+        }
+      ],
+      "pos": [
+        51,
+        0
+      ]
+    },
+    {
+      "id": 1,
+      "plugin": "Cardinal",
+      "model": "HostAudio2",
+      "version": "2.0",
+      "params": [
+        {
+          "value": 0.65,
+          "id": 0
+        }
+      ],
+      "data": {
+        "dcFilter": true
+      },
+      "pos": [
+        80,
+        0
+      ]
+    },
+    {
+      "id": 120200000000015,
+      "plugin": "AudibleInstruments",
+      "model": "Clouds",
+      "version": "2.0",
+      "params": [
+        {
+          "value": 0,
+          "id": 0
+        },
+        {
+          "value": 0,
+          "id": 1
+        },
+        {
+          "value": 0,
+          "id": 2
+        },
+        {
+          "value": 0.46,
+          "id": 3
+        },
+        {
+          "value": 0.62,
+          "id": 4
+        },
+        {
+          "value": 0.82,
+          "id": 5
+        },
+        {
+          "value": 0.5,
+          "id": 6
+        },
+        {
+          "value": 0.7,
+          "id": 7
+        },
+        {
+          "value": 0.72,
+          "id": 8
+        },
+        {
+          "value": 0.42,
+          "id": 9
+        },
+        {
+          "value": 0.73,
+          "id": 10
+        },
+        {
+          "value": 0.55,
+          "id": 11
+        },
+        {
+          "value": 0.82,
+          "id": 12
+        }
+      ],
+      "data": {
+        "playback": 0,
+        "quality": 0,
+        "blendMode": 0
+      },
+      "pos": [
+        61,
+        0
+      ]
+    },
+    {
+      "id": 120200000000016,
+      "plugin": "Cardinal",
+      "model": "TextEditor",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "filepath": "",
+        "lang": "None",
+        "etext": "MODULAR-SYNTH / FACTORY 002\nGRANULAR VEIL\n\nTwo gently detuned analog VCOs feed a\nslow envelope and the Clouds processor.\n\nHold notes for a spacious evolving pad.\nTry changing Clouds SIZE, DENSITY,\nTEXTURE and BLEND. For long tones,\nplay one or two notes at a time.\n\nAuthor: MODULAR-SYNTH factory team\n",
+        "width": 22
+      },
+      "pos": [
+        0,
+        1
+      ]
+    }
+  ],
+  "cables": [
+    {
+      "id": 7000000000000001,
+      "outputModuleId": 2,
+      "outputId": 0,
+      "inputModuleId": 120200000000010,
+      "inputId": 0,
+      "color": "#ff9352"
+    },
+    {
+      "id": 7000000000000002,
+      "outputModuleId": 2,
+      "outputId": 0,
+      "inputModuleId": 120200000000011,
+      "inputId": 0,
+      "color": "#ffd452"
+    },
+    {
+      "id": 7000000000000003,
+      "outputModuleId": 2,
+      "outputId": 1,
+      "inputModuleId": 120200000000013,
+      "inputId": 4,
+      "color": "#e8ff52"
+    },
+    {
+      "id": 7000000000000004,
+      "outputModuleId": 2,
+      "outputId": 6,
+      "inputModuleId": 120200000000013,
+      "inputId": 5,
+      "color": "#52beff"
+    },
+    {
+      "id": 7000000000000005,
+      "outputModuleId": 120200000000010,
+      "outputId": 0,
+      "inputModuleId": 120200000000012,
+      "inputId": 0,
+      "color": "#ff5252"
+    },
+    {
+      "id": 7000000000000006,
+      "outputModuleId": 120200000000010,
+      "outputId": 1,
+      "inputModuleId": 120200000000012,
+      "inputId": 2,
+      "color": "#52ff7d"
+    },
+    {
+      "id": 7000000000000007,
+      "outputModuleId": 120200000000011,
+      "outputId": 0,
+      "inputModuleId": 120200000000012,
+      "inputId": 4,
+      "color": "#6752ff"
+    },
+    {
+      "id": 7000000000000008,
+      "outputModuleId": 120200000000011,
+      "outputId": 1,
+      "inputModuleId": 120200000000012,
+      "inputId": 6,
+      "color": "#e952ff"
+    },
+    {
+      "id": 7000000000000009,
+      "outputModuleId": 120200000000012,
+      "outputId": 0,
+      "inputModuleId": 120200000000014,
+      "inputId": 1,
+      "color": "#ff9352"
+    },
+    {
+      "id": 7000000000000010,
+      "outputModuleId": 120200000000013,
+      "outputId": 0,
+      "inputModuleId": 120200000000014,
+      "inputId": 0,
+      "color": "#ffd452"
+    },
+    {
+      "id": 7000000000000011,
+      "outputModuleId": 120200000000014,
+      "outputId": 0,
+      "inputModuleId": 120200000000015,
+      "inputId": 6,
+      "color": "#e8ff52"
+    },
+    {
+      "id": 7000000000000012,
+      "outputModuleId": 120200000000015,
+      "outputId": 0,
+      "inputModuleId": 1,
+      "inputId": 0,
+      "color": "#52beff"
+    },
+    {
+      "id": 7000000000000013,
+      "outputModuleId": 120200000000015,
+      "outputId": 1,
+      "inputModuleId": 1,
+      "inputId": 1,
+      "color": "#ff5252"
+    }
+  ]
+}
