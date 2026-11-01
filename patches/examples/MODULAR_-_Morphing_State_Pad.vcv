@@ -1,0 +1,403 @@
+{
+  "version": "2.4.1",
+  "zoom": 0.75,
+  "modules": [
+    {
+      "id": 2,
+      "plugin": "Cardinal",
+      "model": "HostMIDI",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "pwRange": 0,
+        "smooth": false,
+        "channels": 1,
+        "polyMode": 0,
+        "lastPitch": 8192,
+        "lastMod": 0,
+        "inputChannel": 0,
+        "outputChannel": 0
+      },
+      "pos": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 940000000007,
+      "plugin": "ModularSynth",
+      "model": "Macro8",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.25
+        },
+        {
+          "id": 1,
+          "value": 0.18
+        },
+        {
+          "id": 2,
+          "value": 0.08
+        },
+        {
+          "id": 3,
+          "value": 0
+        },
+        {
+          "id": 4,
+          "value": 0
+        },
+        {
+          "id": 5,
+          "value": 0
+        },
+        {
+          "id": 6,
+          "value": 0
+        },
+        {
+          "id": 7,
+          "value": 0
+        },
+        {
+          "id": 8,
+          "value": 1
+        },
+        {
+          "id": 9,
+          "value": 0
+        },
+        {
+          "id": 10,
+          "value": 0
+        },
+        {
+          "id": 11,
+          "value": 0
+        },
+        {
+          "id": 12,
+          "value": 0
+        },
+        {
+          "id": 13,
+          "value": 0
+        },
+        {
+          "id": 14,
+          "value": 0
+        },
+        {
+          "id": 15,
+          "value": 0
+        },
+        {
+          "id": 16,
+          "value": 0
+        },
+        {
+          "id": 17,
+          "value": 0
+        },
+        {
+          "id": 18,
+          "value": 0
+        },
+        {
+          "id": 19,
+          "value": 0
+        },
+        {
+          "id": 20,
+          "value": 0
+        },
+        {
+          "id": 21,
+          "value": 0
+        },
+        {
+          "id": 22,
+          "value": 0
+        }
+      ],
+      "data": {
+        "macro8Version": 1,
+        "names": [
+          "Shape",
+          "Resonance",
+          "Drive",
+          "Macro 4",
+          "Macro 5",
+          "Macro 6",
+          "Macro 7",
+          "Macro 8"
+        ],
+        "snapshots": [
+          [
+            0.12,
+            0.08,
+            0.04,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0.74,
+            0.57,
+            0.26,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          null,
+          null
+        ],
+        "selectedSlot": -1
+      },
+      "pos": [
+        9,
+        0
+      ]
+    },
+    {
+      "id": 940000000005,
+      "plugin": "ModularSynth",
+      "model": "MorphVCO",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0
+        },
+        {
+          "id": 1,
+          "value": 0
+        },
+        {
+          "id": 2,
+          "value": 0.08
+        },
+        {
+          "id": 3,
+          "value": 0.5
+        },
+        {
+          "id": 4,
+          "value": 0
+        }
+      ],
+      "pos": [
+        30,
+        0
+      ]
+    },
+    {
+      "id": 940000000006,
+      "plugin": "ModularSynth",
+      "model": "StateFilter",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": -0.45
+        },
+        {
+          "id": 1,
+          "value": 0.12
+        },
+        {
+          "id": 2,
+          "value": 0.04
+        }
+      ],
+      "pos": [
+        42,
+        0
+      ]
+    },
+    {
+      "id": 940000000003,
+      "plugin": "Fundamental",
+      "model": "ADSR",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.15
+        },
+        {
+          "id": 1,
+          "value": 0.5
+        },
+        {
+          "id": 2,
+          "value": 0.7
+        },
+        {
+          "id": 3,
+          "value": 0.4
+        },
+        {
+          "id": 4,
+          "value": 0
+        },
+        {
+          "id": 5,
+          "value": 0
+        },
+        {
+          "id": 6,
+          "value": 0
+        },
+        {
+          "id": 7,
+          "value": 0
+        },
+        {
+          "id": 8,
+          "value": 0
+        }
+      ],
+      "pos": [
+        56,
+        0
+      ]
+    },
+    {
+      "id": 940000000004,
+      "plugin": "Fundamental",
+      "model": "VCA-1",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.45
+        },
+        {
+          "id": 1,
+          "value": 1
+        }
+      ],
+      "pos": [
+        65,
+        0
+      ]
+    },
+    {
+      "id": 1,
+      "plugin": "Cardinal",
+      "model": "HostAudio2",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.3
+        }
+      ],
+      "data": {
+        "dcFilter": true
+      },
+      "pos": [
+        70,
+        0
+      ]
+    },
+    {
+      "id": 940000000008,
+      "plugin": "Cardinal",
+      "model": "TextEditor",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "filepath": "",
+        "lang": "None",
+        "etext": "MODULAR-SYNTH / ORIGINALS 002\nMORPHING STATE PAD\n\nHOST MIDI: pitch and gate -> Morph VCO\nMORPH VCO -> State Filter LP -> VCA\nADSR opens VCA; stereo host output.\n\nMACRO8: Shape, Resonance, Drive\nMACRO8 knobs control 0-10V CV outputs.\nPress snapshot A/B to morph pad timbre;\nLIVE returns control to the knobs.\nUse the STORE toggle to overwrite a slot.\n\nVCA and host output gains are reduced.\nExternal samples/plugins are not needed.\nFundamental ADSR/VCA are bundled in Cardinal.\n",
+        "width": 29
+      },
+      "pos": [
+        78,
+        0
+      ]
+    }
+  ],
+  "cables": [
+    {
+      "id": 940000000011,
+      "outputModuleId": 2,
+      "outputId": 0,
+      "inputModuleId": 940000000005,
+      "inputId": 0,
+      "color": "#ff5252"
+    },
+    {
+      "id": 940000000012,
+      "outputModuleId": 2,
+      "outputId": 1,
+      "inputModuleId": 940000000003,
+      "inputId": 4,
+      "color": "#ffd452"
+    },
+    {
+      "id": 940000000013,
+      "outputModuleId": 940000000007,
+      "outputId": 0,
+      "inputModuleId": 940000000005,
+      "inputId": 2,
+      "color": "#e8ff52"
+    },
+    {
+      "id": 940000000014,
+      "outputModuleId": 940000000007,
+      "outputId": 1,
+      "inputModuleId": 940000000006,
+      "inputId": 2,
+      "color": "#52beff"
+    },
+    {
+      "id": 940000000015,
+      "outputModuleId": 940000000007,
+      "outputId": 2,
+      "inputModuleId": 940000000006,
+      "inputId": 3,
+      "color": "#d5a8ff"
+    },
+    {
+      "id": 940000000016,
+      "outputModuleId": 940000000005,
+      "outputId": 0,
+      "inputModuleId": 940000000006,
+      "inputId": 0,
+      "color": "#a8ff52"
+    },
+    {
+      "id": 940000000017,
+      "outputModuleId": 940000000006,
+      "outputId": 0,
+      "inputModuleId": 940000000004,
+      "inputId": 1,
+      "color": "#52ff7d"
+    },
+    {
+      "id": 940000000018,
+      "outputModuleId": 940000000003,
+      "outputId": 0,
+      "inputModuleId": 940000000004,
+      "inputId": 0,
+      "color": "#f3b6ff"
+    },
+    {
+      "id": 940000000019,
+      "outputModuleId": 940000000004,
+      "outputId": 0,
+      "inputModuleId": 1,
+      "inputId": 0,
+      "color": "#52beff"
+    }
+  ]
+}

@@ -104,13 +104,44 @@ def _source_bounds(root: Path, plugin: str, model: str) -> dict | None:
     assert params is not None
     ranges: dict[int, tuple[float, float]] = {}
     literal = r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)[fF]?"
-    pattern = re.compile(
-        r"\bconfigParam\s*\(\s*([A-Za-z_][A-Za-z_0-9]*)\s*,\s*"
+
+    # Literal-valued scalar Rack config calls (including switches).
+    scalar = re.compile(
+        r"\bconfig(?:Param|Switch)\s*\(\s*([A-Za-z_][A-Za-z_0-9]*)\s*,\s*"
         + literal + r"\s*,\s*" + literal + r"\s*,"
     )
-    for name, lower, upper in pattern.findall(source):
+    for name, lower, upper in scalar.findall(source):
         if name in params:
             ranges[params.index(name)] = (float(lower), float(upper))
+
+    # Rack button parameters are binary 0..1. These have no explicit
+    # configParam min/max but can be validated against the button contract.
+    for name in re.findall(r"\bconfigButton\s*\(\s*([A-Za-z_][A-Za-z_0-9]*)\s*,", source):
+        if name in params:
+            ranges[params.index(name)] = (0.0, 1.0)
+
+    # Source-backed expansion for the simple ordinal +i pattern used by
+    # first-party control banks such as Macro8. Do not infer arbitrary C++.
+    loops = re.compile(
+        r"for\s*\(\s*int\s+i\s*=\s*0\s*;\s*i\s*<\s*(\d+)\s*;"
+        r"\s*\+\+i\s*\)\s*\{(.*?)\n\s*\}", re.S
+    )
+    indexed = re.compile(
+        r"\bconfig(?:Param|Switch)\s*\(\s*([A-Za-z_][A-Za-z_0-9]*)\s*\+\s*i\s*,\s*"
+        + literal + r"\s*,\s*" + literal + r"\s*,"
+    )
+    for count_text, body in loops.findall(source):
+        count = int(count_text)
+        if count < 1 or count > 256:
+            continue
+        for base_name, lower, upper in indexed.findall(body):
+            if base_name not in params:
+                continue
+            start = params.index(base_name)
+            for offset in range(count):
+                if start + offset < len(params):
+                    ranges[start + offset] = (float(lower), float(upper))
+
     return {
         "params": len(params),
         "inputs": len(groups["InputIds"] or []),
@@ -192,6 +223,8 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
             reported_unknown.add(key)
         if key in first_party and schema is None:
             warnings.append(f"{plugin}/{model}: first-party manifest found but source-derived port/parameter bounds unavailable")
+        elif schema is not None and len(schema["ranges"]) < schema["params"]:
+            warnings.append(f"{plugin}/{model}: {schema['params'] - len(schema['ranges'])} parameter ranges were not determined from source")
 
         params = module.get("params", [])
         if not isinstance(params, list):
