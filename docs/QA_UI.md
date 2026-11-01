@@ -21,14 +21,17 @@ each supported host/plugin format.
 - [ ] The app/DAW discovers and opens the plugin with no crash, blank panel,
   missing SVG warning, or host rescan error.
 - [ ] Module browser offers exactly one each of **Morph VCO**,
-  **State Filter**, and **Macro8 Performance Macros** in the
-  **MODULAR-SYNTH Originals** collection. Search resolves all three.
+  **State Filter**, **Macro8 Performance Macros**, **Stereo Echo** and
+  **Clocked LFO** in the **MODULAR-SYNTH Originals** collection. Search
+  resolves all five.
 - [ ] Inspect each SVG panel, ports, labels, controls and lights at normal
   and HiDPI scaling; zoom, close/reopen the editor and check alignment.
 - [ ] Confirm the release package actually contains
   `ModularSynth/res/MorphVCO.svg`,
-  `ModularSynth/res/StateFilter.svg` and
-  `ModularSynth/res/Macro8.svg`.
+  `ModularSynth/res/StateFilter.svg`,
+  `ModularSynth/res/Macro8.svg`,
+  `ModularSynth/res/StereoEcho.svg` and
+  `ModularSynth/res/ClockedLFO.svg`.
 
 ## 2. State Filter signal and CV
 
@@ -81,7 +84,8 @@ each supported host/plugin format.
 
 ## 5. Patch/DAW state and recovery
 
-- [ ] Save a standalone `.vcv` patch with all three modules, cables,
+- [ ] Save a standalone `.vcv` patch with the three modules used by the
+  introductory MorphVCO + StateFilter + Macro8 voice, cables,
   8 custom macro names, mixed unipolar/bipolar ranges, four populated
   snapshots and one selected slot. Reopen and compare every value,
   label, selection, connection and the sound.
@@ -126,10 +130,12 @@ python3 tools/ui-check/validate_panels.py
 python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
 ```
 
-The standard-library-only checker validates four first-party source panels
-(Morph VCO, State Filter, Macro8, StereoEcho) as parseable SVGs with an SVG
-namespace and expected **12/14/20/16 HP** widths, standard **3U
-(128.5 mm)** height, and Rack viewBoxes of **15 px/HP × 380 px**. It cross-checks the exact `setPanel()` asset paths in C++ and
+The standard-library-only checker validates five first-party source panels
+(Morph VCO, State Filter, Macro8, StereoEcho, ClockedLFO) as parseable SVGs
+with an SVG namespace and expected **12/14/20/16/16 HP** widths, standard
+**3U height** and Rack viewBoxes of **15 px/HP × 380 px**. The first four
+panels specify 128.5 mm physical height; ClockedLFO declares equivalent
+380 px dimensions. It cross-checks the exact `setPanel()` asset paths in C++ and
 checks statically resolvable centered knobs, ports, switches and lights
 against panel coordinate bounds. It conservatively expands simple constant
 arrays and conditional positions; non-constant expressions are reported as
@@ -149,7 +155,7 @@ python3 -m unittest discover -s tests -p 'test_panel_contrast.py' -v
 ```
 
 The audit derives **actual text foreground colors** from NanoVG
-`nvgRGB()` / `nvgText()` calls in all four module widgets, and reads SVG
+`nvgRGB()` / `nvgText()` calls in all five module widgets, and reads SVG
 panel fill and decorative control-outline colors. It computes standard
 sRGB relative luminance and contrast ratios and flags measured swatches
 below **4.5:1** for small text and **3:1** for SVG control outlines as
@@ -181,9 +187,12 @@ not account for decorative circles, lines, shadows, Rack knobs, NanoVG
 antialiasing or an actual font glyph pixel; it is **not a measured local
 label contrast or a WCAG pass**.
 
-Across the four original dark-gradient panels, the source palette bounds
-remain comfortably above the 4.5:1 text advisory. The audit deliberately
-keeps these sites marked UNKNOWN, including Macro8's dynamic labels. An
+Across the four earlier dark-gradient panels, the source palette bounds
+remain comfortably above the 4.5:1 text advisory. ClockedLFO has a
+separately inspected flat/layered SVG background; all **61 local source-label
+contrasts across the five panels remain UNKNOWN**, including Macro8's
+dynamic labels. The base-only bounds can be evaluated for 44 sites but
+never establish the actual local pixel background. An
 invalid/missing stop, transparency, stylesheet or unsupported paint construct
 withholds the bound; a weak lower bound is **inconclusive**, not automatic
 proof of low contrast, and does not trigger strict-mode failure. The bare
@@ -215,6 +224,7 @@ not on a recorded plugin-tooltip screenshot.
 | **State Filter** | Cutoff shows actual Hz (about **20 Hz–20 kHz**, **1 kHz** default) despite log2 internal storage; resonance/drive show **0–100% of normalized control range** | Cutoff CV adds **1 octave per volt**; resonance/drive CV each add **0.1 normalized units per volt**; LP/BP/HP outputs are filtered audio |
 | **Macro8** | Eight macro positions show **0–100%**; snapshot transition time **0–5 s** represents **99.9% settling** | Each CV output selects **0 to +10 V** unipolar or **−5 to +5 V** bipolar; A–D buttons **store or recall according to mode**; LIVE returns to physical macro knobs |
 | **StereoEcho** | Echo time **1–1000 ms** (**250 ms** default); feedback **0–90%** (**35%** default); wet mix **0–100%** (**40%** default); ping-pong crossfeed **0–100%** (**50%** default) | Unpatched **right input uses left audio**; signed TIME CV adds **100 ms/V**, feedback and wet-mix CV add **0.1 normalized units (10 percentage points) per volt**; L/R outputs are mixed wet/dry audio |
+| **ClockedLFO** | Free-run rate **1/64–16 Hz** (**0.5 Hz** default); snapped clock ratios **1/4, 1/2, 1, 2 or 4** cycles per clock period (default **1**); output phase **0–100%**; pulse width **5–95%** | External **CLK** and **RESET** are rising-edge inputs (≥2 V, rearmed at ≤1 V); free RATE CV is **1 V/oct**; SIN/TRI/RAMP/PULSE are **±5 V**, EOC nominal **+10 V / 1 ms**. External pulses, not host BPM, govern tempo lock. |
 
 The percentages describe *control positions*, not linear acoustic
 gain, resonance Q, or the instantaneous CV when a snapshot is selected.
@@ -243,8 +253,9 @@ StereoEcho's first-party source/panel is checked independently of static
 plugin loader/manifest registration. Its **16 HP x 3U**
 SVG uses a **240 x 380** viewBox; the C++ widget statically declares
 **4 centered controls**, **5 input jacks**, **2 output jacks**, and
-**13 `nvgText()` call sites**. With the prior 31 label sites, the audit
-now checks **44** source label calls. Since the panel background and four
+**13 `nvgText()` call sites**. At the four-model PR #41 snapshot, these
+augmented 31 earlier calls to **44**; the current **five-model** source
+audit checks **61** label calls after ClockedLFO integration. Since the panel background and four
 knob-dial fills are gradients, those local contrasts remain **UNKNOWN**;
 none are promoted to a contrast pass by inspecting gradient stops.
 
