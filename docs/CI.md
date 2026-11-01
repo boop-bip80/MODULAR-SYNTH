@@ -6,11 +6,13 @@ This fork inherits the substantial upstream Cardinal build matrix. It also has a
 
 | Workflow | Automatic triggers | Manual trigger | Purpose |
 | --- | --- | --- | --- |
-| `quality-baseline.yml` | Pull requests and pushes to `main` | Yes | Fast repository integrity, Module Forge generator tests, and discovered standalone DSP compile/smoke tests (optimization and runtime-probed sanitizers) |
+| `quality-baseline.yml` | Pull requests and pushes to `main` | Yes | Fast repository/patch tests, offline submodule preflight, Module Forge and Instrument Builder suites, and standalone DSP compile/smoke tests (optimization and runtime-probed sanitizers) |
 | `build.yml` | Pushes to `main` (except documentation-only changes) and all tag pushes | Yes | Full cross-platform builds, plugin validation, platform packaging, release uploads |
 | `irc.yml` | None | Yes, but its upstream-only job is skipped on this fork | Prevent derivative activity from posting announcements to Cardinal's upstream IRC channel |
 
 Previously, the full build workflow ran on every feature-branch push **and** its associated pull request. This produced duplicate heavyweight matrices for one change. Full matrices now run only for integration/release/manual verification, while the quality gate remains available on every PR.
+
+The [fast workflow](../.github/workflows/quality-baseline.yml) now directly discovers `tools/instrument-builder/test_*.py` alongside repository and Module Forge tests ([PR #59](https://github.com/boop-bip80/MODULAR-SYNTH/pull/59)). In a local source run on [`e8cd9b17`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/e8cd9b17cc85a5600ffcf2e58aa78b59b343cba3), **193 repository + 38 Forge + 56 Instrument Builder = 287/287 Python tests passed**; nine standalone DSP suites passed **36/36 compiled-and-executed compiler profiles**, including UBSan. These counts are **local evidence, not a claim that a hosted Actions run or the full build matrix succeeded**.
 
 ## Build matrix scope
 
@@ -48,6 +50,7 @@ From a checkout with Python 3 and a C++17 compiler:
 python3 -B tools/ci/preflight_submodules.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 -m unittest discover -s tools/module-forge -p 'test_*.py' -v
+python3 -B -m unittest discover -s tools/instrument-builder -p 'test_*.py' -v
 python3 -B tests/run_dsp_tests.py --sanitize=auto
 ```
 
@@ -68,7 +71,7 @@ For releases, push the intended version tag and inspect all release jobs and art
 
 ## What passing means
 
-- **Fast quality success:** manifest and Gitlink checks, offline SpeexDSP mirror preflight, Module Forge tests, patch graphs, and discovered standalone DSP smokes meet their assertions.
+- **Fast quality success:** manifest and Gitlink checks, offline SpeexDSP mirror preflight, repository/patch tests, Module Forge and Instrument Builder suites, and discovered standalone DSP smokes meet their assertions.
 - **Full build success:** the cross-platform jobs that executed passed compilation and packaging checks.
 - **Audio-host production readiness:** still requires real DAW loading, live MIDI/audio, project save/restore, audio regression, performance, and UI validation; it is not established by source-only tests.
 
@@ -76,6 +79,6 @@ A queued, cancelled, skipped, or not-yet-run job is **not** evidence of a succes
 
 ## Maintenance considerations
 
-The `build.yml` matrix is expensive because it checks out many git submodules and builds multiple architectures. New PRs should rely on fast tests for early feedback; maintainers should request full builds when integration risk warrants them. When adding a new standalone DSP test, name it `tests/<module>_dsp_smoke.cpp` or `tests/<module>_dsp_test.cpp`; it will be automatically compiled and run in all three profiles. Keep Rack/DPF wrapper tests outside this naming convention. Python tests are automatically discovered under `tests/test_*.py` or `tools/module-forge/test_*.py`.
+The `build.yml` matrix is expensive because it checks out many git submodules and builds multiple architectures. New PRs should rely on fast tests for early feedback; maintainers should request full builds when integration risk warrants them. When adding a new standalone DSP test, name it `tests/<module>_dsp_smoke.cpp` or `tests/<module>_dsp_test.cpp`; it will be automatically compiled and run in all three profiles. Keep Rack/DPF wrapper tests outside this naming convention. Python tests are automatically discovered under `tests/test_*.py`, `tools/module-forge/test_*.py`, or `tools/instrument-builder/test_*.py`.
 
 These trigger and concurrency changes do not retroactively cancel runs queued before they were merged. Review old queued runs separately if they continue consuming runner capacity.

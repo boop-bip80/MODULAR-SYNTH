@@ -92,7 +92,7 @@ These checks inspect saved MIDI channel/mode values, every advertised cable, fir
 
 ## Echo Motion Performance — manual A/B/C/D delay moves
 
-[Open Echo Motion Performance](../patches/examples/MODULAR_-_Echo_Motion_Performance.vcv) in a fork build with all four registered original modules. The saved **9-module, 13-cable** source graph uses Cardinal HostMIDI/HostAudio2, Fundamental ADSR/VCA-1 and first-party MorphVCO, StateFilter, StereoEcho and Macro8 (plus an explanatory TextEditor). No external samples or BPM/tempo synchronization are configured.
+[Open Echo Motion Performance](../patches/examples/MODULAR_-_Echo_Motion_Performance.vcv) in a fork build containing the **four original models required by this particular patch**: MorphVCO, StateFilter, StereoEcho and Macro8. The saved **9-module, 13-cable** source graph uses Cardinal HostMIDI/HostAudio2, Fundamental ADSR/VCA-1 and those four first-party models (plus an explanatory TextEditor). ClockedLFO is the collection's fifth model but is not used here. No external samples or BPM/tempo synchronization are configured.
 
 MIDI pitch reaches `MorphVCO` input 0; gate reaches ADSR input 4. Oscillator output → gated VCA → StateFilter audio input 0, then low-pass output 0 → StereoEcho left input 0 and high-pass output 2 → Echo right input 1. The echo's output 0 and 1 connect separately to host audio jacks 0 and 1. This is **two different saved audio paths**, not evidence of audible width or a completed stereo audition.
 

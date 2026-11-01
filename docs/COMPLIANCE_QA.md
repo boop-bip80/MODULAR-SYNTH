@@ -74,6 +74,12 @@ The nine warnings from that snapshot are **specific improvement work**, not igno
 - Two generated SVG panel templates lack a provenance/SPDX XML comment.
 - The effect integration guide template needs an explicit license/artwork attribution reminder.
 
+These four warning categories describe the **historical `fd6a0bd` state**;
+the original panel and Module Forge notice remediation was subsequently
+merged in [PR #46](https://github.com/boop-bip80/MODULAR-SYNTH/pull/46).
+The strict first-party notice audit passes on the current integrated source,
+but that cannot establish asset ownership or third-party license clearance.
+
 The default preflight passed for that snapshot because its first-party C++ headers,
 collection metadata and referenced attribution pointers were present and internally
 consistent. `--strict` deliberately failed its nine advisory warnings. Before a
@@ -85,7 +91,7 @@ notices, or use this result as a claim of redistribution clearance.
 ## Adding a new first-party module
 
 1. Use [Module Forge](MODULE_FORGE.md) to generate source and an SVG starter; inspect all generated files and replace/credit any non-original elements.
-2. Ensure the new C++ source (and optional DSP header) has an accurate copyright line and the project's expected SPDX expression. The generator's existing GPL comment alone is flagged for improvement by this audit.
+2. Confirm generated C++ source (and any DSP header) retains an accurate copyright line and the project's expected SPDX expression; Module Forge's starter notices have been standardized, but contributor-added code still requires review.
 3. Add a truthful original-artwork provenance comment to the SVG and, after checking rights, a matching SPDX identifier.
 4. Add the unique model slug to the existing `ModularSynth` collection manifest; preserve its project-level author/source metadata and upstream `LICENSE`/inventory files.
 5. Run the generator's own checker, the license preflight, standalone DSP/source tests and, eventually, a real plugin/host test. These are separate acceptance gates.
