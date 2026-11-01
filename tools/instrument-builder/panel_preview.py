@@ -181,14 +181,23 @@ def render_svg(manifest: dict) -> bytes:
         mode = controller["snapshotAction"].upper()
         morph = controller["morphSeconds"]
         selection = "LIVE" if selected < 0 else f"SNAPSHOT {SLOTS[selected]}"
+        controller_number = section_index + 1
         parts.append(
-            f'<g class="macro8-section" data-controller="{section_index}">\n'
+            f'<g class="macro8-section" data-controller="{section_index}" '
+            f'data-module-id="{module_id}" role="group" '
+            f'aria-labelledby="controller-{section_index}-title '
+            f'controller-{section_index}-desc">\n'
+            f'<title id="controller-{section_index}-title">'
+            f'Macro controller {controller_number}</title>\n'
+            f'<desc id="controller-{section_index}-desc">'
+            f'Original Rack module ID {module_id}; stable identity retained '
+            f'in this source preview.</desc>\n'
             f'<rect x="20" y="{base + 4}" width="920" height="432" '
             f'rx="18" fill="{c["surface"]}"/>\n'
         )
         parts.append(_text(
-            42, base + 39, f"MACRO8  /  ID {module_id}", fill=c["text"],
-            size=17, weight="700"))
+            42, base + 39, f"MACRO CONTROLLER {controller_number}",
+            fill=c["text"], size=17, weight="700"))
         # Static display chips for live/recall selection, store mode and morph.
         for kind, x, width, text, background, foreground in (
             ("selection", 478, 128, selection, c["active"], c["on_active"]),

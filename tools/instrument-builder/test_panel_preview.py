@@ -76,6 +76,12 @@ class PanelPreviewTests(unittest.TestCase):
         self.assertIn("aria-labelledby", root.attrib)
         self.assertIsNotNone(root.find("s:title", SVG_NS))
         self.assertIsNotNone(root.find("s:desc", SVG_NS))
+        controllers = root.findall(".//s:g[@class='macro8-section']", SVG_NS)
+        self.assertEqual(len(controllers), 1)
+        self.assertEqual(controllers[0].get("data-module-id"), "700")
+        self.assertEqual(controllers[0].get("role"), "group")
+        self.assertIn("Rack module ID 700",
+                      controllers[0].find("s:desc", SVG_NS).text)
         self.assertEqual(
             len(root.findall(".//s:g[@class='macro-control']", SVG_NS)), 8)
         self.assertEqual(
@@ -178,11 +184,18 @@ class PanelPreviewTests(unittest.TestCase):
             ".//s:g[@class='macro-control']", SVG_NS)), 16)
         self.assertEqual(len(root.findall(
             ".//s:g[@class='snapshot-slot']", SVG_NS)), 8)
+        self.assertEqual(
+            [section.get("data-module-id") for section in sections],
+            ["4", "700"])
         header_labels = [item.text for item in root.findall(
             ".//s:g[@class='macro8-section']/s:text", SVG_NS)
-            if (item.text or "").startswith("MACRO8  /  ID")]
+            if (item.text or "").startswith("MACRO CONTROLLER")]
         self.assertEqual(header_labels,
-                         ["MACRO8  /  ID 4", "MACRO8  /  ID 700"])
+                         ["MACRO CONTROLLER 1", "MACRO CONTROLLER 2"])
+        self.assertIn("Rack module ID 4",
+                      sections[0].find("s:desc", SVG_NS).text)
+        self.assertIn("Rack module ID 700",
+                      sections[1].find("s:desc", SVG_NS).text)
 
     def test_preview_rejects_malformed_or_unsafe_manifest(self):
         cases = [
@@ -275,6 +288,11 @@ class PanelPreviewTests(unittest.TestCase):
         names = [item.text for item in root.findall(
             ".//s:text[@class='macro-label']", SVG_NS)]
         self.assertEqual(names[:3], ["Shape", "Resonance", "Drive"])
+        labels = [item.text or "" for item in root.findall(".//s:text", SVG_NS)]
+        self.assertIn("MACRO CONTROLLER 1", labels)
+        self.assertNotIn("940000000007", " ".join(labels))
+        section = root.find(".//s:g[@class='macro8-section']", SVG_NS)
+        self.assertEqual(section.get("data-module-id"), "940000000007")
         self.assertEqual(len(root.findall(
             ".//s:g[@class='snapshot-slot']", SVG_NS)), 4)
 

@@ -120,7 +120,10 @@ section has eight named controls with their saved live knob positions, explicit
 **0…+10 V / −5…+5 V** polarity, four A–D snapshot buttons with stored/empty
 and selected state, and static badges for LIVE/snapshot selection,
 STORE/RECALL mode, and morph time. Populated snapshots show eight small value
-bars. Multiple Macro8 controllers sort by their stable Rack module IDs.
+bars. Multiple Macro8 controllers sort by their stable Rack module IDs;
+the visible headings are friendly `MACRO CONTROLLER 1`, `2`, etc., while
+the exact IDs remain in SVG `data-module-id` attributes and accessible
+controller descriptions for identity-preserving tooling.
 
 Labels are XML-escaped so characters such as `<`, `>` and `&` display as
 text, not markup. The 1–12 character Macro8 labels fit within their fixed cards;
