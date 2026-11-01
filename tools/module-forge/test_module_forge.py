@@ -13,7 +13,7 @@ class ModuleForgeTests(unittest.TestCase):
             destination = generate("OrbitSine", "Orbit Sine", Path(tmp))
             self.assertEqual(check_module(destination), [])
             manifest = json.loads((destination / "OrbitSine.module.json").read_text())
-            self.assertEqual(manifest["slug"], "MFOrbitSine")
+            self.assertEqual(manifest["slug"], "OrbitSine")
             self.assertIn("Oscillator", manifest["tags"])
             source = (destination / "OrbitSine.cpp").read_text()
             self.assertIn("std::clamp(pitch", source)
