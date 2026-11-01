@@ -122,7 +122,7 @@ The plugin slug is ModularSynth, module slug StereoEcho. The shipped `MODULAR_-_
 3. StateFilter LOWPASS_OUTPUT (0) → StereoEcho LEFT_INPUT (0); StateFilter HIGHPASS_OUTPUT (2) → StereoEcho RIGHT_INPUT (1).
 4. StereoEcho LEFT_OUTPUT (0) / RIGHT_OUTPUT (1) → HostAudio2 inputs 0 / 1.
 
-The LP/HP split makes the left and right inputs genuinely different, so the crossfeed knob has a noticeable stereo effect. **Important:** leaving RIGHT_INPUT unpatched normals it to LEFT_INPUT, which is convenient dual-mono routing but produces identical left/right histories. With two identical channels, ping-pong crossfeed alone cannot create stereo width. For classic L-only alternating echoes, patch a zero-volt source into RIGHT_INPUT instead.
+The saved LP/HP split routes nominally different filter outputs to the two delay inputs, so the source graph provides distinct signals for crossfeed processing; **the resulting stereo image has not been auditioned in a fork-built host**. **Important:** leaving RIGHT_INPUT unpatched normals it to LEFT_INPUT, which is convenient dual-mono routing but produces identical left/right histories. With two identical channels, ping-pong crossfeed alone cannot create stereo width. For classic L-only alternating echoes, patch a zero-volt source into RIGHT_INPUT instead.
 
 ## Integration status and remaining host checks
 

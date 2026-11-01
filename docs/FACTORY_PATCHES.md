@@ -60,7 +60,7 @@ The original three patches were initially parsed as JSON and checked for:
 
 ## Polyphonic Motion Pad — source-grounded signal flow
 
-[Open the saved patch](../patches/examples/MODULAR_-_Polyphonic_Motion_Pad.vcv) in a fork build with all three original `ModularSynth` modules. It contains **8 modules and 13 saved cables**, using only the bundled Cardinal Host MIDI/Audio, Fundamental ADSR/VCA-1 and original MorphVCO, StateFilter and Macro8. No third-party library download or external sample file is specified.
+[Open the saved patch](../patches/examples/MODULAR_-_Polyphonic_Motion_Pad.vcv) in a fork build containing the **three original `ModularSynth` models used by this patch**: MorphVCO, StateFilter and Macro8. It contains **8 modules and 13 saved cables**, using only the bundled Cardinal Host MIDI/Audio, Fundamental ADSR/VCA-1 and those first-party models. No third-party library download or external sample file is specified.
 
 - `Cardinal/HostMIDI` saves **`channels=8`** and **`polyMode=1` (Reuse)**. In the checked-in HostMIDI implementation, pitch (output 0), gate (1) and retrigger (6) produce up to 8 separate voice lanes in this mode. The patch routes pitch both to `MorphVCO` pitch input 0 and `StateFilter` cutoff CV input 1 (1 V/oct note-by-note filter keytracking).
 - Gate and retrigger separately feed the pinned Fundamental `ADSR` inputs 4 and 5. Its per-channel envelope output feeds the pinned Fundamental `VCA-1` CV input 0. Oscillator output 0 → StateFilter audio input 0 → filter low-pass output 0 → VCA audio input 1 forms the per-voice audio path.
