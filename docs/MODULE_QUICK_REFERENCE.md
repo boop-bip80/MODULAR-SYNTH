@@ -91,11 +91,13 @@ measured audio or a verified DAW session.
 For an actual prewired version of (1), start with **Morph VCO Performance**.
 For scenes, start with **Morphing State Pad**. For the stereo signal path,
 open **Stereo Echo Showcase**—that saved patch uses the filter's **LP
-and HP** as separate echo left/right inputs.
+and HP** as separate echo left/right inputs. **Echo Motion Performance**
+adds saved Macro8 A–D modulation of echo time, feedback, wet mix and
+oscillator morph. Those are saved signal/CV routes, not an audio audition.
 
-## Nine factory patches
+## Ten factory patches
 
-All nine links below are actual `.vcv` files under
+All ten links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
 existing plugin collection and does not require one of these four first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
@@ -111,10 +113,12 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Rhythmic Grit Bass](../patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv) | Originals | Short MIDI rhythms; rapid Macro8 scene transitions |
 | [Polyphonic Motion Pad](../patches/examples/MODULAR_-_Polyphonic_Motion_Pad.vcv) | Originals | Eight-channel MIDI chord; four Macro8 scenes and filter keytracking |
 | [Stereo Echo Showcase](../patches/examples/MODULAR_-_Stereo_Echo_Showcase.vcv) | Originals | MIDI → VCA → filter LP/HP → stereo echo → host L/R |
+| [Echo Motion Performance](../patches/examples/MODULAR_-_Echo_Motion_Performance.vcv) | Originals | Play MIDI; recall Macro8 A–D to change echo time/feedback/wet and VCO wave morph |
 
-Open a patch through **File → Demo patches** if the build packages it, or
-load its `.vcv` directly. **Clockwork Pulses** is transport-driven; the
-other eight are designed for MIDI note input. Begin at a conservative
+If the examples folder is included in the build, open a patch through
+**File → Open demo / example project**; otherwise load its `.vcv` directly.
+**Clockwork Pulses** is transport-driven; the other nine are designed
+for MIDI note input. Begin at a conservative
 monitor level. [Factory-patch details and structural validation](FACTORY_PATCHES.md)
 and [offline patch checks](PATCH_WORKFLOW.md) provide more context.
 

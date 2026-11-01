@@ -22,7 +22,7 @@ If you already have a **successfully built** MODULAR-SYNTH plugin containing all
 
 1. In your DAW, add the **Cardinal Synth** instrument variant to an instrument track. It has stereo audio output and accepts host MIDI. The standalone/main variants may also work with appropriate routing, but do not assume the FX variant receives MIDI the same way in every host.
 2. Enable the track's MIDI input, monitoring and any necessary record-arm state. Send notes from a keyboard or a MIDI clip.
-3. Open the patch File menu. If the example bank was packaged, choose **Demo patches**, or use **Open…** and browse to a `.vcv` file under `patches/examples/`.
+3. If the examples folder was packaged, choose **File → Open demo / example project**; otherwise use **File → Open...** and browse to a `.vcv` file under `patches/examples/`.
 4. Start with [`MODULAR_-_Morph_VCO_Performance.vcv`](../patches/examples/MODULAR_-_Morph_VCO_Performance.vcv). Play one note, release it, and verify that the ADSR closes the VCA.
 5. Turn the **Morph** knob on the Morph VCO; its waveform moves through sine, saw and pulse regions. Lower volume before increasing resonance, drive or more complex patch gain.
 6. Save a copy of the patch using the patch File menu, then save your DAW project. Reopen both and check that the patch, MIDI mapping and sound return—this is a **manual acceptance check**, not a verified result.
