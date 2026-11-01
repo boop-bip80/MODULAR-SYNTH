@@ -14,3 +14,4 @@ extern Model* modelMorphVCO;
 extern Model* modelStateFilter;
 extern Model* modelMacro8;
 extern Model* modelStereoEcho;
+extern Model* modelClockedLFO;

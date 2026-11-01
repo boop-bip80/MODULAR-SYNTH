@@ -17,9 +17,9 @@ DOC_PATH = ROOT / "docs/MODULE_QUICK_REFERENCE.md"
 PLUGIN_DIR = ROOT / "plugins/ModularSynth"
 PATCH_DIR = ROOT / "patches/examples"
 
-# The quick reference covers exactly the current four first-party modules.
+# The quick reference covers exactly the current five first-party modules.
 # A newly registered model requires an explicit catalog update.
-MODULE_SLUGS = ("MorphVCO", "StateFilter", "Macro8", "StereoEcho")
+MODULE_SLUGS = ("MorphVCO", "StateFilter", "Macro8", "StereoEcho", "ClockedLFO")
 
 
 def enum_ports(source: str, enum_name: str) -> list[str]:
@@ -120,6 +120,16 @@ class ModuleQuickReferenceTests(unittest.TestCase):
                 '"Feedback CV (adds 10 percentage points/V)"',
                 '"Wet mix CV (adds 10 percentage points/V)"',
             ),
+            "ClockedLFO": (
+                'configParam(RATE_PARAM, -6.0f, 4.0f, -1.0f,',
+                'configParam(RATIO_PARAM, 0.0f, 4.0f, 2.0f,',
+                'configParam(PHASE_PARAM, 0.0f, 1.0f, 0.0f,',
+                'configParam(WIDTH_PARAM, 0.05f, 0.95f, 0.5f,',
+                '"Free-rate CV (1 V/oct)"',
+                '"External tempo pulse (2 V rising threshold)"',
+                '"Phase reset trigger (2 V rising threshold)"',
+                '"End-of-cycle trigger (+10 V, 1 ms)"',
+            ),
         }
         for slug, snippets in expected_sources.items():
             normalized = " ".join(self.sources[slug].split())
@@ -130,6 +140,7 @@ class ModuleQuickReferenceTests(unittest.TestCase):
             "1 V/oct", "5 V/oct", "10 V full span",
             "0.25 s", "0…+10 V", "−5…+5 V", "100 ms per volt",
             "10 percentage points", "IN R", "normalled",
+            "1/256…200 Hz", "1/4, 1/2, 1, 2 or 4", "HostTime BEAT",
         ):
             self.assertIn(phrase, self.document)
 
@@ -139,7 +150,7 @@ class ModuleQuickReferenceTests(unittest.TestCase):
         linked = [path for path, _ in rows]
         self.assertEqual(len(linked), len(set(linked)), "Duplicate factory-patch references")
         self.assertEqual(actual, set(linked), "Update quick reference when factory patches change")
-        self.assertEqual(10, len(actual))
+        self.assertEqual(11, len(actual))
         for path, classification in rows:
             with self.subTest(path=path):
                 patch = json.loads((ROOT / path).read_text(encoding="utf-8"))
@@ -211,7 +222,7 @@ class ModuleQuickReferenceTests(unittest.TestCase):
             "MODULAR_-_Echo_Motion_Performance.vcv)", self.document
         )
         self.assertIn("Macro8 A–D", self.document)
-        self.assertIn("other nine", self.document)
+        self.assertIn("remaining nine", self.document)
 
     def test_documented_factory_menu_matches_actual_source_label(self) -> None:
         menu = (ROOT / "src/override/MenuBar.cpp").read_text(encoding="utf-8")
@@ -227,6 +238,43 @@ class ModuleQuickReferenceTests(unittest.TestCase):
                 text = file.read_text(encoding="utf-8")
                 self.assertIn("File → Open demo / example project", text)
                 self.assertNotIn("Demo patches", text)
+
+    def test_clocked_studio_uses_real_hosttime_beat_reset_and_lfo_ports(self) -> None:
+        host_time = (ROOT / "plugins/Cardinal/src/HostTime.cpp").read_text(
+            encoding="utf-8")
+        outputs = enum_ports(host_time, "HostTimeIds")
+        self.assertEqual(outputs.index("kHostTimeReset"), 1)
+        self.assertEqual(outputs.index("kHostTimeBeat"), 3)
+
+        path = PATCH_DIR / "MODULAR_-_Clocked_Modulation_Studio.vcv"
+        patch = json.loads(path.read_text(encoding="utf-8"))
+        indexed = {m["id"]: m for m in patch["modules"]}
+        routes = {
+            ((indexed[c["outputModuleId"]]["plugin"],
+              indexed[c["outputModuleId"]]["model"]), c["outputId"],
+             (indexed[c["inputModuleId"]]["plugin"],
+              indexed[c["inputModuleId"]]["model"]), c["inputId"])
+            for c in patch["cables"]
+        }
+        for route in (
+            (("Cardinal", "HostTime"), 3, ("ModularSynth", "ClockedLFO"), 1),
+            (("Cardinal", "HostTime"), 1, ("ModularSynth", "ClockedLFO"), 2),
+            (("Cardinal", "HostMIDI"), 0, ("ModularSynth", "ClockedLFO"), 0),
+            (("ModularSynth", "ClockedLFO"), 4, ("Fundamental", "ADSR"), 5),
+            (("ModularSynth", "ClockedLFO"), 0, ("ModularSynth", "MorphVCO"), 2),
+            (("ModularSynth", "ClockedLFO"), 1, ("ModularSynth", "StateFilter"), 1),
+            (("ModularSynth", "ClockedLFO"), 3, ("ModularSynth", "StereoEcho"), 4),
+            (("ModularSynth", "StereoEcho"), 0, ("Cardinal", "HostAudio2"), 0),
+            (("ModularSynth", "StereoEcho"), 1, ("Cardinal", "HostAudio2"), 1),
+        ):
+            with self.subTest(route=route):
+                self.assertIn(route, routes)
+        midi = next(m for m in patch["modules"]
+                    if m["plugin"] == "Cardinal" and m["model"] == "HostMIDI")
+        self.assertEqual(midi["data"]["channels"], 8)
+        self.assertEqual(midi["data"]["polyMode"], 1)
+        self.assertIn("external beat/clock pulse", self.document)
+        self.assertIn("Clocked Modulation Studio", self.document)
 
     def test_all_relative_markdown_links_resolve(self) -> None:
         for link in re.findall(r"\]\((?!https?://)([^)#]+)(?:#[^)]*)?\)", self.document):

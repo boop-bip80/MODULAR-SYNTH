@@ -44,6 +44,15 @@
         "Delay",
         "Polyphonic"
       ]
+    },
+    {
+      "slug": "ClockedLFO",
+      "name": "Clocked LFO",
+      "description": "Original 16-lane phase-continuous modulation source with sine, triangle, ramp, pulse and EOC; free frequency, external clock divisions/multipliers, Schmitt reset and CV.",
+      "tags": [
+        "LFO",
+        "Polyphonic"
+      ]
     }
   ]
 }

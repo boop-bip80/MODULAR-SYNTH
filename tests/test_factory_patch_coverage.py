@@ -38,13 +38,16 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertTrue(report["ok"], report["errors"])
         self.assertEqual(len(report["examples"]), len(coverage.EXAMPLES))
         self.assertTrue(all(patch["ok"] for patch in report["examples"]))
-        self.assertTrue({"MorphVCO", "StateFilter", "Macro8", "StereoEcho"}.issubset(
+        self.assertTrue({"MorphVCO", "StateFilter", "Macro8", "StereoEcho",
+                         "ClockedLFO"}.issubset(
             report["model_coverage"]))
         self.assertTrue(all(report["model_coverage"].values()))
         self.assertTrue(any("Morphing_State_Pad.vcv" in name
                             for name in report["model_coverage"]["StateFilter"]))
         self.assertIn("MODULAR_-_Stereo_Echo_Showcase.vcv",
                       report["model_coverage"]["StereoEcho"])
+        self.assertIn("MODULAR_-_Clocked_Modulation_Studio.vcv",
+                      report["model_coverage"]["ClockedLFO"])
         self.assertEqual(report["sample_rate_status"],
                          "not asserted: no host runtime sample-rate execution")
         self.assertGreater(sum(patch["warning_count"]
@@ -63,7 +66,7 @@ class FactoryPatchCoverageTests(unittest.TestCase):
             if json_mode:
                 report = json.loads(proc.stdout)
                 self.assertTrue(report["ok"])
-                self.assertGreaterEqual(len(report["model_coverage"]), 4)
+                self.assertGreaterEqual(len(report["model_coverage"]), 5)
             else:
                 self.assertIn("PASS factory patch claims", proc.stdout)
                 self.assertIn("host execution not tested", proc.stdout)
@@ -349,6 +352,66 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         report = self.inspect()
         self.assertFalse(report["ok"])
         self.assertTrue(any("advertised example patch is missing" in err
+                            for err in report["errors"]), report["errors"])
+
+    def test_clocked_modulation_studio_has_source_grounded_tempo_routes(self) -> None:
+        filename = "MODULAR_-_Clocked_Modulation_Studio.vcv"
+        report = self.inspect()
+        patch = next(item for item in report["examples"]
+                     if item["patch"] == filename)
+        self.assertTrue(patch["ok"], patch["errors"])
+        for capability in (
+            "host beat clocks LFO",
+            "host reset phase-aligns LFO",
+            "MIDI pitch provides poly free-rate CV",
+            "LFO cycle trigger to ADSR retrigger",
+            "LFO sine modulates VCO morph",
+            "LFO triangle modulates filter cutoff",
+            "LFO pulse switches Echo wet mix",
+            "Echo left to host left",
+            "Echo right to host right",
+            "two host audio input routes",
+            "8-channel HostMIDI Reuse polyphony",
+        ):
+            self.assertIn(capability, patch["capabilities"])
+
+    def test_clocked_modulation_rejects_missing_tempo_clock(self) -> None:
+        filename = "MODULAR_-_Clocked_Modulation_Studio.vcv"
+
+        def remove_beat_clock(patch: dict) -> None:
+            host = next(module["id"] for module in patch["modules"]
+                        if module["plugin"] == "Cardinal"
+                        and module["model"] == "HostTime")
+            lfo = next(module["id"] for module in patch["modules"]
+                       if module["plugin"] == "ModularSynth"
+                       and module["model"] == "ClockedLFO")
+            patch["cables"] = [cable for cable in patch["cables"] if not (
+                cable["outputModuleId"] == host and cable["outputId"] == 3
+                and cable["inputModuleId"] == lfo and cable["inputId"] == 1
+            )]
+
+        self.mutate(filename, remove_beat_clock)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("host beat clocks LFO" in err
+                            for err in report["errors"]), report["errors"])
+
+    def test_clocked_modulation_rejects_bad_eoc_output_port(self) -> None:
+        filename = "MODULAR_-_Clocked_Modulation_Studio.vcv"
+
+        def corrupt_end_of_cycle(patch: dict) -> None:
+            lfo = next(module["id"] for module in patch["modules"]
+                       if module["plugin"] == "ModularSynth"
+                       and module["model"] == "ClockedLFO")
+            retrigger = next(cable for cable in patch["cables"]
+                             if cable["outputModuleId"] == lfo
+                             and cable["outputId"] == 4)
+            retrigger["outputId"] = 42
+
+        self.mutate(filename, corrupt_end_of_cycle)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("outputs index 42 exceeds known count 5" in err
                             for err in report["errors"]), report["errors"])
 
 

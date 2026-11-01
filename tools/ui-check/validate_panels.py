@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conservative source-level checks for the three MODULAR-SYNTH SVG panels.
+"""Conservative source-level checks for the MODULAR-SYNTH SVG panels.
 
 Not a renderer: verifies XML, Rack 3U geometry, the exact panel asset used by
 each widget, and the centers of statically resolvable centered controls. It
@@ -18,10 +18,12 @@ import xml.etree.ElementTree as ET
 # declare conventional Eurorack physical dimensions (5.08 mm/HP, 128.5 mm/3U).
 # Deliberately source-backed rather than manifest-driven: a new module can be
 # checked before its registration/packaging PR lands.
-PANELS = {"MorphVCO": 12, "StateFilter": 14, "Macro8": 20, "StereoEcho": 16}
+PANELS = {"MorphVCO": 12, "StateFilter": 14, "Macro8": 20,
+          "StereoEcho": 16, "ClockedLFO": 16}
 # This widget uses literal create*Centered() sites, so it can be checked for
 # exact source callsite cardinality as well as in-bounds center coordinates.
-EXPECTED_SITES = {"StereoEcho": {"Param": 4, "Input": 5, "Output": 2}}
+EXPECTED_SITES = {"StereoEcho": {"Param": 4, "Input": 5, "Output": 2},
+                  "ClockedLFO": {"Param": 4, "Input": 5, "Output": 5, "Light": 1}}
 SVG_NS = "{http://www.w3.org/2000/svg}svg"
 GRID_PX_PER_HP = 15.0
 GRID_HEIGHT_PX = 380.0
