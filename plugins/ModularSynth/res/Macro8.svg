@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Original MODULAR-SYNTH Macro8 panel, 20HP x 3U, designed for Rack SVG rendering. -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" width="101.6mm" height="128.5mm" viewBox="0 0 300 380">
   <defs>
     <linearGradient id="panel" x1="0" y1="0" x2="0.7" y2="1">

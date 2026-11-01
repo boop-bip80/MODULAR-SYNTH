@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- MODULAR-SYNTH StereoEcho original panel; 16 HP x 3U, GPL-3.0-or-later -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" width="81.28mm" height="128.5mm" viewBox="0 0 240 380">
   <defs>
     <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">

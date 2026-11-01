@@ -241,12 +241,14 @@ class LicenseAuditTests(unittest.TestCase):
         )
         self.assertEqual(missing.returncode, 2)
 
-    def test_actual_checkout_has_no_first_party_hard_notice_errors(self) -> None:
+    def test_actual_checkout_passes_strict_first_party_notices(self) -> None:
         actual = Path(os.environ.get("MODULAR_SYNTH_AUDIT_CHECKOUT", str(ROOT)))
         if not (actual / "plugins" / "ModularSynth" / "plugin.json").is_file():
             self.skipTest("full source checkout not present in temporary test workspace")
-        report = audit_repository(actual)
+        report = audit_repository(actual, strict=True)
         self.assertEqual(report["summary"]["errors"], 0, report["findings"])
+        self.assertEqual(report["summary"]["warnings"], 0, report["findings"])
+        self.assertTrue(report["summary"]["passed"])
         self.assertGreaterEqual(report["summary"]["first_party_models"], 3)
         self.assertGreaterEqual(report["summary"]["upstream_submodule_pointers"], 3)
 
