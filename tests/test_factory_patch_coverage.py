@@ -41,8 +41,8 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertTrue({"MorphVCO", "StateFilter", "Macro8"}.issubset(
             report["model_coverage"]))
         self.assertTrue(all(report["model_coverage"].values()))
-        self.assertIn("Morphing_State_Pad.vcv",
-                      report["model_coverage"]["StateFilter"][0])
+        self.assertTrue(any("Morphing_State_Pad.vcv" in name
+                            for name in report["model_coverage"]["StateFilter"]))
         self.assertEqual(report["sample_rate_status"],
                          "not asserted: no host runtime sample-rate execution")
         self.assertGreater(sum(patch["warning_count"]
@@ -83,20 +83,23 @@ class FactoryPatchCoverageTests(unittest.TestCase):
                             for err in report["errors"]), report["errors"])
 
     def test_missing_original_model_fails_manifest_coverage(self) -> None:
-        filename = "MODULAR_-_Morphing_State_Pad.vcv"
-
         def remove_macro(patch: dict) -> None:
-            macro = next(module["id"] for module in patch["modules"]
-                         if module.get("plugin") == "ModularSynth"
-                         and module.get("model") == "Macro8")
+            ids = {module["id"] for module in patch["modules"]
+                   if module.get("plugin") == "ModularSynth"
+                   and module.get("model") == "Macro8"}
             patch["modules"] = [module for module in patch["modules"]
-                                if module["id"] != macro]
+                                if module["id"] not in ids]
             patch["cables"] = [
                 cable for cable in patch["cables"]
-                if cable["outputModuleId"] != macro and cable["inputModuleId"] != macro
+                if cable["outputModuleId"] not in ids
+                and cable["inputModuleId"] not in ids
             ]
 
-        self.mutate(filename, remove_macro)
+        # Macro8 appears in State Pad AND the two newer factory patches.
+        # Remove all uses to exercise manifest-wide coverage, not just a
+        # per-patch required-model assertion.
+        for filename in coverage.EXAMPLES:
+            self.mutate(filename, remove_macro)
         report = self.inspect()
         self.assertFalse(report["ok"])
         self.assertTrue(any("ModularSynth/Macro8: no first-party example" in err
