@@ -36,7 +36,7 @@ python3 -B tools/ci/preflight_submodules.py
 
 This **does not contact the network**. It compares every root `.gitmodules` declaration with the committed Gitlink tree, checks initialized submodule HEADs against their exact pinned SHAs, and verifies that Git resolves the GitLab SpeexDSP URL to the official Xiph mirror using `build.yml`'s `GIT_CONFIG_*` environment. When the pinned Rack checkout is initialized, it also checks Rack's nested `dep/speexdsp` Gitlink, URL, and local checkout. Missing local submodule downloads are reported as notes in the default mode so the fast source gate works without fetching a large dependency tree.
 
-For a workspace that **should already contain all recursive submodules**, run `python3 -B tools/ci/preflight_submodules.py --require-populated`. This also fails if any submodule is uninitialized or checked out at the wrong commit. Both modes are strictly local; they cannot prove that a remote host is reachable or that a complete application build succeeds. The CLI has network-free tests under `tests/test_ci_submodule_preflight.py`.
+For a workspace that should already contain **all declared top-level submodules plus Rack's nested SpeexDSP dependency**, run `python3 -B tools/ci/preflight_submodules.py --require-populated`. Strict mode fails if any of those Gitlinks are uninitialized or checked out at the wrong commit. It **does not recursively inspect every other plugin's nested dependencies**; those still require normal recursive checkout and full build validation. Both modes are strictly local: they cannot prove a remote host is reachable or an application build succeeds. The CLI has network-free tests under `tests/test_ci_submodule_preflight.py`.
 
 ## Run the fast gate locally
 

@@ -120,6 +120,13 @@ class SubmodulePreflightTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("deps/example is not initialized", result.stderr)
 
+    def test_help_explains_strict_mode_is_not_fully_recursive(self) -> None:
+        result = self.run_preflight("--help")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("all root Gitlinks", result.stdout)
+        self.assertIn("Rack/SpeexDSP only", result.stdout)
+        self.assertNotIn("all recursive submodules", result.stdout)
+
     def test_manifest_entry_without_gitlink_fails(self) -> None:
         manifest = self.repo / ".gitmodules"
         manifest.write_text(

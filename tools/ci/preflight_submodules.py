@@ -5,9 +5,10 @@ Run from any working directory:
     python3 tools/ci/preflight_submodules.py
     python3 tools/ci/preflight_submodules.py --require-populated
 
-The default checks committed pins and CI URL rewriting while tolerating
-uninitialized submodules. Strict mode additionally requires checked-out
-submodule HEADs to match each pinned Gitlink.
+The default checks root Gitlinks and CI URL rewriting while tolerating
+uninitialized submodules. Strict mode requires every declared top-level
+submodule and Rack's nested SpeexDSP checkout at its pinned HEAD; it does
+not traverse other nested plugin dependencies.
 """
 from __future__ import annotations
 
@@ -221,7 +222,7 @@ def main() -> int:
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[2],
                         help="Repository root (defaults to this script's checkout)")
     parser.add_argument("--require-populated", action="store_true",
-                        help="Fail if any declared submodule or nested Rack/SpeexDSP is uninitialized")
+                        help="Require pinned HEADs for all root Gitlinks and nested Rack/SpeexDSP only")
     args = parser.parse_args()
     return preflight(args.repo.resolve(), args.require_populated)
 
