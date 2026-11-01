@@ -35,6 +35,15 @@
         "Controller",
         "Utility"
       ]
+    },
+    {
+      "slug": "StereoEcho",
+      "name": "Stereo Echo",
+      "description": "Original MODULAR-SYNTH 16-voice stereo delay with bounded feedback, millisecond time, wet/dry and ping-pong crossfeed",
+      "tags": [
+        "Delay",
+        "Polyphonic"
+      ]
     }
   ]
 }

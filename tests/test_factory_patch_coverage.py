@@ -38,11 +38,13 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertTrue(report["ok"], report["errors"])
         self.assertEqual(len(report["examples"]), len(coverage.EXAMPLES))
         self.assertTrue(all(patch["ok"] for patch in report["examples"]))
-        self.assertTrue({"MorphVCO", "StateFilter", "Macro8"}.issubset(
+        self.assertTrue({"MorphVCO", "StateFilter", "Macro8", "StereoEcho"}.issubset(
             report["model_coverage"]))
         self.assertTrue(all(report["model_coverage"].values()))
         self.assertTrue(any("Morphing_State_Pad.vcv" in name
                             for name in report["model_coverage"]["StateFilter"]))
+        self.assertIn("MODULAR_-_Stereo_Echo_Showcase.vcv",
+                      report["model_coverage"]["StereoEcho"])
         self.assertEqual(report["sample_rate_status"],
                          "not asserted: no host runtime sample-rate execution")
         self.assertGreater(sum(patch["warning_count"]
@@ -61,7 +63,7 @@ class FactoryPatchCoverageTests(unittest.TestCase):
             if json_mode:
                 report = json.loads(proc.stdout)
                 self.assertTrue(report["ok"])
-                self.assertGreaterEqual(len(report["model_coverage"]), 3)
+                self.assertGreaterEqual(len(report["model_coverage"]), 4)
             else:
                 self.assertIn("PASS factory patch claims", proc.stdout)
                 self.assertIn("host execution not tested", proc.stdout)
@@ -287,6 +289,60 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertFalse(report["ok"])
         self.assertTrue(any("macro width CV output range must be bipolar" in err
                             for err in report["errors"]), report["errors"])
+
+
+    def test_echo_showcase_has_distinct_filter_stereo_paths(self) -> None:
+        filename = "MODULAR_-_Stereo_Echo_Showcase.vcv"
+        report = self.inspect()
+        patch = next(item for item in report["examples"]
+                     if item["patch"] == filename)
+        self.assertTrue(patch["ok"], patch["errors"])
+        self.assertIn("filter LP to StereoEcho left", patch["capabilities"])
+        self.assertIn("filter HP to StereoEcho right", patch["capabilities"])
+        self.assertIn("StereoEcho left to host left", patch["capabilities"])
+        self.assertIn("StereoEcho right to host right", patch["capabilities"])
+        self.assertIn("two host audio input routes", patch["capabilities"])
+
+    def test_echo_showcase_rejects_missing_right_filter_input(self) -> None:
+        filename = "MODULAR_-_Stereo_Echo_Showcase.vcv"
+
+        def remove_highpass_to_echo(patch: dict) -> None:
+            filt = next(module["id"] for module in patch["modules"]
+                        if module["plugin"] == "ModularSynth"
+                        and module["model"] == "StateFilter")
+            echo = next(module["id"] for module in patch["modules"]
+                        if module["plugin"] == "ModularSynth"
+                        and module["model"] == "StereoEcho")
+            patch["cables"] = [
+                cable for cable in patch["cables"] if not (
+                    cable["outputModuleId"] == filt and cable["outputId"] == 2
+                    and cable["inputModuleId"] == echo and cable["inputId"] == 1
+                )
+            ]
+
+        self.mutate(filename, remove_highpass_to_echo)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("filter HP to StereoEcho right" in error
+                            for error in report["errors"]), report["errors"])
+
+    def test_echo_showcase_rejects_missing_right_host_output(self) -> None:
+        filename = "MODULAR_-_Stereo_Echo_Showcase.vcv"
+
+        def remove_right_host_output(patch: dict) -> None:
+            patch["cables"] = [
+                cable for cable in patch["cables"] if not (
+                    cable["inputModuleId"] == 1 and cable["inputId"] == 1
+                )
+            ]
+
+        self.mutate(filename, remove_right_host_output)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("StereoEcho right to host right" in error
+                            for error in report["errors"]), report["errors"])
+        self.assertTrue(any("missing two saved HostAudio2 input routes" in error
+                            for error in report["errors"]), report["errors"])
 
     def test_missing_factory_patch_is_reported(self) -> None:
         (self.examples / "MODULAR_-_Granular_Veil.vcv").unlink()
