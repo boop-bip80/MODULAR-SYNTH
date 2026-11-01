@@ -1,0 +1,22 @@
+{
+  "slug": "ModularSynth",
+  "name": "MODULAR-SYNTH Originals",
+  "version": "0.1.0",
+  "license": "GPL-3.0-or-later",
+  "brand": "boop-bip80",
+  "author": "boop-bip80 contributors",
+  "authorUrl": "https://github.com/boop-bip80",
+  "pluginUrl": "https://github.com/boop-bip80/MODULAR-SYNTH",
+  "sourceUrl": "https://github.com/boop-bip80/MODULAR-SYNTH",
+  "modules": [
+    {
+      "slug": "MorphVCO",
+      "name": "Morph VCO",
+      "description": "Original first-party 16-channel oscillator with polyBLEP alias reduction, continuous sine/saw/pulse morphing, exponential FM and pulse-width modulation.",
+      "tags": [
+        "Oscillator",
+        "Polyphonic"
+      ]
+    }
+  ]
+}

@@ -221,6 +221,11 @@ PLUGIN_FILES = plugins.cpp
 MINIPLUGIN_FILES = plugins-mini.cpp
 
 # --------------------------------------------------------------
+# MODULAR-SYNTH first-party collection (full variants)
+
+PLUGIN_FILES += ModularSynth/src/MorphVCO.cpp
+
+# --------------------------------------------------------------
 # Cardinal (built-in)
 
 PLUGIN_FILES += Cardinal/src/AIDA-X.cpp
@@ -2122,6 +2127,12 @@ $(BUILD_DIR)/noplugins.cpp.o: plugins.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
 	@echo "Compiling $<"
 	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@
+
+$(BUILD_DIR)/ModularSynth/%.cpp.o: ModularSynth/%.cpp
+	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
+	@echo "Compiling $<"
+	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@ \
+		-DpluginInstance=pluginInstance__ModularSynth
 
 $(BUILD_DIR)/Cardinal/%.cpp.o: Cardinal/%.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"

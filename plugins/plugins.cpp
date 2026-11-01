@@ -12,6 +12,9 @@
 // Cardinal (built-in)
 #include "Cardinal/src/plugin.hpp"
 
+// MODULAR-SYNTH first-party modules
+#include "ModularSynth/src/plugin.hpp"
+
 // Fundamental (always enabled)
 #include "Fundamental/src/plugin.hpp"
 
@@ -955,6 +958,7 @@ void writeDefaultTheme() {}
 
 // plugin instances
 Plugin* pluginInstance__Cardinal;
+Plugin* pluginInstance__ModularSynth;
 Plugin* pluginInstance__Fundamental;
 // Plugin* pluginInstance__ZamAudio;
 Plugin* pluginInstance__21kHz;
@@ -1213,6 +1217,16 @@ static void initStatic__Cardinal()
             modelHostTime,
         };
     }
+}
+
+static void initStatic__ModularSynth()
+{
+    Plugin* const p = new Plugin;
+    pluginInstance__ModularSynth = p;
+
+    const StaticPluginLoader spl(p, "ModularSynth");
+    if (spl.ok())
+        p->addModel(modelMorphVCO);
 }
 
 static void initStatic__Fundamental()
@@ -3729,6 +3743,7 @@ static void initStatic__ZZC()
 void initStaticPlugins()
 {
     initStatic__Cardinal();
+    initStatic__ModularSynth();
     initStatic__Fundamental();
     // initStatic__ZamAudio();
     initStatic__21kHz();
