@@ -38,5 +38,8 @@ jobs:
       - name: Test Module Forge scaffolder
         run: python3 -m unittest discover -s tools/module-forge -p 'test_*.py' -v
 
+      - name: Test Instrument Builder bundles and control mappings
+        run: python3 -B -m unittest discover -s tools/instrument-builder -p 'test_*.py' -v
+
       - name: Compile and run standalone DSP tests (optimization + sanitizer)
         run: python3 -B tests/run_dsp_tests.py --sanitize=auto
