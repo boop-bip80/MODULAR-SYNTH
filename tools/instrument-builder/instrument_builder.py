@@ -19,6 +19,8 @@ import stat
 import sys
 import zipfile
 
+from panel_preview import PreviewError, render_svg
+
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
 PATCH_MEMBER = "patch/main.vcv"
@@ -423,6 +425,20 @@ def inspect(bundle_path: Path) -> dict:
     return read_bundle(blob)[0]
 
 
+def preview(bundle_path: Path, svg_path: Path) -> dict:
+    """Create a static, self-contained SVG from a verified source bundle."""
+    if svg_path.suffix.lower() != ".svg":
+        raise InstrumentError("preview output must end with .svg")
+    manifest = inspect(bundle_path)  # Validate ZIP and source-derived state first.
+    try:
+        image = render_svg(manifest)
+    except PreviewError as exc:
+        raise InstrumentError(f"cannot preview instrument: {exc}") from exc
+    with _safe_directory_fd(svg_path.parent) as fd:
+        _write_new(svg_path.parent, svg_path.name, image, fd)
+    return manifest
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest="command", required=True)
@@ -435,6 +451,9 @@ def main(argv: list[str] | None = None) -> int:
     extract = subs.add_parser("unpack", help="extract into a NEW directory only")
     extract.add_argument("bundle", type=Path)
     extract.add_argument("--out", required=True, type=Path)
+    panel = subs.add_parser("preview", help="create an offline SVG concept panel")
+    panel.add_argument("bundle", type=Path)
+    panel.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == "pack":
@@ -443,6 +462,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "unpack":
             unpack(args.bundle, args.out)
             print(f"Unpacked to {args.out} (manifest.json, patch/main.vcv)")
+        elif args.command == "preview":
+            preview(args.bundle, args.out)
+            print(f"Generated static SVG preview {args.out}")
         else:
             print(_canonical_json(inspect(args.bundle)).decode("utf-8"), end="")
         return 0
