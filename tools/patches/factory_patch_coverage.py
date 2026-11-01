@@ -39,6 +39,10 @@ class Example:
     snapshot_names: tuple[str, ...] = ()
     morph_seconds: float | None = None
     bipolar_cutoff: bool = False
+    bipolar_width: bool = False
+    snapshot_count: int = 2
+    midi_channels: int | None = None
+    midi_poly_mode: int | None = None
 
 
 EXAMPLES: dict[str, Example] = {
@@ -181,6 +185,48 @@ EXAMPLES: dict[str, Example] = {
         bipolar_cutoff=True,
     ),
 
+    "MODULAR_-_Polyphonic_Motion_Pad.vcv": Example(
+        "Eight-lane MIDI poly pad with per-note filter keytracking and four Macro8 snapshots",
+        ("Cardinal/HostMIDI", "ModularSynth/MorphVCO", "ModularSynth/StateFilter",
+         "ModularSynth/Macro8", "Fundamental/ADSR",
+         "Fundamental/VCA-1", "Cardinal/HostAudio2"),
+        (
+            Route("MIDI pitch to oscillator", "Cardinal/HostMIDI",
+                  "ModularSynth/MorphVCO", output=0, input=0),
+            Route("per-voice MIDI pitch to filter cutoff", "Cardinal/HostMIDI",
+                  "ModularSynth/StateFilter", output=0, input=1),
+            Route("MIDI poly gate to envelope", "Cardinal/HostMIDI",
+                  "Fundamental/ADSR", output=1, input=4),
+            Route("MIDI poly retrigger to envelope", "Cardinal/HostMIDI",
+                  "Fundamental/ADSR", output=6, input=5),
+            Route("macro color CV", "ModularSynth/Macro8",
+                  "ModularSynth/MorphVCO", output=0, input=2),
+            Route("macro resonance CV", "ModularSynth/Macro8",
+                  "ModularSynth/StateFilter", output=1, input=2),
+            Route("macro warmth CV", "ModularSynth/Macro8",
+                  "ModularSynth/StateFilter", output=2, input=3),
+            Route("macro bipolar width CV", "ModularSynth/Macro8",
+                  "ModularSynth/MorphVCO", output=3, input=3),
+            Route("poly oscillator into poly filter", "ModularSynth/MorphVCO",
+                  "ModularSynth/StateFilter", output=0, input=0),
+            Route("poly filter into VCA audio", "ModularSynth/StateFilter",
+                  "Fundamental/VCA-1", output=0, input=1),
+            Route("poly envelope into VCA CV", "Fundamental/ADSR",
+                  "Fundamental/VCA-1", output=0, input=0),
+            Route("poly VCA to host left", "Fundamental/VCA-1",
+                  "Cardinal/HostAudio2", output=0, input=0),
+            Route("poly VCA to host right", "Fundamental/VCA-1",
+                  "Cardinal/HostAudio2", output=0, input=1),
+        ),
+        stereo=True,
+        snapshot_names=("Color", "Resonance", "Warmth", "Width"),
+        snapshot_count=4,
+        morph_seconds=1.8,
+        bipolar_width=True,
+        midi_channels=8,
+        midi_poly_mode=1,
+    ),
+
 }
 
 
@@ -244,7 +290,8 @@ def _check_dual_oscillators(modules_by_id: dict[int, dict],
 
 
 def _check_macro_snapshots(modules_by_id: dict[int, dict],
-                           names_prefix: tuple[str, ...]) -> bool:
+                           names_prefix: tuple[str, ...],
+                           populated_count: int) -> bool:
     macros = [
         module for module in modules_by_id.values()
         if _key(module) == "ModularSynth/Macro8"
@@ -264,15 +311,17 @@ def _check_macro_snapshots(modules_by_id: dict[int, dict],
         return False
     if not isinstance(snapshots, list) or len(snapshots) != 4:
         return False
-    if not all(isinstance(slot, list) and len(slot) == 8
-               for slot in snapshots[:2]):
+    if not 0 <= populated_count <= len(snapshots):
         return False
-    if any(slot is not None for slot in snapshots[2:]):
+    if not all(isinstance(slot, list) and len(slot) == 8
+               for slot in snapshots[:populated_count]):
+        return False
+    if any(slot is not None for slot in snapshots[populated_count:]):
         return False
     return all(
         isinstance(value, (float, int)) and not isinstance(value, bool)
         and math.isfinite(value) and 0.0 <= value <= 1.0
-        for slot in snapshots[:2] for value in slot
+        for slot in snapshots[:populated_count] for value in slot
     )
 
 
@@ -346,12 +395,14 @@ def analyze(root: Path = ROOT, examples_dir: Path | None = None) -> dict:
             else:
                 result["capabilities"].append("both MIDI-driven oscillators feed one mixer")
         if spec.snapshot_names:
-            if not _check_macro_snapshots(modules_by_id, spec.snapshot_names):
+            if not _check_macro_snapshots(modules_by_id, spec.snapshot_names,
+                                          spec.snapshot_count):
                 local_errors.append("missing documented Macro8 names or "
-                                    "two valid eight-value snapshots")
+                                    "required populated eight-value snapshots")
             else:
-                result["capabilities"].append("two versioned Macro8 snapshots")
-        if spec.morph_seconds is not None or spec.bipolar_cutoff:
+                result["capabilities"].append(
+                    f"{spec.snapshot_count} versioned Macro8 snapshots")
+        if spec.morph_seconds is not None or spec.bipolar_cutoff or spec.bipolar_width:
             macro = next((module for module in modules_by_id.values()
                           if _key(module) == "ModularSynth/Macro8"), None)
             param_values = {
@@ -375,6 +426,27 @@ def analyze(root: Path = ROOT, examples_dir: Path | None = None) -> dict:
                         "(first-party param 18 == 1)")
                 else:
                     result["capabilities"].append("bipolar Macro8 cutoff output range")
+            if spec.bipolar_width:
+                if param_values.get(18) != 1:
+                    local_errors.append(
+                        "macro width CV output range must be bipolar "
+                        "(first-party param 18 == 1)")
+                else:
+                    result["capabilities"].append("bipolar Macro8 PWM output range")
+        if spec.midi_channels is not None:
+            midi = next((module for module in modules_by_id.values()
+                         if _key(module) == "Cardinal/HostMIDI"), None)
+            data = midi.get("data") if midi is not None else None
+            if not isinstance(data, dict) or (
+                data.get("channels") != spec.midi_channels
+                or data.get("polyMode") != spec.midi_poly_mode
+            ):
+                local_errors.append(
+                    f"expected HostMIDI {spec.midi_channels}-channel Reuse polyphony "
+                    "(source data.channels and data.polyMode)")
+            else:
+                result["capabilities"].append(
+                    f"{spec.midi_channels}-channel HostMIDI Reuse polyphony")
         if local_errors:
             errors.extend(f"{path.name}: {err}" for err in local_errors)
         result["ok"] = not local_errors
