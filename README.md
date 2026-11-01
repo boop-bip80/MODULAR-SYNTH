@@ -4,18 +4,30 @@
 
 **Development status: Phase 1 started. No verified MODULAR-SYNTH build or release is currently available.** The fork initially matched [DISTRHO Cardinal](https://github.com/DISTRHO/Cardinal) exactly at upstream commit [`0a530b7`](https://github.com/DISTRHO/Cardinal/commit/0a530b73273afc914ec71a78e9165cd28c53b599) (July 28, 2026). All inherited Cardinal, Rack, DPF and third-party functionality remains credited to its original authors. New features should be assessed through merged code, CI evidence and tested audio artifacts, not this roadmap.
 
+## First source milestone — 2026-11-01
+
+The first original features have been **merged into source on `main`**:
+
+- [**Morph VCO**](plugins/ModularSynth/src/MorphVCO.cpp): an original, separately attributed 16-channel sine/saw/pulse morphing oscillator with CV-controlled pitch, FM, shape and pulse width. Its DSP core is [separate and testable](plugins/ModularSynth/src/MorphVCO.hpp).
+- [**Module Forge**](docs/MODULE_FORGE.md): a Python scaffolder for new C++ Rack modules, original SVG panels, JSON manifest entries and reviewed static registration instructions. It is **not** yet an in-app editor or runtime module installer.
+- [**Factory patches**](docs/FACTORY_PATCHES.md): Pulse Bass, Granular Veil and Clockwork Pulses, composed from bundled modules.
+- **Cable decluttering:** View → Show patch cables or Ctrl/Cmd+Shift+H, preserving the previous visible-opacity setting.
+- [**Quality baseline**](tests/README.md): lightweight source/patch/manifest tests and a new [GitHub Actions workflow](.github/workflows/quality-baseline.yml). The workflow also runs Module Forge generator tests and a standalone C++ DSP smoke test.
+
+**Verification status:** These changes are implemented and committed, but a complete fork-owned plugin build, audio audition, DAW save/restore and release artifact are **not yet verified**. Do not interpret this source milestone as completion of Phase 1 or as a downloadable release. Check [the current Actions results](https://github.com/boop-bip80/MODULAR-SYNTH/actions) for pass/fail evidence rather than assuming success.
+
 ## What exists now, and what is planned
 
-| Area | Current foundation inherited from Cardinal | MODULAR-SYNTH development goal |
+| Area | Current codebase (inherited and new) | MODULAR-SYNTH development goal |
 | --- | --- | --- |
-| Modular patching | VCV Rack-derived graph and bundled third-party modules | Better patch navigation, diagnostics, grouping and performance controls |
-| Synthesis | Existing Cardinal/Rack module collection | Original oscillators, filters, FM, wavetable, granular, spectral and physical-modeling modules |
-| Module development | Adding modules at build time; no arbitrary runtime loading | **Module Forge** C++ templates, validation, authoring tools and an eventual optional experimental loader |
+| Modular patching | VCV Rack graph, bundled modules, three new example patches and cable visibility toggle | Better patch navigation, diagnostics, grouping and performance controls |
+| Synthesis | Cardinal/Rack module collection plus original Morph VCO source (host build unverified) | Original oscillators, filters, FM, wavetable, granular, spectral and physical-modeling modules |
+| Module development | New Module Forge C++/SVG scaffolder; reviewed build-time registration, no arbitrary runtime loading | **Module Forge** C++ templates, validation, authoring tools and an eventual optional experimental loader |
 | Instrument design | Patches and module controls | **Patch-to-Instrument Builder** for macros, custom panel layouts, snapshots and reusable instruments |
 | DAW integration | Existing Cardinal plugin variants and host/MIDI/CV mapping | Richer host automation, expression, stable save/restore and performance testing |
 | Distribution | Upstream build configuration and documentation | Independently verified fork-owned binaries, installers, screenshots, demos and release notes |
 
-These future capabilities are **not yet implemented** simply because they appear in the right-hand column.
+The right-hand column describes broader planned capabilities; it is **not** a claim they have shipped.
 
 ## Development roadmap and acceptance gates
 

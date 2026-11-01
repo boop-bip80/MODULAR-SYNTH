@@ -25,12 +25,26 @@ As of this roadmap's initial publication there are **no fork-specific releases a
 | Milestone | Status | Required evidence before marking complete |
 | --- | --- | --- |
 | Baseline provenance recorded | Documented | Upstream commit/tree comparison and license inventory |
-| Phase 1 — First original module and trustworthy baseline | In progress | Original module build, basic audio smoke test, CI results, patch open/save, README |
-| Phase 2 — Module Forge developer workflow | Planned | Generated module compiles and passes documented checks on supported systems |
+| Phase 1 — First original module and trustworthy baseline | Source changes merged; verification pending | Original module build, basic audio smoke test, CI results, patch open/save, README |
+| Phase 2 — Module Forge developer workflow | Initial scaffolder merged; full workflow planned | Generated module compiles and passes documented checks on supported systems |
 | Phase 3 — Patch-to-Instrument Builder | Planned | Save, reload, play and automate a generated instrument from a nested patch |
 | Phase 4 — Distinct flagship synthesis engines | Planned | Listening tests, reference renders and stress/performance evidence |
 | Phase 5 — Production workflow and releases | Planned | DAW roundtrips, installers, release artifacts and cross-platform signoff |
 | Phase 6 — Experimental frontier | Planned | Explicit opt-in, performance/security evaluation and fallback path |
+
+## Initial implementation batch — 2026-11-01
+
+Source changes merged into `main`:
+
+- [#1](https://github.com/boop-bip80/MODULAR-SYNTH/pull/1): README identity and six-phase plan.
+- [#3](https://github.com/boop-bip80/MODULAR-SYNTH/pull/3): integrity checks for manifests, patches and pinned gitlinks.
+- [#2](https://github.com/boop-bip80/MODULAR-SYNTH/pull/2): reversible cable-visibility control.
+- [#4](https://github.com/boop-bip80/MODULAR-SYNTH/pull/4): three original example patch arrangements.
+- [#6](https://github.com/boop-bip80/MODULAR-SYNTH/pull/6): original ModularSynth collection and Morph VCO with a standalone DSP smoke test source.
+- [#5](https://github.com/boop-bip80/MODULAR-SYNTH/pull/5): Module Forge generator, tests and developer instructions.
+- [#7](https://github.com/boop-bip80/MODULAR-SYNTH/pull/7): restrict inherited upstream IRC notification job to the upstream repository.
+
+The quality workflow is being extended to execute the Morph VCO C++ smoke test and Module Forge generator tests on CI. CI results, plugin builds, listening tests, DAW roundtrips and releases are **not implied by code presence**. Phase 1 remains open until the gates below are supported by evidence.
 
 ## Phase 1 — Ownership, baseline and the first original voice
 
