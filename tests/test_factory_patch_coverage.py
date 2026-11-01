@@ -203,6 +203,91 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertTrue(any("both VCO instances must receive MIDI" in err
                             for err in report["errors"]), report["errors"])
 
+    def test_poly_motion_pad_has_source_grounded_voices_and_snapshots(self) -> None:
+        filename = "MODULAR_-_Polyphonic_Motion_Pad.vcv"
+        report = self.inspect()
+        patch = next(item for item in report["examples"]
+                     if item["patch"] == filename)
+        self.assertTrue(patch["ok"], patch["errors"])
+        self.assertEqual({key for key in patch["modules"] if key.startswith("ModularSynth/")},
+                         {"ModularSynth/MorphVCO",
+                          "ModularSynth/StateFilter", "ModularSynth/Macro8"})
+        self.assertIn("8-channel HostMIDI Reuse polyphony",
+                      patch["capabilities"])
+        self.assertIn("4 versioned Macro8 snapshots", patch["capabilities"])
+        self.assertIn("bipolar Macro8 PWM output range", patch["capabilities"])
+        self.assertIn("per-voice MIDI pitch to filter cutoff",
+                      patch["capabilities"])
+        self.assertIn("two host audio input routes", patch["capabilities"])
+
+    def test_poly_motion_rejects_mono_host_midi(self) -> None:
+        filename = "MODULAR_-_Polyphonic_Motion_Pad.vcv"
+
+        def make_mono(patch: dict) -> None:
+            midi = next(module for module in patch["modules"]
+                        if module["plugin"] == "Cardinal"
+                        and module["model"] == "HostMIDI")
+            midi["data"]["channels"] = 1
+
+        self.mutate(filename, make_mono)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("expected HostMIDI 8-channel Reuse polyphony" in err
+                            for err in report["errors"]), report["errors"])
+
+    def test_poly_motion_rejects_missing_keytracking_cable(self) -> None:
+        filename = "MODULAR_-_Polyphonic_Motion_Pad.vcv"
+
+        def remove_keytrack(patch: dict) -> None:
+            midi = next(module["id"] for module in patch["modules"]
+                        if module["plugin"] == "Cardinal"
+                        and module["model"] == "HostMIDI")
+            filt = next(module["id"] for module in patch["modules"]
+                        if module["plugin"] == "ModularSynth"
+                        and module["model"] == "StateFilter")
+            patch["cables"] = [
+                c for c in patch["cables"] if not (
+                    c["outputModuleId"] == midi and c["outputId"] == 0
+                    and c["inputModuleId"] == filt and c["inputId"] == 1
+                )
+            ]
+
+        self.mutate(filename, remove_keytrack)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("per-voice MIDI pitch to filter cutoff" in err
+                            for err in report["errors"]), report["errors"])
+
+    def test_poly_motion_requires_all_four_macro_snapshots(self) -> None:
+        filename = "MODULAR_-_Polyphonic_Motion_Pad.vcv"
+
+        def empty_fourth(patch: dict) -> None:
+            macro = next(module for module in patch["modules"]
+                         if module["plugin"] == "ModularSynth"
+                         and module["model"] == "Macro8")
+            macro["data"]["snapshots"][3] = None
+
+        self.mutate(filename, empty_fourth)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("missing documented Macro8 names" in err
+                            for err in report["errors"]), report["errors"])
+
+    def test_poly_motion_requires_bipolar_width_range(self) -> None:
+        filename = "MODULAR_-_Polyphonic_Motion_Pad.vcv"
+
+        def make_unipolar(patch: dict) -> None:
+            macro = next(module for module in patch["modules"]
+                         if module["plugin"] == "ModularSynth"
+                         and module["model"] == "Macro8")
+            next(param for param in macro["params"] if param["id"] == 18)["value"] = 0
+
+        self.mutate(filename, make_unipolar)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("macro width CV output range must be bipolar" in err
+                            for err in report["errors"]), report["errors"])
+
     def test_missing_factory_patch_is_reported(self) -> None:
         (self.examples / "MODULAR_-_Granular_Veil.vcv").unlink()
         report = self.inspect()
