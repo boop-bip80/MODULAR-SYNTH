@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Factory Patches — original examples
 
-These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `Macro8` and `StereoEcho` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
+These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `Macro8`, `StereoEcho` and `ClockedLFO` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
 
 | Patch | Purpose | Interaction |
 | --- | --- | --- |
@@ -14,19 +14,21 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_Polyphonic_Motion_Pad.vcv` | **Eight-voice MIDI polyphonic** Morph VCO → per-note keytracked StateFilter → ADSR/VCA | Hold chords and recall four 1.8-second Macro8 snapshots; see polyphonic notes below |
 | `MODULAR_-_Stereo_Echo_Showcase.vcv` | MIDI-gated Morph VCO and StateFilter LP/HP stereo split into StereoEcho | Play notes to explore saved 360 ms delay and crossfeed; adjust Echo knobs |
 | `MODULAR_-_Echo_Motion_Performance.vcv` | Three Macro8 outputs change StereoEcho time, feedback and wet mix; fourth moves oscillator shape | Play MIDI and recall four A/B/C/D scenes with 1.2-second transitions; details below |
+| `MODULAR_-_Clocked_Modulation_Studio.vcv` | Eight-channel MIDI with HostTime BEAT/RESET-fed ClockedLFO and animated filter/echo modulation | Start host transport for external beat lock; play MIDI notes; inspect LFO SIN/TRI/PULSE/EOC routes |
+| `MODULAR_-_Cinematic_Pulse_Score.vcv` | Free-running LFO pulse gates a **second** ADSR/VCA on filter LP only; HP remains separate into stereo Echo, with four Macro8 scenes | Play MIDI and recall Hush/Motion/Surge/Return scenes; no host transport or BPM synchronization required |
 
 ## Loading
 
 1. Use a recent MODULAR-SYNTH/Cardinal **main** or **Synth** build with its packaged modules and example patches.
 2. If the examples folder is packaged, choose **File → Open demo / example project** and select the `MODULAR_-` patch; otherwise load the `.vcv` directly from `patches/examples/`.
-3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad saves its own eight-channel MIDI allocation.
-4. For Clockwork Pulses, start the DAW transport; the patch uses **Host Time** and does not require live MIDI notes.
+3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad and Clocked Modulation Studio save eight MIDI channels.
+4. For Clockwork Pulses, start the DAW transport; it uses **Host Time** without live MIDI notes. For Clocked Modulation Studio, use transport **and MIDI** if testing external beat lock (the LFO free-runs without transport). Cinematic Pulse Score needs **MIDI only**: its LFO CLOCK/RESET jacks are unplugged and it does not follow BPM.
 5. Begin with low speaker or headphone volume. The output gain is intentionally conservative, but patch signal levels are not yet perceptually validated.
 
 ## Scope and compatibility
 
 - These are **patch examples**, not new DSP modules or a finished preset management system.
-- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, Macro8 and StereoEcho).
+- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, Macro8, StereoEcho and ClockedLFO).
 - MIDI/transport mapping and sample-rate behavior are inherited from the built-in modules and host.
 - The examples target `Cardinal/HostAudio2`. Some use two saved input routes; others feed a single host input. Polyphonic Motion Pad sends the same summed voice signal to both channels, **not** an independently panned stereo image. They are not standalone VST3 exports.
 - They use plain-text VCV Rack 2.x patch JSON for reproducibility.
@@ -55,6 +57,8 @@ The original three patches were initially parsed as JSON and checked for:
 - Polyphonic Motion Pad: hold 2, 4 and 8 simultaneous MIDI notes; check each pitch follows its own channel, releases independently and filter cutoff keytracks each note. Check four Macro8 A-D recalls, output gain, and audible clipping.
 - Stereo Echo Showcase: play MIDI; compare saved low-pass versus high-pass echo inputs and listen for left/right delay and note-off tails.
 - Echo Motion Performance: recall all four Macro8 A/B/C/D scenes while playing MIDI; check Echo time, feedback and wet changes, wave timbre, stereo channels and release tails. Do not assume transitions are click-free until heard.
+- Clocked Modulation Studio: start/stop host transport with 8-channel MIDI; verify ClockedLFO beat lock versus free run and inspect left/right audio at low levels.
+- Cinematic Pulse Score: hold mono MIDI notes; check free-run rhythmic LP gating only on the left, independent continuous HP on right, LFO sine waveform change, A–D scenes and LIVE. Verify no host sync is advertised or expected.
 - For each patch: save under a new filename, reload, and compare module/cable counts and playback.
 - Test at 44.1/48/96 kHz and block sizes 64/128/256 when practical. Verify silence on stop and no plugin crash.
 
@@ -122,6 +126,45 @@ python3 -m unittest discover -s tests -p 'test_echo_motion_patch.py' -v
 ```
 
 Before advertising this preset as performance-tested, load it in a fork-built host, audition MIDI note-on/off and A–D/LIVE transitions, test both audio channels and gain, and save/reopen the patch. Do not infer audio results or 44.1/48/96 kHz runtime behavior from JSON alone.
+
+## Cinematic Pulse Score — free-running rhythmic score study
+
+[Open the source patch](../patches/examples/MODULAR_-_Cinematic_Pulse_Score.vcv) in a fork build with **all five original modules** and bundled Fundamental ADSR/VCA-1. This 12-module, 17-cable example is deliberately different from the **host-clocked eight-voice** Clocked Modulation Studio: it uses **one saved HostMIDI channel** and **no HostTime module or cable to ClockedLFO CLOCK/RESET**. Its free-running rate is approximately **0.8 Hz**, with a saved 28% pulse duty; this is **not tempo/BPM synchronization**.
+
+The two envelopes and VCAs have independent source-backed roles:
+
+1. **MIDI voice:** HostMIDI pitch output 0 → MorphVCO input 0; MIDI gate output 1 → Fundamental ADSR #1 gate input 4. MorphVCO audio output 0 → VCA #1 audio input 1, ADSR #1 output 0 → VCA #1 CV input 0; VCA #1 output 0 → StateFilter audio input 0.
+2. **Rhythmic left:** ClockedLFO **PULSE output 3** (nominal ±5 V) → ADSR #2 gate input 4; that envelope output 0 → VCA #2 CV input 0. StateFilter **LP output 0** → VCA #2 audio input 1 → StereoEcho **left input 0**. In checked-in Fundamental source, ADSR gate detects ≥1 V, so the positive LFO pulse phase is treated as an envelope gate; VCA CV is bounded to 0–10 V in its gain calculation.
+3. **Independent right / timbre:** StateFilter **HP output 2** goes directly to StereoEcho **right input 1**, bypassing the rhythmic second VCA. Echo L/R outputs 0/1 go separately to HostAudio2 inputs 0/1. ClockedLFO **SIN output 0** → MorphVCO wave-morph input 2 (±5 V moves its saved 0.5 knob across the full nominal 0–1 span).
+
+| Macro8 output / name | Saved source cable | Normalized scene voltage mode |
+| --- | --- | --- |
+| 0 — Tension | StateFilter resonance CV input **2** | 0…+10 V unipolar |
+| 1 — Warmth | StateFilter drive CV input **3** | 0…+10 V unipolar |
+| 2 — Repeats | StereoEcho feedback CV input **3** | 0…+10 V unipolar |
+| 3 — Space | StereoEcho wet-mix CV input **4** | 0…+10 V unipolar |
+
+Each destination adds **0.1 normalized units per CV volt**, so a 0–1 saved macro snapshot adds that normalized value. These are the *static nominal* totals calculated from saved source parameters (not measured sound):
+
+| Snapshot | Filter resonance | Filter drive | Echo feedback | Echo wet |
+| --- | ---: | ---: | ---: | ---: |
+| A — Hush | 8% | 2% | 16% | 20% |
+| B — Motion | 12% | 5% | 24% | 28% |
+| C — Surge | 20% | 9% | 35% | 40% |
+| D — Return | 11% | 4% | 25% | 30% |
+
+Macro8 saves **four complete version-1 A–D scenes**, range switches 0–3 unipolar, a **2.6-second 99.9%-settling** scene transition and `selectedSlot=-1` (starts LIVE; press a scene to recall). StereoEcho time is a fixed **460 ms knob** with no time-CV cable; LFO pulse repetition is nominally **1.25 seconds** independent of the echo time. The first VCA gain is saved at **0.30**, rhythmic VCA gain at **0.48**, HostAudio2 level at **0.14**, and Echo crossfeed at **0.68**. They aim for moderate starting levels, **not** a measured clipping, mix-balance or sound-quality guarantee.
+
+Reproduce offline evidence:
+
+```sh
+python3 tools/patches/patch_inspector.py validate patches/examples/MODULAR_-_Cinematic_Pulse_Score.vcv
+python3 tools/patches/factory_patch_coverage.py
+python3 tools/patches/patch_catalog.py --format markdown
+python3 -m unittest discover -s tests -p 'test_cinematic_pulse_score.py' -v
+```
+
+Before using it live, audition one-note MIDI gate/release, LFO pulse-gated left versus unpulsed right, A–D/LIVE transitions and level/headroom, plus patch save/reopen in a real compiled fork. No actual host audio, sample-rate, CPU or tempo-sync tests were performed by this source-only validation.
 
 ## Future work
 
