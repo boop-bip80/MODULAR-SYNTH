@@ -1,16 +1,108 @@
-# Instrument Builder — Macro8 foundation (work in progress)
+# Instrument Builder — Macro8 performance and offline source bundles
 
 ## Scope
 
-**Macro8 is a first-party performance controller, not a finished Instrument Builder.**
-It provides eight independently controllable CV outputs, custom short labels,
-four versioned snapshot slots, and sample-smoothed transitions between sounds.
-It does **not** yet group modules, compile nested patches, export a standalone
-instrument/plugin, or provide a custom reskinnable performance panel.
+**Instrument Builder is currently an offline source-packaging prototype.**
+Macro8 is the first-party performance controller: eight independently
+controllable CV outputs, custom short labels, four versioned snapshot slots,
+and sample-smoothed transitions. The new Python tool packages a validated
+Rack/VCV patch and a derived, versioned performance manifest into one
+deterministic `.msinstrument` source ZIP. It does **not** group/compile nested
+modules, execute patches, provide a custom performance GUI, embed samples,
+export VST/AU/CLAP, or create a standalone runtime.
 
 The source lives under `plugins/ModularSynth` to preserve the upstream Cardinal
 module collection. The Rack-independent DSP/snapshot implementation is
 `plugins/ModularSynth/src/Macro8.hpp`.
+
+## Offline `.msinstrument` source bundles (Phase 3)
+
+`tools/instrument-builder/instrument_builder.py` uses only the Python standard
+library and reads an **existing saved `.vcv` JSON patch**. The patch must contain
+at least one real `ModularSynth/Macro8` module with `macro8Version: 1` data.
+For example, from the repository root:
+
+```bash
+python3 tools/instrument-builder/instrument_builder.py pack \
+  patches/examples/MODULAR_-_Morphing_State_Pad.vcv \
+  --name "Morphing State Pad" \
+  --out Morphing_State_Pad.msinstrument
+
+python3 tools/instrument-builder/instrument_builder.py inspect \
+  Morphing_State_Pad.msinstrument
+
+python3 tools/instrument-builder/instrument_builder.py unpack \
+  Morphing_State_Pad.msinstrument --out unpacked-pad
+```
+
+`pack` exclusively creates a **new** `.msinstrument` file; `unpack`
+exclusively creates a **new** output directory containing exactly:
+
+| ZIP entry / extracted path | Meaning |
+| --- | --- |
+| `manifest.json` | Versioned, verified performance metadata |
+| `patch/main.vcv` | Original `.vcv` patch bytes, unchanged |
+
+No machine paths, creation timestamps, random identifiers, or plugin binaries
+are embedded. ZIP entries are stored uncompressed with a fixed 1980-01-01
+timestamp, regular-file permissions and fixed ordering. Packing the same patch
+bytes with the same instrument name produces **byte-identical bundles**.
+
+### Manifest schema v1
+
+The manifest has `format: "modular-synth-source-instrument"`,
+`formatVersion: 1`, a printable 1–64 character `name`,
+`patch: {file, sha256, size}`, sorted `requiredPlugins`, and
+`performance.macro8`, ordered by Rack module ID. Each Macro8 record contains:
+
+| Field | Direct source in the saved Macro8 |
+| --- | --- |
+| `moduleId`, `stateVersion` | Rack module `id`, `data.macro8Version` (1) |
+| `names` | Eight real `data.names` labels (printable ASCII, 1–12 chars) |
+| `ranges` | Eight `unipolar` / `bipolar` modes from params 15–22 |
+| `liveValues` | Eight normalized knobs from params 0–7 |
+| `morphSeconds` | Param 8, 0–5 seconds |
+| `snapshotAction` | Param 9, `store` or `recall` |
+| `snapshots` | Four `data.snapshots` slots: `null` or 8 normalized values |
+| `selectedSlot` | `data.selectedSlot`: −1 (LIVE) or 0–3 (A–D) |
+
+Param ranges mirror Macro8's compiled definitions. Missing knob/switch params
+use Macro8 defaults; duplicated IDs or values outside the declared ranges are
+rejected. An active snapshot must actually exist. The manifest is **derived
+from** the patch, not editable independent state: `inspect` and `unpack`
+recompute its contents and SHA-256 and refuse any inconsistency. Editing
+`manifest.json` alone cannot alter playback.
+
+### Safety and limits
+
+- The source `.vcv` is parsed as strict JSON: duplicate keys, NaN/Inf,
+  nonfinite exponent overflow, inconsistent cable module endpoints, bad module
+  IDs, unsupported Macro8 state versions, malformed names/snapshots/ranges,
+  and missing Macro8 modules are rejected before output is created. This is
+  **structural/schema/graph validation**, not a Rack loader: the tool does
+  **not** know third-party modules' input/output port bounds or confirm that
+  Cardinal or a DAW can actually load every model or restore its runtime state.
+- The ZIP must have **exactly two** allowlisted file entries. It rejects
+  traversal (`../`), absolute/drive paths, backslash paths, duplicate names,
+  Unix symlink entries, encryption, unsupported compression, and unknown files.
+  Extraction writes fixed paths only—it does not trust ZIP member names as
+  filesystem targets.
+- Limits: patch 8 MiB; manifest 128 KiB; 256 modules; 4096 cables; eight
+  Macro8 modules. These are prototype caps, not Rack host capacities.
+- Both commands refuse to overwrite a file or directory. POSIX extraction
+  uses component-wise no-follow directory handles and exclusive file creation;
+  other platforms reject known symlink parents but are not hardened against
+  hostile concurrent filesystem races.
+- A storage failure can leave an incomplete *new* bundle/directory, never an
+  overwritten destination. Inspect the exact path and remove only that failed
+  output after confirming it contains no needed data. Run `inspect` before
+  sending a bundle elsewhere.
+
+This is a **source-only container**. Other plugins, external samples, paths
+inside module custom state and licensing obligations are **not** bundled or
+resolved. Opening `patch/main.vcv` still requires a compatible Cardinal build
+and the patch's dependencies. Bundles are not cryptographically signed; the
+SHA-256 detects internal mismatches, not malicious replacement of both entries.
 
 ## Performance workflow
 
@@ -83,27 +175,30 @@ macro labels are not automatically synchronized with DAW automation names;
 there is no external modulation input or independently programmable range
 beyond unipolar/bipolar selection. These are follow-up milestones.
 
-## Build registration required
+## Existing first-party registration
 
-Macro8 is isolated in this workstream. Integrate these exact shared-file
-changes in one consistent commit with the original-module registry:
-
-- `plugins/Makefile`: add `PLUGIN_FILES += ModularSynth/src/Macro8.cpp`
-  immediately after the existing `MorphVCO.cpp` entry.
-- `plugins/ModularSynth/src/plugin.hpp`: add
-  `extern Model* modelMacro8;`.
-- `plugins/plugins.cpp`: inside `initStatic__ModularSynth()`, register
-  `p->addModel(modelMacro8);` along with `modelMorphVCO`; wrap the
-  `if (spl.ok())` body in braces.
-- `plugins/ModularSynth/plugin.json`: append a module entry:
-  `{"slug":"Macro8","name":"Macro8 Performance Macros","description":"Eight named CV performance outputs with four recallable smoothly morphing snapshots and per-output voltage modes.","tags":["Controller","Utility"]}`.
-
-The SVG panel is `plugins/ModularSynth/res/Macro8.svg`. No additional
-third-party library is needed.
+Macro8 is registered in `plugins/ModularSynth` in the full Cardinal
+collection (source in `plugins/ModularSynth/src/Macro8.cpp`, DSP core in
+`Macro8.hpp`, panel in `plugins/ModularSynth/res/Macro8.svg`). The offline
+Instrument Builder does not modify plugin registration, Mini builds, or runtime
+module loading. New patches must still reference module slugs available in
+the intended Cardinal build.
 
 ## Tests and acceptance
 
-Run the Rack-independent test:
+Run the offline Instrument Builder tests first:
+
+```bash
+python3 -m unittest discover -s tools/instrument-builder -p "test_*.py" -v
+```
+
+They exercise real factory Macro8 data, deterministic ZIP bytes, pack/inspect/
+unpack/repack roundtrips, strict schemas, malformed snapshots and ranges,
+source-identity mismatches, hostile ZIP paths/symlinks/compression, and
+non-overwriting destinations. The tool uses the patch's saved performance
+state; tests do not load or render a host plugin.
+
+Run the Rack-independent DSP test:
 
 ```sh
 c++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread \
