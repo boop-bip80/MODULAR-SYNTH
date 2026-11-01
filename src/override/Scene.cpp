@@ -39,9 +39,22 @@
 namespace rack {
 namespace app {
 
-// Implemented in MenuBar.cpp so the View menu and keyboard shortcut share
-// the same saved cable opacity and cannot drift out of sync.
-void Cardinal_toggleCableVisibility();
+// Visual-only patch-cable decluttering shared by the keyboard shortcut and
+// View menu. Retaining the last nonzero opacity preserves the user's choice.
+void Cardinal_toggleCableVisibility()
+{
+	static float previousVisibleOpacity = 0.5f;
+
+	if (settings::cableOpacity > 0.f)
+	{
+		previousVisibleOpacity = settings::cableOpacity;
+		settings::cableOpacity = 0.f;
+	}
+	else
+	{
+		settings::cableOpacity = previousVisibleOpacity;
+	}
+}
 
 
 struct ResizeHandle : widget::OpaqueWidget {
