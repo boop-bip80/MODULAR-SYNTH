@@ -11,6 +11,10 @@ deterministic `.msinstrument` source ZIP. It does **not** group/compile nested
 modules, execute patches, provide a custom performance GUI, embed samples,
 export VST/AU/CLAP, or create a standalone runtime.
 
+An **opt-in manifest v2** additionally records direct, source-verified Macro8
+output-to-module-input cable mappings. The default remains v1, so existing
+bundles and the v1 concept preview remain compatible.
+
 The source lives under `plugins/ModularSynth` to preserve the upstream Cardinal
 module collection. The Rack-independent DSP/snapshot implementation is
 `plugins/ModularSynth/src/Macro8.hpp`.
@@ -73,6 +77,102 @@ from** the patch, not editable independent state: `inspect` and `unpack`
 recompute its contents and SHA-256 and refuse any inconsistency. Editing
 `manifest.json` alone cannot alter playback.
 
+### Opt-in manifest schema v2 — explicit Macro8 cable mappings
+
+Use v2 to inspect *where an existing saved patch routes each Macro8 control*
+without editing that patch or assuming a plugin runtime:
+
+```bash
+python3 tools/instrument-builder/instrument_builder.py pack \
+  patches/examples/MODULAR_-_Echo_Motion_Performance.vcv \
+  --name "Echo Motion Performance" --format-version 2 \
+  --out Echo_Motion.msinstrument
+
+python3 tools/instrument-builder/instrument_builder.py inspect \
+  Echo_Motion.msinstrument
+```
+
+`formatVersion: 2` retains every v1 field and adds an array at
+`performance.controlMappings`. One record is derived **per direct saved cable**
+whose source is `ModularSynth/Macro8`. An output may appear more than once when
+it fans out. Unconnected Macro8 controls remain present in `performance.macro8`
+but have no mapping row. For example, Echo Motion's first macro has a saved
+direct connection to StereoEcho's echo-time CV input:
+
+```json
+{
+  "cableId": 980000000210,
+  "source": {
+    "moduleId": 980000000107,
+    "outputId": 0,
+    "controlNumber": 1,
+    "name": "Time",
+    "range": "unipolar"
+  },
+  "destination": {
+    "moduleId": 980000000105,
+    "plugin": "ModularSynth",
+    "model": "StereoEcho",
+    "inputId": 2,
+    "inputKind": "cv",
+    "inputLabel": "Echo time CV (additive 100 ms/V; accepts negative CV)",
+    "modulatesParameter": {"id": 0, "name": "Echo time"}
+  }
+}
+```
+
+All Rack IDs and input/output IDs are copied from the `.vcv` graph, with
+zero-based port IDs and one-based performer-facing `controlNumber`. Routes sort
+by source module ID, output ID, destination module ID, destination input ID,
+then cable ID, regardless of the original JSON order. The source `name` and
+`range` are taken from validated Macro8 data/parameters, not user-supplied
+mapping annotations. A matching `modulatesParameter` describes a **known CV
+input's effect on a first-party knob**, not a cable to that Rack parameter,
+automation assignment, or a promise that the host applies a particular value.
+
+For the current four first-party modules, source-backed input contracts come
+from the exact `InputIds` enums, `configInput` descriptors and matching
+`configParam` labels in `plugins/ModularSynth/src/*.cpp`; regression tests keep
+the frozen v2 contract synchronized with those sources. The mapping reports:
+
+| `destination.inputKind` | Meaning |
+| --- | --- |
+| `cv` | Verified first-party destination CV input, labeled by source; `modulatesParameter` is populated only for a corresponding first-party knob |
+| `audio` | Verified first-party audio input; no claimed control-parameter modulation |
+| `unverified` | Third-party input or unrecognized first-party model; input bounds, name and semantics are unknown, with `inputLabel` and `modulatesParameter` explicitly `null` |
+
+For known first-party models, v2 refuses an out-of-range or missing input ID; it
+also rejects Macro8 source output IDs outside 0–7 and duplicate saved routes
+with identical source-output/destination-input endpoints (while allowing real
+fan-out to distinct inputs). Unknown external model ports are
+retained as `unverified`, **not validated or inferred to work**. v2 never
+traverses multi-hop cables, checks third-party port schemas, alters a Rack
+parameter, generates a performance GUI, or confirms actual sound. This is a
+static *patch wiring index*, not a remapping system. No user-authored mapping
+can override source wiring.
+
+`inspect`, `unpack` and `check` accept both v1 and v2; manifest validation
+re-derives all v2 routes from the unchanged patch bytes and rejects deleted,
+modified, duplicated or fabricated mapping rows. `preview` still draws the
+same verified eight Macro8 controls and four snapshots; it projects a verified
+v2 manifest onto the unchanged v1 concept renderer, without displaying routes.
+Repacking an unpacked v2 bundle requires the **same name and**
+`--format-version 2` to reproduce identical archive bytes:
+
+```bash
+python3 tools/instrument-builder/instrument_builder.py unpack \
+  Echo_Motion.msinstrument --out Echo_Motion_source
+python3 tools/instrument-builder/instrument_builder.py pack \
+  Echo_Motion_source/patch/main.vcv \
+  --name "Echo Motion Performance" --format-version 2 \
+  --out Echo_Motion_repacked.msinstrument
+```
+
+The v1 format remains the default and its byte layout is unchanged. Existing
+v1 archives are not silently upgraded. Any future changes to these frozen
+v2 first-party destination semantics require a new schema version; old
+source-bundle claims should not be silently reinterpreted.
+
 ### Safety and limits
 
 - The source `.vcv` is parsed as strict JSON: duplicate keys, NaN/Inf,
@@ -131,7 +231,7 @@ instrument titles up to 64 characters wrap to at most two lines. Text/background
 palette pairs are tested for at least WCAG AA 4.5:1 contrast. SVG `title` and
 `desc` provide an accessible summary.
 
-`preview` checks the entire source bundle and derived manifest **before**
+`preview` checks the entire v1 or v2 source bundle and derived manifest **before**
 writing and refuses to overwrite an existing `.svg` file or follow symlink
 output parents. The SVG represents *saved metadata* and is **not interactive**:
 LIVE bars remain the physical knob values even when snapshot A–D is selected.

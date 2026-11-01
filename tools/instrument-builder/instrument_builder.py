@@ -21,9 +21,12 @@ import zipfile
 
 from panel_preview import PreviewError, render_svg
 from compatibility import CompatibilityError, compatibility_report, text_report
+from control_mapping import MappingError, derive_control_mappings
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
+MAPPING_FORMAT_VERSION = 2
+SUPPORTED_FORMAT_VERSIONS = (FORMAT_VERSION, MAPPING_FORMAT_VERSION)
 PATCH_MEMBER = "patch/main.vcv"
 MANIFEST_MEMBER = "manifest.json"
 MEMBERS = (MANIFEST_MEMBER, PATCH_MEMBER)
@@ -230,12 +233,15 @@ def _validate_display_name(name: object) -> str:
     return name
 
 
-def build_manifest(patch_bytes: bytes, name: str) -> dict:
+def build_manifest(patch_bytes: bytes, name: str, *,
+                   format_version: int = FORMAT_VERSION) -> dict:
     name = _validate_display_name(name)
+    if not _is_int(format_version) or format_version not in SUPPORTED_FORMAT_VERSIONS:
+        raise InstrumentError("unsupported instrument manifest format/version")
     performance, plugins = patch_performance(patch_bytes)
-    return {
+    manifest = {
         "format": FORMAT,
-        "formatVersion": FORMAT_VERSION,
+        "formatVersion": format_version,
         "name": name,
         "patch": {
             "file": PATCH_MEMBER,
@@ -245,6 +251,17 @@ def build_manifest(patch_bytes: bytes, name: str) -> dict:
         "performance": {"macro8": performance},
         "requiredPlugins": plugins,
     }
+    if format_version == MAPPING_FORMAT_VERSION:
+        # No source repository is required at pack/read time. First-party port
+        # descriptors are a versioned contract tested against our C++ source;
+        # all third-party ports remain explicitly unverified.
+        try:
+            mappings = derive_control_mappings(
+                _decode_json(patch_bytes, "VCV patch"), performance)
+        except MappingError as exc:
+            raise InstrumentError(f"Macro8 control mapping: {exc}") from exc
+        manifest["performance"]["controlMappings"] = mappings
+    return manifest
 
 
 def _canonical_json(data: dict) -> bytes:
@@ -252,9 +269,11 @@ def _canonical_json(data: dict) -> bytes:
                        allow_nan=False, indent=2) + "\n").encode("utf-8")
 
 
-def create_bundle(patch_bytes: bytes, name: str) -> bytes:
+def create_bundle(patch_bytes: bytes, name: str, *,
+                  format_version: int = FORMAT_VERSION) -> bytes:
     """Build a deterministic, two-entry, uncompressed source archive."""
-    manifest = _canonical_json(build_manifest(patch_bytes, name))
+    manifest = _canonical_json(build_manifest(
+        patch_bytes, name, format_version=format_version))
     if len(manifest) > MAX_MANIFEST_BYTES:
         raise InstrumentError("performance manifest exceeds 128 KiB")
     stream = BytesIO()
@@ -320,12 +339,12 @@ def read_bundle(bundle_bytes: bytes) -> tuple[dict, bytes]:
     if len(raw_manifest) > MAX_MANIFEST_BYTES or len(patch) > MAX_PATCH_BYTES:
         raise InstrumentError("archive extraction exceeds size limit")
     manifest = _decode_json(raw_manifest, "instrument manifest")
-    if manifest.get("format") != FORMAT or (
-        not _is_int(manifest.get("formatVersion"))
-        or manifest["formatVersion"] != FORMAT_VERSION
-    ):
+    if (manifest.get("format") != FORMAT
+            or not _is_int(manifest.get("formatVersion"))
+            or manifest["formatVersion"] not in SUPPORTED_FORMAT_VERSIONS):
         raise InstrumentError("unsupported instrument manifest format/version")
-    expected = build_manifest(patch, manifest.get("name"))
+    expected = build_manifest(
+        patch, manifest.get("name"), format_version=manifest["formatVersion"])
     if manifest != expected:
         raise InstrumentError("instrument manifest does not match its patch")
     return manifest, patch
@@ -391,14 +410,18 @@ def _write_new(parent: Path, name: str, content: bytes,
         stream.write(content)
 
 
-def pack(patch_path: Path, bundle_path: Path, name: str | None = None) -> dict:
+def pack(patch_path: Path, bundle_path: Path, name: str | None = None, *,
+         format_version: int = FORMAT_VERSION) -> dict:
     if patch_path.suffix.lower() != ".vcv":
         raise InstrumentError("source patch must have a .vcv extension")
     if bundle_path.suffix.lower() != ".msinstrument":
         raise InstrumentError("output bundle must end with .msinstrument")
     patch = _read_limited(patch_path, MAX_PATCH_BYTES, "VCV patch")
-    manifest = build_manifest(patch, name if name is not None else patch_path.stem)
-    bundle = create_bundle(patch, manifest["name"])
+    manifest = build_manifest(
+        patch, name if name is not None else patch_path.stem,
+        format_version=format_version)
+    bundle = create_bundle(
+        patch, manifest["name"], format_version=format_version)
     with _safe_directory_fd(bundle_path.parent) as fd:
         _write_new(bundle_path.parent, bundle_path.name, bundle, fd)
     return manifest
@@ -431,8 +454,15 @@ def preview(bundle_path: Path, svg_path: Path) -> dict:
     if svg_path.suffix.lower() != ".svg":
         raise InstrumentError("preview output must end with .svg")
     manifest = inspect(bundle_path)  # Validate ZIP and source-derived state first.
+    # The concept renderer deliberately remains v1 and displays only real
+    # Macro8 controls/snapshots. A verified v2 manifest has the same fields;
+    # project only its display subset, never its cable mapping metadata.
+    view = (manifest if manifest["formatVersion"] == FORMAT_VERSION else {
+        **manifest, "formatVersion": FORMAT_VERSION,
+        "performance": {"macro8": manifest["performance"]["macro8"]},
+    })
     try:
-        image = render_svg(manifest)
+        image = render_svg(view)
     except PreviewError as exc:
         raise InstrumentError(f"cannot preview instrument: {exc}") from exc
     with _safe_directory_fd(svg_path.parent) as fd:
@@ -472,6 +502,10 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("patch", type=Path)
     create.add_argument("--out", required=True, type=Path)
     create.add_argument("--name", help="instrument display name (default: patch stem)")
+    create.add_argument(
+        "--format-version", type=int, choices=SUPPORTED_FORMAT_VERSIONS,
+        default=FORMAT_VERSION,
+        help="source manifest v1 (default) or v2 with verified Macro8 cable mappings")
     info = subs.add_parser("inspect", help="validate and print an instrument manifest")
     info.add_argument("bundle", type=Path)
     extract = subs.add_parser("unpack", help="extract into a NEW directory only")
@@ -493,7 +527,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "pack":
-            manifest = pack(args.patch, args.out, args.name)
+            manifest = pack(
+                args.patch, args.out, args.name, format_version=args.format_version)
             print(f"Packed {args.out} ({len(manifest['performance']['macro8'])} Macro8)")
         elif args.command == "unpack":
             unpack(args.bundle, args.out)
