@@ -75,6 +75,10 @@ void Engine_setRemoteDetails(Engine*, remoteUtils::RemoteDetails*);
 }
 
 namespace app {
+
+// Shared with Scene.cpp, where the implementation lives in the Rack library.
+void Cardinal_toggleCableVisibility();
+
 namespace menuBar {
 
 
@@ -632,6 +636,9 @@ struct ViewButton : MenuButton {
 #endif
 
 		menu->addChild(createBoolPtrMenuItem("Show tooltips", "", &settings::tooltips));
+		menu->addChild(createCheckMenuItem("Show patch cables", RACK_MOD_CTRL_NAME "+" RACK_MOD_SHIFT_NAME "+H",
+			[]() { return settings::cableOpacity > 0.f; },
+			[]() { Cardinal_toggleCableVisibility(); }));
 
 		ZoomSlider* zoomSlider = new ZoomSlider;
 		zoomSlider->box.size.x = 250.0;

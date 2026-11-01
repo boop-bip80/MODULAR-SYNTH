@@ -39,6 +39,23 @@
 namespace rack {
 namespace app {
 
+// Visual-only patch-cable decluttering shared by the keyboard shortcut and
+// View menu. Retaining the last nonzero opacity preserves the user's choice.
+void Cardinal_toggleCableVisibility()
+{
+	static float previousVisibleOpacity = 0.5f;
+
+	if (settings::cableOpacity > 0.f)
+	{
+		previousVisibleOpacity = settings::cableOpacity;
+		settings::cableOpacity = 0.f;
+	}
+	else
+	{
+		settings::cableOpacity = previousVisibleOpacity;
+	}
+}
+
 
 struct ResizeHandle : widget::OpaqueWidget {
 	math::Vec size;
@@ -321,6 +338,10 @@ void Scene::onHoverKey(const HoverKeyEvent& e) {
 		}
 		if (e.keyName == "2" && (e.mods & RACK_MOD_MASK) == RACK_MOD_CTRL) {
 			APP->scene->rackScroll->setZoom(2.f);
+			e.consume(this);
+		}
+		if (e.keyName == "h" && (e.mods & RACK_MOD_MASK) == (RACK_MOD_CTRL | GLFW_MOD_SHIFT)) {
+			Cardinal_toggleCableVisibility();
 			e.consume(this);
 		}
 		if (e.key == GLFW_KEY_F1 && (e.mods & RACK_MOD_MASK) == 0) {
