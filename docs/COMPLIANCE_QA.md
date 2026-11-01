@@ -44,27 +44,43 @@ The scanner is **deliberately confined to the first-party `plugins/ModularSynth`
 
 The `.gitmodules` check confirms that the known `src/Rack` and `dpf` pointers and at least one bundled `plugins/` source pointer exist, with nonempty paths and URLs and no duplicate paths. It does **not** dereference URLs, verify gitlink SHAs, read remote licenses, or assert that those repositories permit any specific redistribution. See [the existing Cardinal-derived license inventory](LICENSES.md) and [permission notes](LICENSE-PERMISSIONS.md), preserving their provenance.
 
-## Current observed baseline
+## Historical source snapshot (not a live count)
 
-A source-only run against the current fork on 2026-11-01 reported:
+A source-only run on 2026-11-01 against shallow checkout commit
+[`fd6a0bd2ff68ab275be8b3b94ccd4268656813ae`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/fd6a0bd2ff68ab275be8b3b94ccd4268656813ae)
+reported the following **historical** inventory:
 
 | Finding | Count |
 | --- | ---: |
 | Hard errors | 0 |
 | Advisory notice warnings | 9 |
-| Registered original models | 3 |
-| First-party C++/header files | 7 |
-| First-party SVG panels | 3 |
+| Registered original models at that commit | 3 |
+| First-party C++/header files at that commit | 7 |
+| First-party SVG panels at that commit | 3 |
 | Upstream submodule provenance pointers | 89 |
 
-The nine warnings are **specific improvement work**, not ignored failures:
+These values are **not asserted for the current `main` branch**. The CLI
+dynamically enumerates the current `plugins/ModularSynth/src` C++/header
+files and `plugins/ModularSynth/res` SVGs, including not-yet-registered
+work-in-progress files, while the registered model count comes from the
+current first-party manifest. As new files land, source/panel counts and
+notice warnings can change independently of registered model count.
+Run the preflight at the exact commit being reviewed for up-to-date numbers.
+
+The nine warnings from that snapshot are **specific improvement work**, not ignored failures:
 
 - Three original SVG panels identify themselves as MODULAR-SYNTH artwork but lack a per-file SPDX identifier.
 - Three Module Forge-generated C++ template variants mention the GPL expression informally rather than using the standardized SPDX notice.
 - Two generated SVG panel templates lack a provenance/SPDX XML comment.
 - The effect integration guide template needs an explicit license/artwork attribution reminder.
 
-The default preflight passes with those warnings because current first-party C++ headers, collection metadata and referenced attribution pointers are present and internally consistent. `--strict` deliberately fails this baseline. Before a release, confirm the correct rights holder and precise license for any panel/template and update the **original first-party** notices through reviewed commits. Do **not** blanket-relabel inherited upstream assets, remove upstream notices, or use this result as a claim of redistribution clearance.
+The default preflight passed for that snapshot because its first-party C++ headers,
+collection metadata and referenced attribution pointers were present and internally
+consistent. `--strict` deliberately failed its nine advisory warnings. Before a
+release, confirm the correct rights holder and precise license for any
+panel/template and update the **original first-party** notices through reviewed
+commits. Do **not** blanket-relabel inherited upstream assets, remove upstream
+notices, or use this result as a claim of redistribution clearance.
 
 ## Adding a new first-party module
 
@@ -76,4 +92,8 @@ The default preflight passes with those warnings because current first-party C++
 
 To review a proposed notice fix without risking an inherited file, examine the scanner's exact repository-relative paths and compare the original contributor history. If you are uncertain about a third-party grant, record that uncertainty and seek appropriate review; the preflight cannot resolve it.
 
-The tests include deliberate missing/wrong SPDX notices, manifest drift, uncredited SVG panels, generator template gaps, inherited-code exclusion and stable JSON/exit behavior. There is also a real-checkout regression that confirms the current first-party baseline has no hard notice errors.
+The tests include deliberate missing/wrong SPDX notices, manifest drift,
+uncredited SVG panels, generator template gaps, inherited-code exclusion and
+stable JSON/exit behavior. The real-checkout regression reruns the hard
+notice checks against whichever repository revision is under test; it does
+not pin the model or file counts from the historical table above.
