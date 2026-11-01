@@ -116,3 +116,27 @@ each supported host/plugin format.
 GUI/host results, not just compilation or DSP unit tests. Block a
 production-ready claim for crashes, state loss, corrupt panels, nonfinite
 CV/audio, or repeatable real-time dropout regressions.
+
+## 7. Automated panel geometry preflight (source-level only)
+
+Run these separately from the manual UI/DAW acceptance checklist:
+
+```sh
+python3 tools/ui-check/validate_panels.py
+python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
+```
+
+The standard-library-only checker validates that all three original panels
+are parseable SVG documents with an SVG namespace, the expected **12/14/20 HP**
+width and **3U (128.5 mm)** height, and Rack panel viewBoxes of **15 px/HP ×
+380 px**. It cross-checks the exact `setPanel()` asset paths in C++ and
+checks statically resolvable centered knobs, ports, switches and lights
+against panel coordinate bounds. It conservatively expands simple constant
+arrays and conditional positions; non-constant expressions are reported as
+**NOTE** and skipped rather than guessed.
+
+This is **not** a rendered or interactive visual test: it cannot validate
+font availability, text clipping, visual overlaps, knob/port footprints,
+screw positioning, hit areas, HiDPI layout, DAW state, or host audio. Keep
+the manual checkboxes above unverified until an actual plugin/host UI run
+is documented.
