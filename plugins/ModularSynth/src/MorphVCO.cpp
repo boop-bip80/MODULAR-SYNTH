@@ -78,14 +78,11 @@ struct ModularSynthMorphVCO : Module {
         for (int c = 0; c < channels; ++c) {
             const double pitchCV = inputs[PITCH_INPUT].getNormalPolyVoltage(0.0f, c);
             const double fmCV = inputs[FM_INPUT].getNormalPolyVoltage(0.0f, c);
-            double pitchOctave = baseOctave + fineOctave + pitchCV + (fmCV / 5.0) * fmDepth;
-            if (!std::isfinite(pitchOctave))
-                pitchOctave = 0.0;
-            pitchOctave = std::min(20.0, std::max(-20.0, pitchOctave));
-
-            // VCV convention: C4 is 0 V. Frequency is clamped by the
-            // oscillator core to stay below Nyquist on any host sample rate.
-            const double hz = 261.6255653005986 * std::exp2(pitchOctave);
+            const double pitchOctave = baseOctave + fineOctave + pitchCV + (fmCV / 5.0) * fmDepth;
+            // Keep pitch and FM sanitization independent of compiler
+            // fast-math assumptions; the DSP helper clamps to +/-20 octaves.
+            // Frequency is then capped by the oscillator below Nyquist.
+            const double hz = modular_synth::dsp::MorphOscillator::frequencyForPitch(pitchOctave);
             const float morph = baseMorph + inputs[MORPH_CV_INPUT].getNormalPolyVoltage(0.0f, c) * 0.1f;
             const float width = baseWidth + inputs[PWM_CV_INPUT].getNormalPolyVoltage(0.0f, c) * 0.1f;
 
