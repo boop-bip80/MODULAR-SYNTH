@@ -73,8 +73,13 @@ registry updates, case-insensitive collisions, stale plans, parent symlinks,
 interruption, and rollback after injected write failures.
 When a C++ compiler is available, `test_effect_core.py` also builds and
 executes a standalone C++17 probe against the generated Rack-free filter header:
-DC convergence, reset, impulse decay, 44.1/48/96 kHz, and nonfinite inputs.
-This does **not** compile or load the Rack/Cardinal module.
+DC convergence, reset, impulse decay, 44.1/48/96 kHz, and IEEE-bitwise
+NaN/Inf input, coefficient, cutoff and sample-rate behavior. Each probe is
+compiled and executed with ordinary `-O2`, production-style
+`-O2 -ffast-math -fno-finite-math-only`, and strict `-O2 -ffast-math`.
+The nonfinite checks inspect raw float exponent bits so strict fast-math
+cannot silently fold the test assertions away. This does **not** compile or
+load the Rack/Cardinal module.
 
 ## Dry-run integration (explicit opt-in)
 
@@ -175,8 +180,10 @@ The stereo effect demonstrates:
 - Cutoff offset in octaves and 1 V/oct CV, with nonfinite CV reset to 0 and
   bounded tuning before frequency conversion.
 - A bilinear/TPT one-pole low-pass core in a reusable Rack-independent header,
-  with finite audio handling, reset, coefficient clamping to 5 Hz–0.45 ×
-  sample rate, and no dynamic allocation.
+  with NaN/Inf-safe audio and coefficient handling, reset, cutoff clamping to
+  5 Hz–0.45 × sample rate, and no dynamic allocation. Both the Rack wrapper
+  and core use IEEE-754 binary32 exponent-bit checks via `std::memcpy`:
+  `std::isfinite` can be incorrectly optimized away under strict `-ffast-math`.
 - Separate per-voice left/right state so stereo paths and polyphonic voices
   cannot contaminate one another. Recompute coefficients when the host's
   sample rate changes; an audible patch test remains necessary.
