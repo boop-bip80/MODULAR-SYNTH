@@ -123,6 +123,9 @@ PANEL_TEMPLATE = r'''<?xml version="1.0" encoding="UTF-8"?>
 INTEGRATION_TEMPLATE = '''# Integrating @@SLUG@@ into the ModularSynth collection
 
 Generated outputs are a reviewed starting point, not automatically installed modules.
+From the repository root, preview with
+`python3 tools/module-forge/integrate.py <output-parent>/@@SLUG@@ --repo-root .`;
+add `--apply` only after reviewing the complete diff.
 This workflow keeps the current self-contained Cardinal/ModularSynth architecture.
 
 1. Copy `@@SLUG@@.cpp` to `plugins/ModularSynth/src/@@SLUG@@.cpp`.
