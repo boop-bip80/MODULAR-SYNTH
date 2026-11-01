@@ -30,8 +30,13 @@ fi
 temp_file="$(mktemp "${PAWPAW_DOWNLOAD_DIR}/.flac-${FLAC_VERSION}.XXXXXXXX")"
 trap 'rm -f "${temp_file}"' EXIT
 echo "Fetching ${FLAC_ARCHIVE} from the official Xiph GitHub release"
+curl_retry_flags=(--retry 5 --retry-delay 2)
+# Older macOS system curl versions do not support --retry-all-errors.
+if curl --help all 2>/dev/null | grep -F -- "--retry-all-errors" >/dev/null; then
+  curl_retry_flags+=(--retry-all-errors)
+fi
 curl --fail --location --silent --show-error \
-  --retry 5 --retry-all-errors --retry-delay 2 \
+  "${curl_retry_flags[@]}" \
   "${FLAC_URL}" --output "${temp_file}"
 if ! check_sha256 "${temp_file}"; then
   echo "SHA-256 mismatch for official FLAC release asset; refusing to cache" >&2

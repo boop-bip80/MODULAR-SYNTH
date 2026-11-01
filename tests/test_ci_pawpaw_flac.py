@@ -33,6 +33,8 @@ class PawPawFlacBootstrapTests(unittest.TestCase):
         self.assertIn('check_sha256 "${temp_file}"', script)
         self.assertNotIn("--insecure", script)
         self.assertNotIn("--no-check-certificate", script)
+        self.assertIn("curl --help all", script)
+        self.assertIn("curl_retry_flags+=(--retry-all-errors)", script)
         if shutil.which("bash"):
             subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
 
@@ -51,7 +53,7 @@ class PawPawFlacBootstrapTests(unittest.TestCase):
         shutil.which("bash") and (shutil.which("sha256sum") or shutil.which("shasum")),
         "Requires Bash and a SHA-256 command",
     )
-    def test_corrupt_download_is_rejected_without_network(self) -> None:
+    def test_old_curl_fallback_rejects_corrupt_download_without_network(self) -> None:
         with tempfile.TemporaryDirectory(prefix="pawpaw-flac-test-") as temp:
             root = Path(temp)
             home = root / "home"
@@ -61,7 +63,15 @@ class PawPawFlacBootstrapTests(unittest.TestCase):
             fake_curl = fake_bin / "curl"
             fake_curl.write_text(
                 '#!/bin/sh\n'
+                'if [ "$1" = "--help" ]; then\n'
+                '  printf "older curl options\\n"\n'
+                '  exit 0\n'
+                'fi\n'
                 'while [ "$#" -gt 0 ]; do\n'
+                '  if [ "$1" = "--retry-all-errors" ]; then\n'
+                '    echo "unsupported curl flag" >&2\n'
+                '    exit 64\n'
+                '  fi\n'
                 '  if [ "$1" = "--output" ]; then\n'
                 '    shift\n'
                 '    printf "corrupted" > "$1"\n'
