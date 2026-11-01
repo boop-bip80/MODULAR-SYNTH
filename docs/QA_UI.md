@@ -169,16 +169,34 @@ python3 tools/ui-check/contrast_audit.py --fail-on-low-contrast
 These numbers measure SVG decorative fill/stroke colors, **not** the
 actual Rack widget controls after drawing/compositing.
 
-**Important uncertainty:** The current SVG panels use gradient/layered
-backgrounds. The tool marks the actual label underlay **UNKNOWN** and
-may report contrast against known gradient *stop swatches* only as
-context; it never treats those stop values as measured local text contrast.
-Macro8's dynamic labels also require manual inspection. StereoEcho's four
-radial-gradient knob-dial fills are also reported as **UNKNOWN** control
-outline ratios, while its seven flat port-ring fill/stroke pairs are
-measurable. Many thin SVG
-circles/outlined decorations sit **behind** actual Rack knobs and ports;
-their ratios are not proof of interactive control visibility.
+**Important uncertainty:** The first-party SVGs use gradient and/or layered
+backgrounds. The tool keeps **actual label underlays UNKNOWN** even when
+the source foreground is a static NanoVG color. For an explicitly opaque
+full-panel base gradient with valid literal RGB stops, it additionally
+computes a **conservative source-only base-gradient contrast lower bound**:
+every possible interpolated RGB channel is bounded by the extrema of the
+stops, and relative luminance is monotone in each channel. The reported
+bound compares text foreground with that **bottom SVG layer only**. It does
+not account for decorative circles, lines, shadows, Rack knobs, NanoVG
+antialiasing or an actual font glyph pixel; it is **not a measured local
+label contrast or a WCAG pass**.
+
+Across the four original dark-gradient panels, the source palette bounds
+remain comfortably above the 4.5:1 text advisory. The audit deliberately
+keeps these sites marked UNKNOWN, including Macro8's dynamic labels. An
+invalid/missing stop, transparency, stylesheet or unsupported paint construct
+withholds the bound; a weak lower bound is **inconclusive**, not automatic
+proof of low contrast, and does not trigger strict-mode failure. The bare
+SVGs were preview-rendered with Inkscape for geometry/color inspection, but
+that preview omits C++ NanoVG labels and Rack controls. No opaque label
+plates were added because the source evidence does not justify obscuring
+the existing design.
+
+StereoEcho's four radial-gradient knob-dial fills are also reported as
+**UNKNOWN** control outline ratios, while its seven flat port-ring
+fill/stroke pairs are measurable. Many thin SVG circles/outlined
+decorations sit **behind** actual Rack knobs and ports; their palette
+ratios are not proof of interactive control visibility.
 
 This preflight **does not render the UI or establish WCAG conformance**.
 It cannot assess antialiasing, font size/weight in final pixels, labels over

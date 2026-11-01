@@ -4,7 +4,8 @@
 The audit reads NanoVG nvgRGB()/nvgText() calls and SVG paint colors. A ratio
 for a solid SVG fill/stroke pair is a palette measurement, not a rendered
 control hit-area or WCAG conformance result. Gradient/layered text underlays
-are UNKNOWN; stop-color swatches are merely reference comparisons.
+remain UNKNOWN. Valid opaque gradient stops additionally give a conservative
+contrast lower bound for the *base palette only*, not the rendered text layer.
 """
 from __future__ import annotations
 
@@ -117,6 +118,105 @@ def extract_labels(source: str) -> list[dict[str, object]]:
     return labels
 
 
+def opaque_base_gradient_stops(
+    root: ET.Element, underlay_description: str
+) -> list[tuple[int, int, int]] | None:
+    """Validate opaque base-gradient stops for a *base-only* RGB envelope.
+
+    This is deliberately NOT a local label-underlay detector. Extra SVG paths,
+    circles and Rack controls can cover any label; their actual pixels remain
+    UNKNOWN. A valid opaque gradient only bounds the color of the bottom layer.
+    """
+    match = re.fullmatch(r"gradient url\(#([^)]+)\) \(pixels not sampled\)",
+                         underlay_description)
+    if match is None:
+        return None
+    # Stylesheets/inherited styles can override source attributes.
+    if any(_local_name(node.tag) in {"style", "script", "animate", "set"}
+           for node in root.iter()):
+        return None
+    if any(root.get(key) is not None for key in
+           ("style", "class", "filter", "opacity")):
+        return None
+    painted = [node for node in root if _local_name(node.tag) != "defs"]
+    if not painted:
+        return None
+    base = painted[0]  # _svg_underlay has already checked full-panel geometry.
+    if any(base.get(key) is not None for key in
+           ("style", "class", "filter", "mask", "clip-path", "transform",
+            "stroke", "mix-blend-mode")):
+        return None
+    if any(base.get(key, "1") not in ("1", "1.0") for key in
+           ("opacity", "fill-opacity")):
+        return None
+
+    gradient_id = match.group(1)
+    matched_ids = [node for node in root.iter()
+                   if node.get("id") == gradient_id]
+    if len(matched_ids) != 1:
+        return None
+    gradient = matched_ids[0]
+    if _local_name(gradient.tag) not in ("linearGradient", "radialGradient"):
+        return None
+    if any(gradient.get(key) is not None for key in
+           ("style", "class", "filter", "mask", "gradientTransform",
+            "spreadMethod")):
+        return None
+    if any(_local_name(key) == "href" for key in gradient.attrib):
+        return None
+    if gradient.get("color-interpolation", "sRGB") != "sRGB":
+        return None
+
+    stops: list[tuple[int, int, int]] = []
+    previous_offset = -1.0
+    for stop in gradient:
+        if _local_name(stop.tag) != "stop":
+            return None
+        if stop.get("style") is not None or stop.get("class") is not None or list(stop):
+            return None
+        if any(stop.get(key, "1") not in ("1", "1.0") for key in
+               ("opacity", "stop-opacity")):
+            return None
+        color = rgb(stop.get("stop-color"))
+        raw_offset = stop.get("offset", "").strip()
+        try:
+            offset = (float(raw_offset[:-1]) / 100.0 if raw_offset.endswith("%")
+                      else float(raw_offset))
+        except ValueError:
+            return None
+        if (color is None or not math.isfinite(offset) or
+                offset < previous_offset or not 0.0 <= offset <= 1.0):
+            return None
+        previous_offset = offset
+        stops.append(color)
+    return stops if len(stops) >= 2 else None
+
+
+def gradient_rgb_contrast_lower_bound(
+    foreground: tuple[int, int, int],
+    stops: list[tuple[int, int, int]],
+) -> float | None:
+    """Conservative *base-layer* ratio bound over sRGB stop interpolation.
+
+    Every gradient pixel's RGB channels lie between the component-wise minima
+    and maxima of opaque stops. Relative luminance is monotone in each channel,
+    so the corresponding synthetic colors bound all base-gradient luminances.
+    The bound is not a rendered/local contrast measurement; layered artwork,
+    controls, antialiasing and font pixels are deliberately excluded.
+    """
+    if not stops:
+        return None
+    lower_rgb = tuple(min(c[index] for c in stops) for index in range(3))
+    upper_rgb = tuple(max(c[index] for c in stops) for index in range(3))
+    low_lum, high_lum = luminance(lower_rgb), luminance(upper_rgb)
+    text_lum = luminance(foreground)
+    if text_lum >= high_lum:
+        return (text_lum + 0.05) / (high_lum + 0.05)
+    if text_lum <= low_lum:
+        return (low_lum + 0.05) / (text_lum + 0.05)
+    return 1.0  # The palettes' luminance intervals overlap: no useful bound.
+
+
 def _svg_underlay(root: ET.Element) -> tuple[str, tuple[int, int, int] | None,
                                                 list[tuple[int, int, int]]]:
     """Resolve a full-panel solid base only if no other SVG paint layers exist."""
@@ -200,6 +300,7 @@ def audit(repo_root: Path) -> tuple[list[str], list[str], dict[str, int]]:
     lines: list[str] = []
     errors: list[str] = []
     stats = {"labels": 0, "unknown_labels": 0, "measured_labels": 0,
+             "gradient_base_bounds": 0, "weak_gradient_base_bounds": 0,
              "outlines": 0, "unknown_outlines": 0,
              "low_labels": 0, "low_outlines": 0}
     collection = repo_root / "plugins" / "ModularSynth"
@@ -216,6 +317,7 @@ def audit(repo_root: Path) -> tuple[list[str], list[str], dict[str, int]]:
             continue
 
         underlay, solid, stops = _svg_underlay(svg_root)
+        opaque_stops = opaque_base_gradient_stops(svg_root, underlay)
         lines.append(f"[{model}] label underlay: {underlay}")
         for label in labels:
             stats["labels"] += 1
@@ -232,6 +334,14 @@ def audit(repo_root: Path) -> tuple[list[str], list[str], dict[str, int]]:
                     ratios = [contrast_ratio(fore, stop) for stop in stops]
                     swatch_info = (f"; gradient-stop swatches {min(ratios):.2f}"
                                    f"–{max(ratios):.2f}:1 (not local contrast)")
+                if opaque_stops is not None:
+                    bound = gradient_rgb_contrast_lower_bound(fore, opaque_stops)
+                    if bound is not None:
+                        stats["gradient_base_bounds"] += 1
+                        stats["weak_gradient_base_bounds"] += int(bound < TEXT_ADVISORY)
+                        swatch_info += (f"; opaque base-gradient lower bound "
+                                        f"≥{bound:.2f}:1 (base layer only; "
+                                        "local contrast UNKNOWN)")
                 reason = underlay if solid is None else "dynamic label coordinates"
                 lines.append(f"  UNKNOWN TEXT {name} {foreground}: {reason}{swatch_info}")
                 stats["unknown_labels"] += 1
@@ -285,13 +395,17 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"SUMMARY: {len(MODULES)} panels; {stats['labels']} nvgText sites; "
         f"{stats['unknown_labels']} UNKNOWN label backgrounds/positions; "
+        f"{stats['gradient_base_bounds']} source-only gradient-base bounds "
+        f"({stats['weak_gradient_base_bounds']} inconclusive under {TEXT_ADVISORY:g}:1); "
         f"{stats['measured_labels']} measured text swatches; "
         f"{stats['outlines']} measured SVG outline shapes; "
         f"{stats['unknown_outlines']} UNKNOWN SVG outline shapes; "
         f"{stats['low_labels']} low text and {stats['low_outlines']} low outline swatches"
     )
-    print("NOTE: swatch ratios are advisory; no rendered contrast, overlap, "
-          "font sizing, control visibility or WCAG conformance is claimed.")
+    print("NOTE: gradient bounds constrain only opaque SVG base colors, not "
+          "overlaid artwork or actual label pixels. Swatch ratios are advisory; "
+          "no rendered contrast, overlap, font sizing, control visibility or "
+          "WCAG conformance is claimed.")
     if args.fail_on_low_contrast and (stats["low_labels"] or stats["low_outlines"]):
         return 2
     return 0
