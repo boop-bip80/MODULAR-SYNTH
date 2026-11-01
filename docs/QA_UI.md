@@ -140,3 +140,31 @@ font availability, text clipping, visual overlaps, knob/port footprints,
 screw positioning, hit areas, HiDPI layout, DAW state, or host audio. Keep
 the manual checkboxes above unverified until an actual plugin/host UI run
 is documented.
+
+## 8. Source-color and contrast preflight (advisory only)
+
+```sh
+python3 tools/ui-check/contrast_audit.py
+python3 -m unittest discover -s tests -p 'test_panel_contrast.py' -v
+```
+
+The audit derives **actual text foreground colors** from NanoVG
+`nvgRGB()` / `nvgText()` calls in the three module widgets, and reads SVG
+panel fill and decorative control-outline colors. It computes standard
+sRGB relative luminance and contrast ratios and flags measured swatches
+below **4.5:1** for small text and **3:1** for SVG control outlines as
+**advisory warnings**. Use `--fail-on-low-contrast` to turn those measured
+warnings into exit status 2; the default is report-only.
+
+**Important uncertainty:** The current SVG panels use gradient/layered
+backgrounds. The tool marks the actual label underlay **UNKNOWN** and
+may report contrast against known gradient *stop swatches* only as
+context; it never treats those stop values as measured local text contrast.
+Macro8's dynamic labels also require manual inspection. Many thin SVG
+circles/outlined decorations sit **behind** actual Rack knobs and ports;
+their ratios are not proof of interactive control visibility.
+
+This preflight **does not render the UI or establish WCAG conformance**.
+It cannot assess antialiasing, font size/weight in final pixels, labels over
+knobs, dynamic states, color-vision usability, hit areas or keyboard use.
+Review a real host screenshot and complete the manual UI checks above.
