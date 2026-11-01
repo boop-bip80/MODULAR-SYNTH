@@ -73,6 +73,33 @@ The standalone tests cover:
 
 **Actually executed (2026-11-01):** GCC 13.3 C++17 -O2 and -O3 -ffast-math/-fno-finite-math-only and strict -O3 -ffast-math compiled and ran the full core test successfully. AddressSanitizer/UndefinedBehaviorSanitizer also passed with LeakSanitizer disabled due sandbox /proc inspection restrictions. The Rack plugin wrapper has not been successfully built or auditioned inside Cardinal yet.
 
+## Exact module indices and suggested factory routing
+
+The Rack enums are contiguous and begin at zero; these numeric values are important for a factory patch JSON/VCV cable:
+
+| Type | Enum name | Index |
+| --- | --- | ---: |
+| Param | TIME_PARAM | 0 |
+| Param | FEEDBACK_PARAM | 1 |
+| Param | MIX_PARAM | 2 |
+| Param | CROSSFEED_PARAM | 3 |
+| Input | LEFT_INPUT | 0 |
+| Input | RIGHT_INPUT | 1 |
+| Input | TIME_CV_INPUT | 2 |
+| Input | FEEDBACK_CV_INPUT | 3 |
+| Input | MIX_CV_INPUT | 4 |
+| Output | LEFT_OUTPUT | 0 |
+| Output | RIGHT_OUTPUT | 1 |
+
+The plugin slug is ModularSynth, module slug StereoEcho. For a factory **stereo** demo with only the existing original modules:
+
+1. MorphVCO MORPH_OUTPUT (0) → StateFilter AUDIO_INPUT (0).
+2. StateFilter LOWPASS_OUTPUT (0) → StereoEcho LEFT_INPUT (0).
+3. StateFilter HIGHPASS_OUTPUT (2) → StereoEcho RIGHT_INPUT (1).
+4. StereoEcho LEFT_OUTPUT (0) / RIGHT_OUTPUT (1) → host audio left / right.
+
+The LP/HP split makes the left and right inputs genuinely different, so the crossfeed knob has a noticeable stereo effect. **Important:** leaving RIGHT_INPUT unpatched normals it to LEFT_INPUT, which is convenient dual-mono routing but produces identical left/right histories. With two identical channels, ping-pong crossfeed alone cannot create stereo width. For classic L-only alternating echoes, patch a zero-volt source into RIGHT_INPUT instead.
+
 ## Integration ownership
 
 This feature branch adds only new, isolated files. The integrating maintainer should:
