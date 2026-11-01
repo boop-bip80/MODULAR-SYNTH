@@ -25,11 +25,12 @@ The tool catches:
 - Non-numeric and non-finite parameter values.
 - Unknown first-party `plugin/model` combinations based on checked-in Cardinal and ModularSynth manifests.
 - First-party ModularSynth input/output/parameter count violations and declared `configParam` range violations **when the simple source schema can be read**.
+- Checked-in Cardinal **HostMIDI** (12 inputs/12 outputs), **HostTime** (eight outputs) and **HostAudio2** (two input/output jacks and saved level range 0–2) bounds, guarded by expected source declarations. Other Cardinal models remain unverified unless a reviewed schema is added.
 - A readable inventory, a directed cable list and graph-connected components, including disconnected utility/note modules.
 
 ### Important limitations
 
-The first-party manifest establishes that a model is **declared in source**, not that a particular binary was built. The simple C++ schema reader handles ordinal enum declarations and literal `configParam` ranges; if it cannot parse a module, the report explicitly warns that its bounds were not verified. It does **not** execute C++, infer every arbitrary Rack widget convention or check semantic voltage/audio compatibility.
+The first-party manifest establishes that a model is **declared in source**, not that a particular binary was built. The C++ schema reader handles original-module ordinal enums and literal `configParam` ranges plus three narrow Cardinal host declarations. If a source signature no longer matches, the report explicitly warns that its bounds were not verified. It does **not** execute C++, infer every arbitrary Rack widget convention or check semantic voltage/audio compatibility. HostAudio2's two declared jacks are present in source but actual terminal processing depends on the plugin variant; no audio-output behavior is inferred.
 
 Third-party modules are a different case: this repository uses pinned git submodules, and their source manifests or port boundaries are not generally available to the offline inspector. Module names observed in committed stock Cardinal patch templates are recognized as historical references but **still get unverified bounds warnings**. An unknown third-party module is a warning by default, not a false assertion of correctness. Use `--strict-unknown` to make all non-first-party plugin/model pairs errors; because factory patches use bundled third-party modules, this strict mode is best for testing isolated first-party-only patches.
 
@@ -162,6 +163,6 @@ python3 tools/patches/patch_inspector.py inspect patches/examples/MODULAR_-_Cine
 python3 -m unittest discover -s tests -p 'test_patch_tools.py' -v
 ```
 
-The tests require each new patch to have eight modules, ten valid cables, four specific Macro8 CV routes, bipolar output 3 for cutoff, finite and range-checked first-party parameters, two eight-value snapshots, and low stored audio gains. The inspector still warns honestly when inherited Cardinal or Fundamental port ranges are not available from checked-in source.
+The tests require each new patch to have eight modules, ten valid cables, four specific Macro8 CV routes, bipolar output 3 for cutoff, finite and range-checked first-party parameters, two eight-value snapshots, and low stored audio gains. The inspector now verifies three inherited Cardinal host port contracts directly from checked-in source, while Fundamental and other Cardinal module ports remain unverified.
 
 For **actual** acceptance, build this fork with the three original modules **required by these patches** (MorphVCO, StateFilter and Macro8), load both patches in Cardinal Synth, verify MIDI note-on/note-off and host output, check A/B/LIVE transitions, confirm no unexpected clipping, and save/reopen the DAW project. **Those listening and host tests are not claimed by these JSON validation steps.**

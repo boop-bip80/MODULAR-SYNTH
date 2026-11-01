@@ -56,6 +56,75 @@ class PatchInspectorTests(unittest.TestCase):
         report = self.check()
         self.assertTrue(report["ok"], report["errors"])
 
+    def test_checked_in_cardinal_host_port_contracts(self) -> None:
+        # These host models are part of this checkout, unlike arbitrary
+        # bundled third-party modules whose port boundaries remain unknown.
+        expected = {
+            "HostMIDI": (0, 12, 12),
+            "HostTime": (0, 0, 8),
+            "HostAudio2": (1, 2, 2),
+        }
+        for name, counts in expected.items():
+            with self.subTest(model=name):
+                schema = inspector._source_bounds(ROOT, "Cardinal", name)
+                self.assertIsNotNone(schema)
+                self.assertEqual((schema["params"], schema["inputs"],
+                                  schema["outputs"]), counts)
+        self.assertEqual(inspector._source_bounds(ROOT, "Cardinal", "HostAudio2")["ranges"],
+                         {0: (0.0, 2.0)})
+        self.assertIsNone(inspector._source_bounds(ROOT, "Cardinal", "HostMIDICC"))
+
+        for path in sorted((ROOT / "patches" / "examples").glob("MODULAR_-_*.vcv")):
+            with self.subTest(patch=path.name):
+                report = inspector.inspect_patch(path, ROOT)
+                self.assertTrue(report["ok"], report["errors"])
+                self.assertFalse(any("Cardinal/HostMIDI:" in warning or
+                                     "Cardinal/HostTime:" in warning or
+                                     "Cardinal/HostAudio2:" in warning
+                                     for warning in report["warnings"]))
+
+    def test_cardinal_host_saved_ports_and_gain_reject_invalid_values(self) -> None:
+        # HostAudio2 exposes just two Rack-facing audio jacks (0 and 1).
+        self.patch["cables"][0]["inputId"] = 2
+        report = self.check()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("inputs index 2 exceeds known count 2" in e
+                            for e in report["errors"]))
+
+        self.patch["cables"][0]["inputId"] = 0
+        self.patch["modules"][1]["params"] = [{"id": 0, "value": 2.001}]
+        report = self.check()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("outside declared [0.0, 2.0]" in e
+                            for e in report["errors"]))
+
+        self.patch["modules"][1]["params"] = []
+        self.patch["modules"].append(
+            {"id": 3, "plugin": "Cardinal", "model": "HostMIDI", "params": []})
+        self.patch["cables"][0]["outputModuleId"] = 3
+        self.patch["cables"][0]["outputId"] = 12
+        report = self.check()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("outputs index 12 exceeds known count 12" in e
+                            for e in report["errors"]))
+
+        self.patch["modules"][-1]["model"] = "HostTime"
+        self.patch["cables"][0]["outputId"] = 8
+        report = self.check()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("outputs index 8 exceeds known count 8" in e
+                            for e in report["errors"]))
+
+    def test_cardinal_host_schema_drift_becomes_unverified(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "plugins" / "Cardinal" / "src" / "HostAudio.cpp"
+            path.parent.mkdir(parents=True)
+            original = (ROOT / "plugins" / "Cardinal" / "src" / "HostAudio.cpp").read_text()
+            path.write_text(original.replace("struct HostAudio2 : HostAudio<2>",
+                                             "struct HostAudio2 : HostAudio<4>"),
+                            encoding="utf-8")
+            self.assertIsNone(inspector._source_bounds(Path(tmp), "Cardinal", "HostAudio2"))
+
     def test_all_registered_original_models_have_source_schemas(self) -> None:
         manifest = json.loads(
             (ROOT / "plugins" / "ModularSynth" / "plugin.json").read_text(encoding="utf-8")

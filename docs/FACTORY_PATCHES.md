@@ -16,13 +16,14 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_Echo_Motion_Performance.vcv` | Three Macro8 outputs change StereoEcho time, feedback and wet mix; fourth moves oscillator shape | Play MIDI and recall four A/B/C/D scenes with 1.2-second transitions; details below |
 | `MODULAR_-_Clocked_Modulation_Studio.vcv` | Eight-channel MIDI with HostTime BEAT/RESET-fed ClockedLFO and animated filter/echo modulation | Start host transport for external beat lock; play MIDI notes; inspect LFO SIN/TRI/PULSE/EOC routes |
 | `MODULAR_-_Cinematic_Pulse_Score.vcv` | Free-running LFO pulse gates a **second** ADSR/VCA on filter LP only; HP remains separate into stereo Echo, with four Macro8 scenes | Play MIDI and recall Hush/Motion/Surge/Return scenes; no host transport or BPM synchronization required |
+| `MODULAR_-_Noir_Expressive_Lead.vcv` | Monophonic dark lead using MIDI channel aftertouch for oscillator timbre, mod wheel for Echo wet, and five Macro8 scene controls | Play single-note phrases, move aftertouch/mod wheel, then recall four Noir/Tension scenes; no host BPM sync |
 
 ## Loading
 
 1. Use a recent MODULAR-SYNTH/Cardinal **main** or **Synth** build with its packaged modules and example patches.
 2. If the examples folder is packaged, choose **File → Open demo / example project** and select the `MODULAR_-` patch; otherwise load the `.vcv` directly from `patches/examples/`.
 3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad and Clocked Modulation Studio save eight MIDI channels.
-4. For Clockwork Pulses, start the DAW transport; it uses **Host Time** without live MIDI notes. For Clocked Modulation Studio, use transport **and MIDI** if testing external beat lock (the LFO free-runs without transport). Cinematic Pulse Score needs **MIDI only**: its LFO CLOCK/RESET jacks are unplugged and it does not follow BPM.
+4. For Clockwork Pulses, start the DAW transport; it uses **Host Time** without live MIDI notes. For Clocked Modulation Studio, use transport **and MIDI** if testing external beat lock (the LFO free-runs without transport). Cinematic Pulse Score needs **MIDI only**: its LFO CLOCK/RESET jacks are unplugged and it does not follow BPM. Noir Expressive Lead also needs MIDI notes; MIDI channel pressure and CC1 mod wheel are optional expressive controls, subject to the keyboard/DAW's MIDI routing.
 5. Begin with low speaker or headphone volume. The output gain is intentionally conservative, but patch signal levels are not yet perceptually validated.
 
 ## Scope and compatibility
@@ -41,7 +42,7 @@ The original three patches were initially parsed as JSON and checked for:
 - finite parameter values and sequential parameter IDs;
 - module/model names that occur in bundled repository example patches.
 
-**Current offline checks:** `tools/patches/patch_inspector.py` validates structural graph integrity and source-backed original-module ports; `tools/patches/factory_patch_coverage.py` confirms every original `ModularSynth` model is represented and each original preset's advertised routes/settings exist. This is saved-source evidence only.
+**Current offline checks:** `tools/patches/patch_inspector.py` validates structural graph integrity, source-backed original-module ports and checked-in Cardinal HostMIDI/HostTime/HostAudio2 port contracts; `tools/patches/factory_patch_coverage.py` confirms every original `ModularSynth` model is represented and each original preset's advertised routes/settings exist. Other bundled modules' ports remain unverified. This is saved-source evidence only.
 
 **Not yet verified:** loading the patches in a compiled MODULAR-SYNTH binary, rendering audio, listening for expected sonic results, clipping/CPU profiling, and loading/saving from real DAWs. Those are explicit acceptance checks before these patches are described as production-validated.
 
@@ -59,6 +60,7 @@ The original three patches were initially parsed as JSON and checked for:
 - Echo Motion Performance: recall all four Macro8 A/B/C/D scenes while playing MIDI; check Echo time, feedback and wet changes, wave timbre, stereo channels and release tails. Do not assume transitions are click-free until heard.
 - Clocked Modulation Studio: start/stop host transport with 8-channel MIDI; verify ClockedLFO beat lock versus free run and inspect left/right audio at low levels.
 - Cinematic Pulse Score: hold mono MIDI notes; check free-run rhythmic LP gating only on the left, independent continuous HP on right, LFO sine waveform change, A–D scenes and LIVE. Verify no host sync is advertised or expected.
+- Noir Expressive Lead: play single-note MIDI phrases, test **channel pressure** on MorphVCO wave morph and **CC1 mod wheel** on Echo wet CV; recall Macro8 A–D and LIVE while varying the five documented macro routes. Verify note-off closes VCA, stereo echo tails remain finite and both channels reach the host. Do not assume your controller or DAW sends channel aftertouch without explicitly checking.
 - For each patch: save under a new filename, reload, and compare module/cable counts and playback.
 - Test at 44.1/48/96 kHz and block sizes 64/128/256 when practical. Verify silence on stop and no plugin crash.
 
@@ -166,6 +168,32 @@ python3 -m unittest discover -s tests -p 'test_cinematic_pulse_score.py' -v
 
 Before using it live, audition one-note MIDI gate/release, LFO pulse-gated left versus unpulsed right, A–D/LIVE transitions and level/headroom, plus patch save/reopen in a real compiled fork. No actual host audio, sample-rate, CPU or tempo-sync tests were performed by this source-only validation.
 
+## Noir Expressive Lead — cinematic keyboard expression
+
+[Open the source patch](../patches/examples/MODULAR_-_Noir_Expressive_Lead.vcv). This **9-module, 15-cable**, **single-channel MIDI** voice uses MorphVCO → StateFilter low-pass → Fundamental ADSR-controlled VCA → StereoEcho → the two HostAudio2 input jacks. Echo Right input is deliberately unplugged, so StereoEcho uses its code-defined Left-to-Right normalization; two output cables do **not** by themselves establish audible stereo width.
+
+The expressive controls use actual `Cardinal/HostMIDI` source output IDs: **Pitch 0** drives MorphVCO input 0, **Gate 1** drives ADSR input 4, **Aftertouch 3** drives MorphVCO wave-morph CV input 2 (0–10 V maps to one normalized morph span), and **Mod Wheel 5** drives StereoEcho wet CV input 4 (0–10 V adds 0–100 percentage points to the 5% wet base). Not all keyboards send channel aftertouch; no minimum external controller capabilities or actual MIDI messages have been tested.
+
+| Macro8 output | Saved name | Destination | Nominal source scaling |
+| --- | --- | --- | --- |
+| 0 | Delay Time | StereoEcho TIME CV input **2** | 100 ms/V added to a 180 ms base |
+| 1 | Echo FB | StereoEcho feedback CV input **3** | 10 percentage points/V added to a 12% base |
+| 2 | Resonance | StateFilter resonance CV input **2** | 0–10 V adds normalized 0–1 to the 8% base |
+| 3 | Drive | StateFilter drive CV input **3** | 0–10 V adds normalized 0–1 to the 4% base |
+| 4 | Pulse Width | MorphVCO PWM CV input **3** | 0–10 V adds normalized 0–1 to its 42% base |
+
+All five range switches are saved **unipolar**. The four named A–D Macro8 snapshot rows take **0.65 seconds to approximately 99.9% settle**. Nominal Echo time changes from **260 ms** (A) to **600 ms** (D), with nominal feedback from **20%** to **44%**; the mod wheel independently controls wetness. The source graph saves a moderate VCA gain **0.32**, HostAudio2 level **0.22**, and low 5% default wet signal. These are *source settings*, **not** measured headroom or a completed playable-host audition. The preset is free-running/manual, not tempo-synced.
+
+For source-only QA:
+
+```sh
+python3 tools/patches/patch_inspector.py validate patches/examples/MODULAR_-_Noir_Expressive_Lead.vcv
+python3 tools/patches/factory_patch_coverage.py
+python3 -m unittest discover -s tests -p 'test_noir_expressive_lead.py' -v
+```
+
+For real acceptance, use a fork-built plugin with a controller that sends channel aftertouch and mod wheel; confirm note/release, responsive wave CV and echo wetness, both host channels, sensible levels, A–D/LIVE recall and DAW reopen at several sample rates. Source checks do not assert any of those outcomes.
+
 ## Future work
 
-Add audio-rendered regression fixtures, MPE/aftertouch expressive performance patches, improved patch-browser tagging, and audio previews after real host audition and a testable plugin build.
+Add audio-rendered regression fixtures, MPE/polyphonic-expression performance patches, improved patch-browser tagging, and audio previews after real host audition and a testable plugin build.
