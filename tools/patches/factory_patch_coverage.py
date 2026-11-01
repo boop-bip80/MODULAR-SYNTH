@@ -36,6 +36,8 @@ class Example:
     routes: tuple[Route, ...]
     stereo: bool = False
     two_oscillators: bool = False
+    rhythmic_lp_gate: bool = False
+    free_lfo_rate_hz: float | None = None
     snapshot_names: tuple[str, ...] = ()
     morph_seconds: float | None = None
     bipolar_cutoff: bool = False
@@ -340,6 +342,57 @@ EXAMPLES: dict[str, Example] = {
         midi_channels=8,
         midi_poly_mode=1,
     ),
+    "MODULAR_-_Cinematic_Pulse_Score.vcv": Example(
+        "Free-running MIDI score with dual ADSR/VCA roles, LFO-pulsed LP and continuous HP stereo Echo",
+        ("Cardinal/HostMIDI", "ModularSynth/ClockedLFO",
+         "ModularSynth/Macro8", "ModularSynth/MorphVCO",
+         "Fundamental/ADSR", "Fundamental/VCA-1",
+         "ModularSynth/StateFilter", "ModularSynth/StereoEcho",
+         "Cardinal/HostAudio2"),
+        (
+            Route("MIDI pitch to oscillator", "Cardinal/HostMIDI",
+                  "ModularSynth/MorphVCO", output=0, input=0),
+            Route("MIDI gate to main ADSR", "Cardinal/HostMIDI",
+                  "Fundamental/ADSR", output=1, input=4),
+            Route("oscillator into main VCA", "ModularSynth/MorphVCO",
+                  "Fundamental/VCA-1", output=0, input=1),
+            Route("main ADSR into main VCA CV", "Fundamental/ADSR",
+                  "Fundamental/VCA-1", output=0, input=0),
+            Route("main VCA into StateFilter", "Fundamental/VCA-1",
+                  "ModularSynth/StateFilter", output=0, input=0),
+            Route("filter LP into rhythmic VCA", "ModularSynth/StateFilter",
+                  "Fundamental/VCA-1", output=0, input=1),
+            Route("LFO pulse into rhythmic ADSR gate", "ModularSynth/ClockedLFO",
+                  "Fundamental/ADSR", output=3, input=4),
+            Route("rhythmic ADSR into rhythmic VCA CV", "Fundamental/ADSR",
+                  "Fundamental/VCA-1", output=0, input=0),
+            Route("rhythmic VCA into Echo left", "Fundamental/VCA-1",
+                  "ModularSynth/StereoEcho", output=0, input=0),
+            Route("filter HP into Echo right", "ModularSynth/StateFilter",
+                  "ModularSynth/StereoEcho", output=2, input=1),
+            Route("Echo left into host left", "ModularSynth/StereoEcho",
+                  "Cardinal/HostAudio2", output=0, input=0),
+            Route("Echo right into host right", "ModularSynth/StereoEcho",
+                  "Cardinal/HostAudio2", output=1, input=1),
+            Route("LFO sine into oscillator morph CV", "ModularSynth/ClockedLFO",
+                  "ModularSynth/MorphVCO", output=0, input=2),
+            Route("macro tension to filter resonance CV", "ModularSynth/Macro8",
+                  "ModularSynth/StateFilter", output=0, input=2),
+            Route("macro warmth to filter drive CV", "ModularSynth/Macro8",
+                  "ModularSynth/StateFilter", output=1, input=3),
+            Route("macro repeats to Echo feedback CV", "ModularSynth/Macro8",
+                  "ModularSynth/StereoEcho", output=2, input=3),
+            Route("macro space to Echo wet CV", "ModularSynth/Macro8",
+                  "ModularSynth/StereoEcho", output=3, input=4),
+        ),
+        stereo=True,
+        rhythmic_lp_gate=True,
+        free_lfo_rate_hz=0.8,
+        snapshot_names=("Tension", "Warmth", "Repeats", "Space"),
+        snapshot_count=4,
+        morph_seconds=2.6,
+        unipolar_macro_outputs=(0, 1, 2, 3),
+    ),
 
 }
 
@@ -401,6 +454,54 @@ def _check_dual_oscillators(modules_by_id: dict[int, dict],
             for source, target, _ in routes)
         for osc in oscillators
     ) for mixer in mixers)
+
+
+
+def _check_dual_envelope_pulse_roles(
+        modules_by_id: dict[int, dict],
+        routes: list[tuple[dict, dict, dict]]) -> bool:
+    """Prove two distinct ADSR/VCA chains, not merely two reused model labels.
+
+    Fundamental's checked-in ADSR has gate input 4/envelope output 0;
+    VCA-1 has CV input 0, audio input 1, audio output 0. We deliberately
+    bind each claimed route to the SAME patch-local module IDs.
+    """
+    def ids(key: str) -> set[int]:
+        return {mid for mid, m in modules_by_id.items() if _key(m) == key}
+
+    midi, lfo = ids("Cardinal/HostMIDI"), ids("ModularSynth/ClockedLFO")
+    osc, filt = ids("ModularSynth/MorphVCO"), ids("ModularSynth/StateFilter")
+    echo = ids("ModularSynth/StereoEcho")
+    adsrs, vcas = ids("Fundamental/ADSR"), ids("Fundamental/VCA-1")
+    if not (len(midi) == len(lfo) == len(osc) == len(filt) == len(echo) == 1
+            and len(adsrs) == len(vcas) == 2):
+        return False
+
+    edges = {(src["id"], cable["outputId"], dst["id"], cable["inputId"])
+             for src, dst, cable in routes}
+
+    def linked(source: int, out: int, target: int, inp: int) -> bool:
+        return (source, out, target, inp) in edges
+
+    (midi_id,), (lfo_id,), (osc_id,), (filt_id,), (echo_id,) = (
+        tuple(midi), tuple(lfo), tuple(osc), tuple(filt), tuple(echo))
+    for voice_adsr in adsrs:
+        if not linked(midi_id, 1, voice_adsr, 4):
+            continue
+        for rhythm_adsr in adsrs - {voice_adsr}:
+            if not linked(lfo_id, 3, rhythm_adsr, 4):
+                continue
+            for voice_vca in vcas:
+                if not (linked(osc_id, 0, voice_vca, 1)
+                        and linked(voice_adsr, 0, voice_vca, 0)
+                        and linked(voice_vca, 0, filt_id, 0)):
+                    continue
+                for rhythm_vca in vcas - {voice_vca}:
+                    if (linked(filt_id, 0, rhythm_vca, 1)
+                            and linked(rhythm_adsr, 0, rhythm_vca, 0)
+                            and linked(rhythm_vca, 0, echo_id, 0)):
+                        return True
+    return False
 
 
 def _check_macro_snapshots(modules_by_id: dict[int, dict],
@@ -508,6 +609,43 @@ def analyze(root: Path = ROOT, examples_dir: Path | None = None) -> dict:
                 local_errors.append("both VCO instances must receive MIDI and feed one mixer")
             else:
                 result["capabilities"].append("both MIDI-driven oscillators feed one mixer")
+        if spec.rhythmic_lp_gate:
+            if not _check_dual_envelope_pulse_roles(modules_by_id, routes):
+                local_errors.append(
+                    "rhythmic LP requires two distinct MIDI/LFO ADSR-to-VCA "
+                    "chains with role-specific filter/Echo routing")
+            else:
+                result["capabilities"].append(
+                    "separate MIDI voice and LFO pulse ADSR/VCA chains")
+        if spec.free_lfo_rate_hz is not None:
+            lfos = [m for m in modules_by_id.values()
+                    if _key(m) == "ModularSynth/ClockedLFO"]
+            host_time = any(_key(m) == "Cardinal/HostTime"
+                            for m in modules_by_id.values())
+            if len(lfos) == 1:
+                lfo = lfos[0]
+                params = {p["id"]: p["value"] for p in lfo.get("params", [])}
+                rate_log2 = params.get(0)
+                rate_ok = (isinstance(rate_log2, (int, float))
+                           and not isinstance(rate_log2, bool)
+                           and math.isclose(2.0 ** rate_log2,
+                                            spec.free_lfo_rate_hz,
+                                            rel_tol=0.0, abs_tol=1e-4))
+                clock_or_reset = any(
+                    cable["inputModuleId"] == lfo["id"]
+                    and cable["inputId"] in (1, 2)
+                    for cable in patch["cables"]
+                )
+            else:
+                rate_ok = False
+                clock_or_reset = True
+            if host_time or clock_or_reset or not rate_ok:
+                local_errors.append(
+                    "expected free-running LFO with saved rate "
+                    f"{spec.free_lfo_rate_hz:g} Hz, no HostTime or CLOCK/RESET cables")
+            else:
+                result["capabilities"].append(
+                    f"free-running LFO at {spec.free_lfo_rate_hz:g} Hz; no host clock")
         if spec.snapshot_names:
             if not _check_macro_snapshots(modules_by_id, spec.snapshot_names,
                                           spec.snapshot_count):
