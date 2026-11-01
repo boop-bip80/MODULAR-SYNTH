@@ -116,3 +116,52 @@ To check this particular file:
 python3 tools/patches/patch_inspector.py inspect patches/examples/MODULAR_-_Morphing_State_Pad.vcv
 python3 -m unittest discover -s tests -p 'test_patch_tools.py' -v
 ```
+
+
+## Further cinematic presets — controlled motion and rhythmic bass
+
+Two additional first-party performance patches use the same proven host and envelope components as Morphing State Pad: `Cardinal/HostMIDI`, `Fundamental/ADSR`, `Fundamental/VCA-1` and `Cardinal/HostAudio2`. They also use all three original `ModularSynth` models: `MorphVCO`, `StateFilter` and `Macro8`.
+
+In both patches, the audio path is **MIDI pitch → MorphVCO → StateFilter low-pass → VCA → HostAudio2**, while **MIDI gate → ADSR → VCA CV** provides note-off silence. Macro8 outputs 0/1/2/3 respectively modulate oscillator morph, filter resonance, filter drive and filter cutoff. Output 3 uses its **bipolar -5 to +5 V mode**; the first three outputs are unipolar 0 to 10 V. The templates use conservative VCA and HostAudio gains.
+
+These are plain-text `.vcv` files using pinned/bundled modules, not premixed WAV assets or independent exported plugins.
+
+### Cinematic Drift Pad
+
+[`MODULAR_-_Cinematic_Drift_Pad.vcv`](../patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv)
+
+- Purpose: a soft, sustained harmonic bed whose timbre can change slowly through Macro8 snapshot transitions.
+- ADSR attack 0.55, decay 0.80, sustain 0.85, release 0.85 (normalized module knobs); the values are not literal seconds.
+- MorphVCO starts at concert-register pitch with a slightly sharpened fine tuning; StateFilter low-pass starts around the mid-frequency region.
+- **Macro8 morph time = 4.0 seconds** (approximately 99.9% settling), with snapshot A quieter/darker and snapshot B brighter/more resonant and driven.
+- VCA gain = 0.26, HostAudio2 level = 0.24. Start with low monitoring volume, especially when recalling brighter snapshots.
+
+For evolving motion, sustain a MIDI chord or note and alternate Macro8 **A** and **B** in Recall mode; use **LIVE** to return to the physical macro knobs. This patch has **manual snapshot morphing**, not a free-running LFO or autonomous generative sequence. It is designed as a starting point for cinematic texture performance, not a claim of reviewed cinematic audio quality.
+
+### Rhythmic Grit Bass
+
+[`MODULAR_-_Rhythmic_Grit_Bass.vcv`](../patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv)
+
+- Purpose: a low-register bass voice for tightly gated short notes, syncopation and evolving grit.
+- MorphVCO octave = -2; StateFilter low-pass cutoff is set lower than the pad, with moderately higher resonance and drive.
+- Short ADSR attack 0.005, decay 0.14, sustain 0.25 and release 0.11 (normalized knob values). Play short MIDI notes.
+- **Macro8 morph time = 0.20 seconds**, with snapshot A cleaner/subbier and B brighter, raspier and more resonant.
+- VCA gain = 0.32 and HostAudio2 level = 0.23 to reduce monitoring level before experimenting with resonant snapshots.
+
+The rhythmic sequence comes from your **DAW or MIDI keyboard**, not from a built-in step sequencer; this template does not generate notes by itself. Use the A/B buttons for short growl sweeps, and keep your monitoring level conservative when increasing resonance or drive.
+
+### Structural checks and manual audio checklist
+
+From the repository root:
+
+```sh
+python3 tools/patches/patch_inspector.py validate \
+  patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv \
+  patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv
+python3 tools/patches/patch_inspector.py inspect patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv
+python3 -m unittest discover -s tests -p 'test_patch_tools.py' -v
+```
+
+The tests require each new patch to have eight modules, ten valid cables, four specific Macro8 CV routes, bipolar output 3 for cutoff, finite and range-checked first-party parameters, two eight-value snapshots, and low stored audio gains. The inspector still warns honestly when inherited Cardinal or Fundamental port ranges are not available from checked-in source.
+
+For **actual** acceptance, build this fork with all three original modules, load both patches in Cardinal Synth, verify MIDI note-on/note-off and host output, check A/B/LIVE transitions, confirm no unexpected clipping, and save/reopen the DAW project. **Those listening and host tests are not claimed by these JSON validation steps.**
