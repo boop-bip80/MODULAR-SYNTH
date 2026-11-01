@@ -39,6 +39,10 @@
 namespace rack {
 namespace app {
 
+// Implemented in MenuBar.cpp so the View menu and keyboard shortcut share
+// the same saved cable opacity and cannot drift out of sync.
+void Cardinal_toggleCableVisibility();
+
 
 struct ResizeHandle : widget::OpaqueWidget {
 	math::Vec size;
@@ -321,6 +325,10 @@ void Scene::onHoverKey(const HoverKeyEvent& e) {
 		}
 		if (e.keyName == "2" && (e.mods & RACK_MOD_MASK) == RACK_MOD_CTRL) {
 			APP->scene->rackScroll->setZoom(2.f);
+			e.consume(this);
+		}
+		if (e.keyName == "h" && (e.mods & RACK_MOD_MASK) == (RACK_MOD_CTRL | GLFW_MOD_SHIFT)) {
+			Cardinal_toggleCableVisibility();
 			e.consume(this);
 		}
 		if (e.key == GLFW_KEY_F1 && (e.mods & RACK_MOD_MASK) == 0) {
