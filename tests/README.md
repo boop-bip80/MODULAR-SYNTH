@@ -16,7 +16,7 @@ For these tests, Git submodules do **not** need to be initialized. In a normal G
 ## Checks
 
 - **Bundled patch integrity:** every committed `patches/**/*.vcv` file is valid UTF-8 JSON and has a basic Rack patch graph: unique module/cable IDs and no dangling cable endpoints.
-- **First-party module manifest:** `plugins/Cardinal/plugin.json` parses, each declared module has a nonempty and unique slug/name, and `tags` remains a list.
+- **First-party module manifests:** `plugins/Cardinal/plugin.json` is validated, plus `plugins/ModularSynth/plugin.json` when that original module collection exists. Each manifest has a matching plugin slug; module slugs/names must be nonempty, module slugs unique within their collection, and `tags` must be a list.
 - **Submodule consistency:** `.gitmodules` paths are unique, relative, and use HTTPS; when Git metadata is available, every declaration must correspond exactly to a committed submodule gitlink.
 
 The lightweight workflow runs on pull requests and pushes to `main`.
