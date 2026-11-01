@@ -41,7 +41,7 @@ D = sqrt((1 - w²)² + (w / Q)²)
 |HP| = w² / D
 ```
 
-These predictions account for frequency warping at each sample rate rather than treating the cutoff as an unwarped analog pole. Error limits are **0.75 dB** for amplitudes at/above 0.025× and **0.015 absolute gain** below that threshold, where dB amplifies numerical noise. The code uses the filter's IEEE exponent-bit finite guard, so NaNs do not falsely pass under GCC `-ffast-math`.
+These predictions account for frequency warping at each sample rate rather than treating the cutoff as an unwarped analog pole. Error limits are **0.20 dB** for amplitudes at/above 0.025× and **0.010 absolute gain** below that threshold, where dB amplifies numerical noise. The code uses the filter's IEEE exponent-bit finite guard, so NaNs do not falsely pass under GCC `-ffast-math`.
 
 ## Boundaries
 

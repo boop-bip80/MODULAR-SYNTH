@@ -160,8 +160,8 @@ inline Matrix evaluateMatrix() {
                         // Deep stopbands are checked in absolute gain, where
                         // tiny numerical error need not be a large dB penalty.
                         const bool passed = finite && (expectedGain < 0.025
-                            ? std::abs(actualGain - expectedGain) <= 0.015
-                            : std::abs(dbError) <= 0.75);
+                            ? std::abs(actualGain - expectedGain) <= 0.010
+                            : std::abs(dbError) <= 0.20);
                         matrix.rows.push_back({rate, cutoff, resonance, probe,
                             static_cast<Output>(i), expectedGain, actualGain,
                             dbError, passed});
