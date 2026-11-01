@@ -2,20 +2,20 @@
 
 **Status:** first implementation, developer tooling only. This is not yet an
 in-app source editor, just-in-time DSP compiler, module hot loader, or standalone
-plugin exporter. The separate \`plugins/ModularSynth\` collection is the home
-for original modules; it is distinct from the upstream \`plugins/Cardinal\`
+plugin exporter. The separate `plugins/ModularSynth` collection is the home
+for original modules; it is distinct from the upstream `plugins/Cardinal`
 collection.
 
 ## What is available
 
-\`tools/module-forge/module_forge.py\` generates four files for an original
+`tools/module-forge/module_forge.py` generates four files for an original
 Rack-compatible module:
 
 - A C++ DSP/GUI starter with one 1 V/oct pitch input and a polyphonic sine
   output, including sample-rate-safe phase integration, reset, and finite CV
   handling.
 - A self-contained SVG panel.
-- A **single-module JSON fragment** for the \`ModularSynth\` manifest.
+- A **single-module JSON fragment** for the `ModularSynth` manifest.
 - Integration steps listing the specific Cardinal build/registration changes.
 
 It creates a new directory and refuses to overwrite a preexisting generated
@@ -25,17 +25,17 @@ module. No third-party modules are downloaded.
 
 From the repository root:
 
-\`\`\`bash
+```bash
 python3 tools/module-forge/module_forge.py new \
     --slug OrbitSine \
     --name "Orbit Sine" \
     --out module-forge-output
 python3 tools/module-forge/module_forge.py check module-forge-output/OrbitSine
-\`\`\`
+```
 
-The output will be \`module-forge-output/OrbitSine/\`. Read the generated
-\`INTEGRATION.md\` **before** moving source/artwork into
-\`plugins/ModularSynth\` or registering the model in the static loader.
+The output will be `module-forge-output/OrbitSine/`. Read the generated
+`INTEGRATION.md` **before** moving source/artwork into
+`plugins/ModularSynth` or registering the model in the static loader.
 Generated sources are not automatically built or installed.
 
 Module identifiers use stable PascalCase letters and digits (2–40 characters,
@@ -45,10 +45,10 @@ remain stable after patches begin referring to it.
 
 ## Automated scaffolder tests
 
-\`\`\`bash
+```bash
 python3 -m unittest discover -s tools/module-forge \
     -p "test_*.py" -v
-\`\`\`
+```
 
 Tests cover generated structure, manifest identity, C++ model/panel references,
 refusal to overwrite user-edited files, and rejection of invalid identifiers.
@@ -62,12 +62,12 @@ generated instructions assume the dedicated first-party collection:
 
 | Change | File |
 | --- | --- |
-| Add the module source | \`plugins/ModularSynth/src/<Slug>.cpp\` |
-| Install SVG artwork | \`plugins/ModularSynth/res/<Slug>.svg\` |
-| Add the source to the built-in object list | \`plugins/Makefile\` |
-| Declare the exported C++ model pointer | \`plugins/ModularSynth/src/plugin.hpp\` |
-| Register the model with \`initStatic__ModularSynth()\` | \`plugins/plugins.cpp\` |
-| Append one module object | \`plugins/ModularSynth/plugin.json\` |
+| Add the module source | `plugins/ModularSynth/src/<Slug>.cpp` |
+| Install SVG artwork | `plugins/ModularSynth/res/<Slug>.svg` |
+| Add the source to the built-in object list | `plugins/Makefile` |
+| Declare the exported C++ model pointer | `plugins/ModularSynth/src/plugin.hpp` |
+| Register the model with `initStatic__ModularSynth()` | `plugins/plugins.cpp` |
+| Append one module object | `plugins/ModularSynth/plugin.json` |
 
 A module's panel must be available before its widget is instantiated. Ensure
 the resource pipeline includes the new SVG (the current Cardinal build uses
@@ -105,7 +105,7 @@ indexes are part of patch compatibility, so never silently reorder them.
 
 1. Run generated-module compilation and host smoke tests automatically in CI.
 2. Provide an atomic command that integrates new modules with reviewed edits
-   to \`plugins/Makefile\`, model declaration, model registry and manifest.
+   to `plugins/Makefile`, model declaration, model registry and manifest.
 3. Add a reusable DSP utility library and deterministic offline unit tests.
 4. Build editable panel templates and a configurable module manifest schema.
 5. Offer an optional scripting/DSL workflow compiled outside the real-time
