@@ -183,7 +183,9 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
         inventory[f"{plugin}/{model}"] += 1
         schema = _source_bounds(root, plugin, model) if key in first_party else None
         schemas[mid] = schema
-        if key not in first_party and key not in reported_unknown:
+        if plugin in FIRST_PARTY and key not in first_party:
+            errors.append(f"{plugin}/{model}: model absent from checked-in first-party manifest")
+        elif key not in first_party and key not in reported_unknown:
             origin = "appears in a stock Cardinal patch template" if key in template_references else "is not in a checked-in first-party manifest"
             warning = f"{plugin}/{model}: {origin}; module availability and port/parameter bounds are unverified"
             (errors if strict_unknown else warnings).append(warning)

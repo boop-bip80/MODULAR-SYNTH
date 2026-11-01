@@ -102,6 +102,13 @@ class PatchInspectorTests(unittest.TestCase):
         self.assertFalse(report["ok"])
         self.assertTrue(any("Non-finite JSON" in err for err in report["errors"]))
 
+    def test_unknown_first_party_model_is_error(self) -> None:
+        self.patch["modules"][0]["model"] = "MorphVCOTypo"
+        report = self.check()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("model absent from checked-in first-party manifest" in err
+                            for err in report["errors"]))
+
     def test_unknown_third_party_is_warning_only_by_default(self) -> None:
         self.patch["modules"][0]["plugin"] = "ThirdPartyUnknown"
         self.patch["modules"][0]["model"] = "ImaginaryOsc"
