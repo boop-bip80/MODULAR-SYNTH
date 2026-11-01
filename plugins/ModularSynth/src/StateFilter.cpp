@@ -35,6 +35,7 @@ struct ModularSynthStateFilter : Module {
     };
 
     modular_synth::dsp::StateFilter voices[16];
+    int previousChannels = 0;
 
     ModularSynthStateFilter() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -57,6 +58,7 @@ struct ModularSynthStateFilter : Module {
     void onReset() override {
         for (auto& voice : voices)
             voice.reset();
+        previousChannels = 0;
     }
 
     void process(const ProcessArgs& args) override {
@@ -65,6 +67,13 @@ struct ModularSynthStateFilter : Module {
         channels = std::max(channels, inputs[RESONANCE_CV_INPUT].getChannels());
         channels = std::max(channels, inputs[DRIVE_CV_INPUT].getChannels());
         channels = std::min(channels, 16);
+
+        // Retire disappearing channels before writing outputs. Otherwise a
+        // re-expanded lane can emit stale integrator energy from a voice
+        // that was disconnected many samples earlier.
+        for (int c = channels; c < previousChannels; ++c)
+            voices[c].reset();
+        previousChannels = channels;
 
         outputs[LOWPASS_OUTPUT].setChannels(channels);
         outputs[BANDPASS_OUTPUT].setChannels(channels);

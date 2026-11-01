@@ -22,7 +22,7 @@ Up to **16 independent channels** are processed, following Rack's polyphonic-jac
 - Pure DSP code in `plugins/ModularSynth/src/StateFilter.hpp` can be compiled without Rack or plugin host dependencies.
 - The cutoff is limited to the lesser of 20 kHz or 45% of the current sample rate.
 - Extreme controls and non-finite inputs are sanitized; outputs are bounded to ±10 V.
-- Each polyphonic lane carries independent integrator history; states are reset on Rack reset and host sample-rate changes.
+- Each active polyphonic lane carries independent integrator history; states are reset on Rack reset, host sample-rate changes and when a lane is retired by shrinking cable polyphony. Re-expanding a cable therefore cannot reactivate an old filter tail.
 - State variables are bounded and tiny values flushed to zero to reduce denormal problems.
 - No audio-thread locks or dynamic allocations are performed by the core.
 
@@ -34,17 +34,15 @@ Up to **16 independent channels** are processed, following Rack's polyphonic-jac
 - Coefficient modulation is not independently smoothed, so abrupt control movement can be audible.
 - The high-resonance character is a digital SVF response, not an emulation of a commercial filter circuit.
 
-## Registration required for integration
+## Static registration and host-build status
 
-Other workstreams own the shared plugin registry and build configuration. To integrate the branch:
-
-1. Add to `plugins/ModularSynth/src/plugin.hpp`:
-   `extern Model* modelStateFilter;`
-2. In the first-party plugin initialization code, register it after Morph VCO:
-   `p->addModel(modelStateFilter);` (adapt `p` to the local plugin-instance variable)
-3. Include `src/StateFilter.cpp` in the first-party module build, and include `res/StateFilter.svg` in its resources.
-4. Add a `StateFilter` entry to `plugins/ModularSynth/plugin.json` with `Filter` and `Polyphonic` tags.
-5. Run the existing Cardinal plugin builds and host self-tests before merging.
+The integrated collection already declares `modelStateFilter` in
+`plugins/ModularSynth/src/plugin.hpp`, registers it in
+`plugins/plugins.cpp`, compiles `src/StateFilter.cpp` via `plugins/Makefile`,
+and includes the SVG and manifest entry. Source registration tests inspect
+these exact declarations. A successful **full Cardinal plugin build and live
+host audition** are still outstanding and must not be inferred from that
+static configuration.
 
 ## Reproducible DSP regression test
 

@@ -18,7 +18,7 @@ Status: First-party oscillator module in the `ModularSynth` static collection. T
 | Wave output | Morph oscillator at nominal ±5 V |
 | Sine output | Independent full-amplitude sine from the same phase accumulator |
 
-Each jack supports up to 16 Rack polyphony channels. Monophonic CV signals are broadcast to polyphonic lanes using the Rack port API. Each lane has its own persistent phase, shape smoothing and PWM smoothing.
+Each jack supports up to 16 Rack polyphony channels. Monophonic CV signals are broadcast to polyphonic lanes using the Rack port API. Each active lane has its own persistent phase, shape smoothing and PWM smoothing. When input polyphony shrinks, retired lanes are reset so re-expanding a cable does not resume frozen oscillator phases or previous shape controls; remaining active lanes stay phase-continuous.
 
 Frequency input is limited to a maximum of 45% of the sample rate, keeping the oscillator phase increment below Nyquist. The pitch helper clamps input to ±20 octaves before exponentiation, avoiding overflow on extreme CV. Invalid frequency or host sample rate produces silence; invalid pitch CV defaults to C4, morph to sine, and width to 50%.
 
