@@ -13,7 +13,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_DIR = ROOT / "plugins" / "ModularSynth" / "src"
-MODULES = ("MorphVCO", "StateFilter", "Macro8")
+MODULES = ("MorphVCO", "StateFilter", "Macro8", "StereoEcho")
 
 
 def _source(model: str) -> str:
@@ -112,6 +112,9 @@ class FirstPartyTooltipTests(unittest.TestCase):
         # Macro8 registers one indexed eight-knob bank and one morph-time knob.
         self.assertEqual(len(_config_calls(self.sources["Macro8"], "configParam")), 2)
         self.assertEqual(len(_config_calls(self.sources["Macro8"], "configOutput")), 1)
+        self.assertEqual(len(_config_calls(self.sources["StereoEcho"], "configParam")), 4)
+        self.assertEqual(len(_config_calls(self.sources["StereoEcho"], "configInput")), 5)
+        self.assertEqual(len(_config_calls(self.sources["StereoEcho"], "configOutput")), 2)
 
     def test_morph_octave_fine_and_percentage_knobs(self) -> None:
         octave = self.config("MorphVCO", "configParam", "OCTAVE_PARAM")
@@ -225,6 +228,58 @@ class FirstPartyTooltipTests(unittest.TestCase):
         self.assertEqual(morph[5], '" s"')
         live = self.config("Macro8", "configButton", "LIVE_PARAM")
         self.assertEqual(live[1], '"Return to live macro knobs"')
+
+    def test_stereo_echo_control_ranges_defaults_and_units(self) -> None:
+        time = self.config("StereoEcho", "configParam", "TIME_PARAM")
+        self.assertEqual(tuple(_number(v) for v in time[1:4]), (1, 1000, 250))
+        self.assertEqual(time[4:], ['"Echo time"', '" ms"'])
+        for identifier, low, high, default, name in (
+            ("FEEDBACK_PARAM", 0, 0.9, 0.35, "Feedback"),
+            ("MIX_PARAM", 0, 1, 0.4, "Wet mix"),
+            ("CROSSFEED_PARAM", 0, 1, 0.5, "Stereo ping-pong crossfeed"),
+        ):
+            args = self.check_percent_param("StereoEcho", identifier, low, high, default)
+            self.assertEqual(args[4], f'"{name}"')
+        # Feedback displays 35% initially and stops at 90%, not 100%.
+        self.assertAlmostEqual(0.35 * 100, 35, places=6)
+        self.assertAlmostEqual(0.9 * 100, 90, places=6)
+
+    def test_stereo_echo_cv_scaling_and_right_normalled_routing(self) -> None:
+        expected = {
+            "LEFT_INPUT": "Left audio input",
+            "RIGHT_INPUT": "Right audio input (uses left when unplugged)",
+            "TIME_CV_INPUT": "Echo time CV (additive 100 ms/V; accepts negative CV)",
+            "FEEDBACK_CV_INPUT": "Feedback CV (adds 10 percentage points/V)",
+            "MIX_CV_INPUT": "Wet mix CV (adds 10 percentage points/V)",
+        }
+        for identifier, label in expected.items():
+            self.assertEqual(
+                self.config("StereoEcho", "configInput", identifier),
+                [identifier, f'"{label}"']
+            )
+        src = _compact(self.sources["StereoEcho"])
+        self.assertRegex(
+            src, r"inputs\[RIGHT_INPUT\]\.getNormalPolyVoltage\(\s*"
+                 r"static_cast<float>\(left\), c\)"
+        )
+        self.assertIn("StereoEchoDSP::finite(timeCv) ? timeCv * 100.0 : 0.0", src)
+        self.assertIn("StereoEchoDSP::finite(feedbackCv) ? feedbackCv * 0.1 : 0.0", src)
+        self.assertIn("StereoEchoDSP::finite(mixCv) ? mixCv * 0.1 : 0.0", src)
+
+    def test_stereo_echo_output_metadata_matches_stereo_audio(self) -> None:
+        for identifier, name in (
+            ("LEFT_OUTPUT", "Left mixed wet/dry audio"),
+            ("RIGHT_OUTPUT", "Right mixed wet/dry audio"),
+        ):
+            self.assertEqual(
+                self.config("StereoEcho", "configOutput", identifier),
+                [identifier, f'"{name}"']
+            )
+        src = _compact(self.sources["StereoEcho"])
+        self.assertIn("outputs[LEFT_OUTPUT].setChannels(channels)", src)
+        self.assertIn("outputs[RIGHT_OUTPUT].setChannels(channels)", src)
+        self.assertIn("outputs[LEFT_OUTPUT].setVoltage(sample.left, c)", src)
+        self.assertIn("outputs[RIGHT_OUTPUT].setVoltage(sample.right, c)", src)
 
 
 if __name__ == "__main__":

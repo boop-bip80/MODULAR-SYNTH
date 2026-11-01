@@ -37,13 +37,13 @@ struct ModularSynthStereoEcho : Module {
         configParam(CROSSFEED_PARAM, 0.0f, 1.0f, 0.5f,
                     "Stereo ping-pong crossfeed", " %", 0.0f, 100.0f);
 
-        configInput(LEFT_INPUT, "Left audio");
-        configInput(RIGHT_INPUT, "Right audio (normalled from left)");
-        configInput(TIME_CV_INPUT, "Echo time (+100 ms per volt)");
-        configInput(FEEDBACK_CV_INPUT, "Feedback (+10% per volt)");
-        configInput(MIX_CV_INPUT, "Wet mix (+10% per volt)");
-        configOutput(LEFT_OUTPUT, "Left wet/dry");
-        configOutput(RIGHT_OUTPUT, "Right wet/dry");
+        configInput(LEFT_INPUT, "Left audio input");
+        configInput(RIGHT_INPUT, "Right audio input (uses left when unplugged)");
+        configInput(TIME_CV_INPUT, "Echo time CV (additive 100 ms/V; accepts negative CV)");
+        configInput(FEEDBACK_CV_INPUT, "Feedback CV (adds 10 percentage points/V)");
+        configInput(MIX_CV_INPUT, "Wet mix CV (adds 10 percentage points/V)");
+        configOutput(LEFT_OUTPUT, "Left mixed wet/dry audio");
+        configOutput(RIGHT_OUTPUT, "Right mixed wet/dry audio");
     }
 
     void onReset() override {
