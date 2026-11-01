@@ -26,11 +26,9 @@ dlfile="${PWD}/bin/innosetup-6.0.5.exe"
 innodir="${PWD}/build/innosetup-6.0.5"
 iscc="${innodir}/drive_c/InnoSetup/ISCC.exe"
 
-# download it
-if [ ! -f "${dlfile}" ]; then
-    # FIXME proper dl version
-    curl -L https://jrsoftware.org/download.php/is.exe -o "${dlfile}"
-fi
+# Fetch the same fixed release that the Wine prefix and cache paths expect.
+# The mutable latest-version URL can return an HTML page instead of a PE file.
+sh utils/fetch-inno-setup.sh "${dlfile}"
 
 # initialize wine
 if [ ! -d "${innodir}"/drive_c ]; then
