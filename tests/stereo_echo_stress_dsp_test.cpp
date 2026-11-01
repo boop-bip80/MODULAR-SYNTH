@@ -185,10 +185,14 @@ void testChangingSampleRateInvalidatesHistory() {
             if (i < minDelayFrames)
                 expect(sample.left == 0.0f && sample.right == 0.0f,
                        "sample-rate switch must invalidate all prior echo history");
-            if (i == minDelayFrames)
-                expect(std::abs(sample.left - 2.0f) < 1e-5f
+            if (i == minDelayFrames || i == minDelayFrames + 1) {
+                const double fractional = rate / 1000.0 - minDelayFrames;
+                const double expected = 2.0 * (i == minDelayFrames
+                    ? 1.0 - fractional : fractional);
+                expect(std::abs(sample.left - expected) < 1e-5
                        && sample.right == 0.0f,
-                       "new-rate first echo must arrive at exactly 1 ms");
+                       "first echo must respect fractional 1 ms delay at each rate");
+            }
         }
     }
     // Invalid rates must discard pending state and recover on next valid call.
