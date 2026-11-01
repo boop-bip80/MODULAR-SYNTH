@@ -40,18 +40,21 @@ struct ModularSynthMorphVCO : Module {
 
     ModularSynthMorphVCO() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
-        configParam(OCTAVE_PARAM, -4.0f, 4.0f, 0.0f, "Octave");
+        configParam(OCTAVE_PARAM, -4.0f, 4.0f, 0.0f, "Octave offset");
         getParamQuantity(OCTAVE_PARAM)->snapEnabled = true;
         configParam(FINE_PARAM, -100.0f, 100.0f, 0.0f, "Fine tune", " cents");
-        configParam(MORPH_PARAM, 0.0f, 1.0f, 0.0f, "Wave morph");
-        configParam(PULSE_WIDTH_PARAM, 0.05f, 0.95f, 0.5f, "Pulse width");
-        configParam(FM_DEPTH_PARAM, 0.0f, 1.0f, 0.0f, "Exponential FM depth");
-        configInput(PITCH_INPUT, "Pitch (1 V/oct)");
-        configInput(FM_INPUT, "Exponential FM (5 V / octave at full depth)");
-        configInput(MORPH_CV_INPUT, "Wave morph (0 to 10 V)");
-        configInput(PWM_CV_INPUT, "Pulse width modulation (10 V full span)");
-        configOutput(MORPH_OUTPUT, "Morph oscillator");
-        configOutput(SINE_OUTPUT, "Sine oscillator");
+        configParam(MORPH_PARAM, 0.0f, 1.0f, 0.0f,
+                    "Wave morph position", " %", 0.0f, 100.0f);
+        configParam(PULSE_WIDTH_PARAM, 0.05f, 0.95f, 0.5f,
+                    "Pulse width", " %", 0.0f, 100.0f);
+        configParam(FM_DEPTH_PARAM, 0.0f, 1.0f, 0.0f,
+                    "Exponential FM depth", " %", 0.0f, 100.0f);
+        configInput(PITCH_INPUT, "Pitch CV (1 V/oct)");
+        configInput(FM_INPUT, "Exponential FM CV (5 V/oct at 100% depth)");
+        configInput(MORPH_CV_INPUT, "Wave morph CV (10 V full span; adds to knob)");
+        configInput(PWM_CV_INPUT, "Pulse width CV (10 V full span; adds to knob)");
+        configOutput(MORPH_OUTPUT, "Morphed waveform audio (nominal +/-5 V)");
+        configOutput(SINE_OUTPUT, "Sine waveform audio (nominal +/-5 V)");
     }
 
     void onReset() override {

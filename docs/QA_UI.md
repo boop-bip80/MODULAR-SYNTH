@@ -181,3 +181,36 @@ This preflight **does not render the UI or establish WCAG conformance**.
 It cannot assess antialiasing, font size/weight in final pixels, labels over
 knobs, dynamic states, color-vision usability, hit areas or keyboard use.
 Review a real host screenshot and complete the manual UI checks above.
+
+## 9. Parameter, port and tooltip discoverability (manual)
+
+The following inventory is based on first-party Rack `configParam()`,
+`configInput()`, `configOutput()` metadata and the matching DSP scaling,
+not on a recorded plugin-tooltip screenshot.
+
+| Module | Knob tooltip/display conventions | Port and mode semantics |
+| --- | --- | --- |
+| **Morph VCO** | Snapped octave offset **−4 to +4**; fine tune **−100 to +100 cents**; wave morph **0–100%**; pulse width **5–95%**; FM depth **0–100%** | Pitch **1 V/oct**; FM **5 V/oct at full depth**; morph and PWM CV each add **0.1 normalized units per volt** to their knobs; morphed/sine audio outputs nominally **±5 V** |
+| **State Filter** | Cutoff shows actual Hz (about **20 Hz–20 kHz**, **1 kHz** default) despite log2 internal storage; resonance/drive show **0–100% of normalized control range** | Cutoff CV adds **1 octave per volt**; resonance/drive CV each add **0.1 normalized units per volt**; LP/BP/HP outputs are filtered audio |
+| **Macro8** | Eight macro positions show **0–100%**; snapshot transition time **0–5 s** represents **99.9% settling** | Each CV output selects **0 to +10 V** unipolar or **−5 to +5 V** bipolar; A–D buttons **store or recall according to mode**; LIVE returns to physical macro knobs |
+
+The percentages describe *control positions*, not linear acoustic
+gain, resonance Q, or the instantaneous CV when a snapshot is selected.
+Renamed Macro8 panel labels do not rename the underlying host parameter IDs.
+
+- [ ] Hover/right-click every first-party knob and jack in an actual plugin
+  build. Confirm these labels and units appear, default values are sensible,
+  and automation/DAW parameter lists remain understandable.
+- [ ] Change Macro8 CV polarity and Store/Recall mode, then verify that
+  the corresponding tooltip text and observed voltage/scene behavior agree.
+- [ ] Verify the percentage-formatted knobs preserve their underlying
+  normalized state and DAW automation values when an existing patch reopens.
+
+The automated source consistency checks are:
+
+```sh
+python3 -m unittest discover -s tests -p 'test_first_party_tooltips.py' -v
+```
+
+**Status:** not manually verified; passing these text/source checks does
+not prove actual tooltip rendering, localization or host accessibility.
