@@ -35,7 +35,5 @@ jobs:
       - name: Test Module Forge scaffolder
         run: python3 -m unittest discover -s tools/module-forge -p 'test_*.py' -v
 
-      - name: Compile and run Morph VCO standalone DSP smoke
-        run: |
-          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/morphvco_dsp_smoke.cpp -o /tmp/morphvco_dsp_smoke
-          /tmp/morphvco_dsp_smoke
+      - name: Compile and run all standalone DSP tests (three optimization profiles)
+        run: python3 -B tests/run_dsp_tests.py

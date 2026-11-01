@@ -20,6 +20,12 @@ permissions:
   contents: read
 
 env:
+  # Rack pins speexdsp to a GitLab commit that is also present in the official
+  # Xiph GitHub mirror. Use the mirror if GitLab returns upstream 502/504.
+  # Git's environment config propagates to nested recursive checkout calls.
+  GIT_CONFIG_COUNT: '1'
+  GIT_CONFIG_KEY_0: url.https://github.com/xiph/speexdsp.git.insteadOf
+  GIT_CONFIG_VALUE_0: https://gitlab.xiph.org/xiph/speexdsp.git
   CACHE_VERSION: 15
   CARDINAL_UNDER_WINE: 1
   CIBUILD: true
