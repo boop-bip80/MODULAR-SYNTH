@@ -76,22 +76,8 @@ void Engine_setRemoteDetails(Engine*, remoteUtils::RemoteDetails*);
 
 namespace app {
 
-// Visual-only cable decluttering. Keep the previous nonzero opacity so a
-// second toggle restores the user's preference instead of resetting it.
-void Cardinal_toggleCableVisibility()
-{
-	static float previousVisibleOpacity = 0.5f;
-
-	if (settings::cableOpacity > 0.f)
-	{
-		previousVisibleOpacity = settings::cableOpacity;
-		settings::cableOpacity = 0.f;
-	}
-	else
-	{
-		settings::cableOpacity = previousVisibleOpacity;
-	}
-}
+// Shared with Scene.cpp, where the implementation lives in the Rack library.
+void Cardinal_toggleCableVisibility();
 
 namespace menuBar {
 
