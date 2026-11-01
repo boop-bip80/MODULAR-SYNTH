@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+from contextlib import contextmanager
 import json
 import os
 import re
@@ -68,7 +69,7 @@ def _insert_makefile(source: str, slug: str) -> str:
     if "-DpluginInstance=pluginInstance__ModularSynth" not in source:
         raise IntegrationError("ModularSynth compiler namespace rule is missing")
     item = f"ModularSynth/src/{slug}.cpp"
-    if item in source:
+    if item.casefold() in source.casefold():
         raise IntegrationError(f"module source is already registered: {item}")
     matches = list(re.finditer(
         r"(?m)^PLUGIN_FILES \+= ModularSynth/src/[A-Za-z0-9]+\.cpp$", source))
@@ -158,7 +159,7 @@ def _insert_manifest(source: str, fragment: dict) -> str:
     ):
         raise IntegrationError("manifest modules must be objects with slugs")
     slug = fragment["slug"]
-    if any(item["slug"] == slug for item in modules):
+    if any(item["slug"].casefold() == slug.casefold() for item in modules):
         raise IntegrationError(f"duplicate module slug in manifest: {slug}")
     modules.append(fragment)
     return json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
@@ -200,6 +201,10 @@ def integration_plan(module_dir: Path, repo_root: Path) -> list[FileEdit]:
             raise IntegrationError(f"missing module destination directory: {relative.parent}")
         if target.exists() or target.is_symlink():
             raise IntegrationError(f"refusing to overwrite existing file: {relative}")
+        # Reject cross-platform path collisions even on case-sensitive Linux.
+        if any(entry.name.casefold() == target.name.casefold()
+               for entry in target.parent.iterdir()):
+            raise IntegrationError(f"case-insensitive file collision: {relative}")
         if target.resolve(strict=False) in generated_paths:
             raise IntegrationError("generated source is already inside target collection")
 
@@ -249,6 +254,83 @@ def plan_diff(edits: list[FileEdit], repo_root: Path) -> str:
     return "".join(parts)
 
 
+def _open_safe_parent(root: Path, target: Path) -> int | None:
+    """Hold a no-follow directory handle on POSIX to prevent parent link swaps.
+
+    Windows lacks the portable dir_fd/O_NOFOLLOW combination; its fallback
+    repeatedly validates the path and refuses direct target symlinks.
+    """
+    relative = _within_root(root, target)
+    if os.name != "posix" or not hasattr(os, "O_NOFOLLOW"):
+        return None
+    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_DIRECTORY", 0)
+    handle = os.open(root, flags)
+    try:
+        for component in relative.parts[:-1]:
+            new_handle = os.open(component, flags, dir_fd=handle)
+            os.close(handle)
+            handle = new_handle
+        return handle
+    except BaseException:
+        os.close(handle)
+        raise
+
+
+@contextmanager
+def _parent_handle(root: Path, target: Path):
+    handle = _open_safe_parent(root, target)
+    try:
+        yield handle
+    finally:
+        if handle is not None:
+            os.close(handle)
+
+
+def _current_at(edit: FileEdit, parent_fd: int | None) -> bytes | None:
+    if parent_fd is None:
+        return _current_bytes(edit)
+    try:
+        handle = os.open(
+            edit.path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(handle, "rb") as reader:
+        if not stat.S_ISREG(os.fstat(reader.fileno()).st_mode):
+            raise IntegrationError(f"not a regular file: {edit.path}")
+        return reader.read()
+
+
+def _publish_at(
+    source: Path, edit: FileEdit, parent_fd: int | None
+) -> None:
+    if edit.before is None:
+        if parent_fd is None:
+            os.link(source, edit.path)
+        else:
+            os.link(source, edit.path.name, dst_dir_fd=parent_fd,
+                    follow_symlinks=False)
+    elif parent_fd is None:
+        os.replace(source, edit.path)
+    else:
+        os.replace(source, edit.path.name, dst_dir_fd=parent_fd)
+
+
+def _undo_at(
+    edit: FileEdit, backup: Path | None, parent_fd: int | None
+) -> None:
+    if edit.before is None:
+        if parent_fd is None:
+            edit.path.unlink()
+        else:
+            os.unlink(edit.path.name, dir_fd=parent_fd)
+    elif backup is None:
+        raise IntegrationError("internal backup missing")
+    elif parent_fd is None:
+        os.replace(backup, edit.path)
+    else:
+        os.replace(backup, edit.path.name, dst_dir_fd=parent_fd)
+
+
 def _current_bytes(edit: FileEdit) -> bytes | None:
     if edit.path.is_symlink():
         raise IntegrationError(f"symlink appeared during apply: {edit.path}")
@@ -271,6 +353,7 @@ def apply_plan(edits: list[FileEdit], repo_root: Path) -> None:
     backups: list[Path | None] = []
     applied: list[int] = []
     rollback_failed = False
+    in_flight: int | None = None
     try:
         for index, edit in enumerate(edits):
             stage = transaction_dir / f"{index}.new"
@@ -287,27 +370,29 @@ def apply_plan(edits: list[FileEdit], repo_root: Path) -> None:
             stages.append(stage)
             backups.append(backup)
         for index, edit in enumerate(edits):
-            if _current_bytes(edit) != edit.before:
-                raise IntegrationError(f"concurrent file change: {edit.path}")
-            if edit.before is None:
-                # Hard link creation is atomic and fails if the target exists.
-                os.link(stages[index], edit.path)
-            else:
-                os.replace(stages[index], edit.path)
-            applied.append(index)
-    except Exception:
-        for index in reversed(applied):
+            with _parent_handle(root, edit.path) as parent_fd:
+                if _current_at(edit, parent_fd) != edit.before:
+                    raise IntegrationError(f"concurrent file change: {edit.path}")
+                in_flight = index
+                _publish_at(stages[index], edit, parent_fd)
+                applied.append(index)
+                in_flight = None
+    except BaseException:
+        # Include a possibly published-but-interrupted registry replacement.
+        # Do not assume an interrupted new-file hard link actually succeeded.
+        undo = list(applied)
+        if (in_flight is not None and edits[in_flight].before is not None
+                and in_flight not in undo):
+            undo.append(in_flight)
+        for index in reversed(undo):
             edit = edits[index]
             try:
                 # Do not undo someone else's changes made after this tool's write.
-                if _current_bytes(edit) != edit.after:
-                    rollback_failed = True
-                    continue
-                if edit.before is None:
-                    edit.path.unlink()
-                else:
-                    assert backups[index] is not None
-                    os.replace(backups[index], edit.path)
+                with _parent_handle(root, edit.path) as parent_fd:
+                    if _current_at(edit, parent_fd) != edit.after:
+                        rollback_failed = True
+                        continue
+                    _undo_at(edit, backups[index], parent_fd)
             except Exception:
                 rollback_failed = True
         if rollback_failed:
@@ -317,7 +402,11 @@ def apply_plan(edits: list[FileEdit], repo_root: Path) -> None:
         raise
     finally:
         if not rollback_failed:
-            shutil.rmtree(transaction_dir)
+            try:
+                shutil.rmtree(transaction_dir)
+            except OSError as exc:
+                print(f"Warning: transaction temp cleanup failed: {exc}",
+                      file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:

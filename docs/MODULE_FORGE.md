@@ -52,8 +52,9 @@ python3 -m unittest discover -s tools/module-forge \
 
 Tests cover generated structure, manifest identity, C++ model/panel references,
 refusal to overwrite user-edited files, and rejection of invalid identifiers.
-The integration tests also simulate registry updates, collisions, stale plans,
-and rollback after an injected write failure. These are not a substitute for compiling/loading the C++
+The integration tests also simulate registry updates, case-insensitive collisions,
+stale plans, mixed existing collections, parent symlinks, interruption, and
+rollback after an injected write failure. These are not a substitute for compiling/loading the C++
 module in Cardinal or testing its audio behavior.
 
 ## Dry-run integration (explicit opt-in)
@@ -75,8 +76,9 @@ The command prepares six edits: the new C++ source and SVG panel, plus
 `plugins/Makefile`, `plugins/plugins.cpp`,
 `plugins/ModularSynth/src/plugin.hpp`, and
 `plugins/ModularSynth/plugin.json`. It checks all anchors, model/slug identity,
-duplicate registration, destination collisions, UTF-8 and SVG validity, and
-source/header/compiler namespace compatibility before writing. It refuses to
+duplicate registration, case-insensitive destination collisions, UTF-8 and SVG
+validity, the exported C++ model symbol, and source/header/compiler namespace
+compatibility before writing. It refuses to
 overwrite existing source/panel files and refuses changes to unsupported loader
 layouts. It never edits the upstream `plugins/Cardinal` collection.
 
@@ -84,7 +86,10 @@ On `--apply`, all replacement content is staged first, then published one
 file at a time. Original registry files are backed up during the transaction.
 If publication fails, the tool attempts to restore every completed edit and
 remove only the new files it created. Multi-file operations cannot be fully
-atomic across process crashes; if restoration fails, it prints the retained
+atomic across process crashes. On POSIX the publisher holds no-follow directory
+handles to prevent parent symlinks from redirecting writes; on other platforms
+it rechecks paths but does not claim security against hostile concurrent edits.
+If restoration fails, it prints the retained
 `.module-forge-transaction-*` backup directory. Do not remove that directory
 until you have recovered the source. Do not run concurrent integration or make
 manual edits to the same files while applying.

@@ -65,6 +65,24 @@ class ModuleForgeTests(unittest.TestCase):
             self.assertTrue(any("invalid generated module" in error
                                 for error in check_module(destination)))
 
+    def test_reject_exported_model_symbol_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = generate("SafeModule", "Safe Module", Path(tmp))
+            source_path = destination / "SafeModule.cpp"
+            source_path.write_text(source_path.read_text().replace(
+                "modelMSSafeModule =", "modelWrongSymbol ="))
+            self.assertTrue(any("exported model symbol" in error
+                                for error in check_module(destination)))
+
+    def test_reject_missing_plugin_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = generate("SafeModule", "Safe Module", Path(tmp))
+            source_path = destination / "SafeModule.cpp"
+            source_path.write_text(source_path.read_text().replace(
+                '#include "plugin.hpp"', '#include "wrong.hpp"'))
+            self.assertTrue(any("include first-party" in error
+                                for error in check_module(destination)))
+
     def test_detect_changed_model_registration(self):
         with tempfile.TemporaryDirectory() as tmp:
             destination = generate("SafeModule", "Safe Module", Path(tmp))

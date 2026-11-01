@@ -215,8 +215,15 @@ def check_module(path: Path) -> list[str]:
             errors.append("manifest slug does not match directory")
         validate_name(manifest.get("name", ""))
         source = (path / f"{slug}.cpp").read_text(encoding="utf-8")
-        if f'createModel<MS{slug}Module, MS{slug}Widget>("{slug}")' not in source:
-            errors.append("source model registration does not match manifest")
+        model_pattern = re.compile(
+            rf'\bModel\s*\*\s*modelMS{re.escape(slug)}\s*=\s*'
+            rf'createModel\s*<\s*MS{re.escape(slug)}Module\s*,\s*'
+            rf'MS{re.escape(slug)}Widget\s*>\s*'
+            rf'\(\s*"{re.escape(slug)}"\s*\)')
+        if len(model_pattern.findall(source)) != 1:
+            errors.append("exported model symbol/registration does not match manifest")
+        if '#include "plugin.hpp"' not in source:
+            errors.append("source must include first-party plugin.hpp")
         if f'"res/{slug}.svg"' not in source:
             errors.append("source panel path does not match generated SVG")
         ElementTree.parse(path / f"{slug}.svg")

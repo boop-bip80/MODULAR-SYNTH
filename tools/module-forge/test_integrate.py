@@ -172,6 +172,99 @@ class IntegrationTests(unittest.TestCase):
                 apply_plan(plan, root)
             self.assertEqual(registered_files(root), before)
 
+    def test_cross_platform_casefold_file_collision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary))
+            (root / "plugins/ModularSynth/src/Orbitsine.cpp").write_text(
+                "another module", encoding="utf-8")
+            with self.assertRaises(IntegrationError):
+                integration_plan(module, root)
+
+    def test_casefold_manifest_slug_collision(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary))
+            path = root / "plugins/ModularSynth/plugin.json"
+            manifest = json.loads(path.read_text())
+            manifest["modules"].append({"slug": "orbitsine", "name": "Already Exists"})
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaises(IntegrationError):
+                integration_plan(module, root)
+
+    def test_three_existing_modules_are_preserved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary), LOADER_BRACED)
+            loader = root / "plugins/plugins.cpp"
+            loader.write_text(loader.read_text().replace(
+                "        p->addModel(modelMorphVCO);",
+                "        p->addModel(modelMorphVCO);\n"
+                "        p->addModel(modelSpectralFold);\n"
+                "        p->addModel(modelChaoticLFO);"))
+            header = root / "plugins/ModularSynth/src/plugin.hpp"
+            header.write_text(header.read_text() +
+                              "extern Model* modelSpectralFold;\n"
+                              "extern Model* modelChaoticLFO;\n")
+            makefile = root / "plugins/Makefile"
+            makefile.write_text(makefile.read_text().replace(
+                "PLUGIN_FILES += ModularSynth/src/MorphVCO.cpp",
+                "PLUGIN_FILES += ModularSynth/src/MorphVCO.cpp\n"
+                "PLUGIN_FILES += ModularSynth/src/SpectralFold.cpp\n"
+                "PLUGIN_FILES += ModularSynth/src/ChaoticLFO.cpp"))
+            manifest_path = root / "plugins/ModularSynth/plugin.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["modules"].extend([
+                {"slug": "SpectralFold", "name": "Spectral Fold"},
+                {"slug": "ChaoticLFO", "name": "Chaotic LFO"},
+            ])
+            manifest_path.write_text(json.dumps(manifest))
+            apply_plan(integration_plan(module, root), root)
+            names = [m["slug"] for m in json.loads(manifest_path.read_text())["modules"]]
+            self.assertEqual(names, ["MorphVCO", "SpectralFold", "ChaoticLFO", "OrbitSine"])
+            self.assertIn("modelMSOrbitSine", loader.read_text())
+            self.assertIn("modelChaoticLFO", loader.read_text())
+
+    def test_symlinked_destination_parent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary))
+            plan = integration_plan(module, root)
+            original = root / "plugins/ModularSynth/src"
+            moved = root / "plugins/ModularSynth/source-backup"
+            outside = root / "outside"
+            outside.mkdir()
+            original.rename(moved)
+            try:
+                try:
+                    original.symlink_to(outside, target_is_directory=True)
+                except (OSError, NotImplementedError):
+                    self.skipTest("directory symlink creation unavailable")
+                with self.assertRaises((IntegrationError, OSError)):
+                    apply_plan(plan, root)
+                self.assertEqual(list(outside.iterdir()), [])
+            finally:
+                if original.is_symlink():
+                    original.unlink()
+                if moved.exists():
+                    moved.rename(original)
+
+    def test_keyboard_interrupt_rolls_back(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary))
+            before = registered_files(root)
+            plan = integration_plan(module, root)
+            original_replace = os.replace
+            count = [0]
+
+            def interrupt_on_second_replace(source, target, **kwargs):
+                count[0] += 1
+                if count[0] == 2:
+                    raise KeyboardInterrupt()
+                return original_replace(source, target, **kwargs)
+
+            with mock.patch("integrate.os.replace",
+                            side_effect=interrupt_on_second_replace):
+                with self.assertRaises(KeyboardInterrupt):
+                    apply_plan(plan, root)
+            self.assertEqual(registered_files(root), before)
+
     def test_failure_during_apply_rolls_back_completed_writes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, module = fixture_root(Path(temporary))
@@ -180,11 +273,11 @@ class IntegrationTests(unittest.TestCase):
             original_replace = os.replace
             count = [0]
 
-            def fail_on_second_replace(source, target):
+            def fail_on_second_replace(source, target, **kwargs):
                 count[0] += 1
                 if count[0] == 2:
                     raise OSError("injected interruption")
-                return original_replace(source, target)
+                return original_replace(source, target, **kwargs)
 
             with mock.patch("integrate.os.replace", side_effect=fail_on_second_replace):
                 with self.assertRaises(OSError):
