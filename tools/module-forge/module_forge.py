@@ -123,6 +123,9 @@ PANEL_TEMPLATE = r'''<?xml version="1.0" encoding="UTF-8"?>
 INTEGRATION_TEMPLATE = '''# Integrating @@SLUG@@ into the ModularSynth collection
 
 Generated outputs are a reviewed starting point, not automatically installed modules.
+From the repository root, preview with
+`python3 tools/module-forge/integrate.py <output-parent>/@@SLUG@@ --repo-root .`;
+add `--apply` only after reviewing the complete diff.
 This workflow keeps the current self-contained Cardinal/ModularSynth architecture.
 
 1. Copy `@@SLUG@@.cpp` to `plugins/ModularSynth/src/@@SLUG@@.cpp`.
@@ -212,8 +215,15 @@ def check_module(path: Path) -> list[str]:
             errors.append("manifest slug does not match directory")
         validate_name(manifest.get("name", ""))
         source = (path / f"{slug}.cpp").read_text(encoding="utf-8")
-        if f'createModel<MS{slug}Module, MS{slug}Widget>("{slug}")' not in source:
-            errors.append("source model registration does not match manifest")
+        model_pattern = re.compile(
+            rf'\bModel\s*\*\s*modelMS{re.escape(slug)}\s*=\s*'
+            rf'createModel\s*<\s*MS{re.escape(slug)}Module\s*,\s*'
+            rf'MS{re.escape(slug)}Widget\s*>\s*'
+            rf'\(\s*"{re.escape(slug)}"\s*\)')
+        if len(model_pattern.findall(source)) != 1:
+            errors.append("exported model symbol/registration does not match manifest")
+        if '#include "plugin.hpp"' not in source:
+            errors.append("source must include first-party plugin.hpp")
         if f'"res/{slug}.svg"' not in source:
             errors.append("source panel path does not match generated SVG")
         ElementTree.parse(path / f"{slug}.svg")

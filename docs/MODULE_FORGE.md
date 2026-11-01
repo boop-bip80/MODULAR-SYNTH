@@ -52,8 +52,62 @@ python3 -m unittest discover -s tools/module-forge \
 
 Tests cover generated structure, manifest identity, C++ model/panel references,
 refusal to overwrite user-edited files, and rejection of invalid identifiers.
-These are generator tests, **not** a substitute for compiling/loading the C++
+The integration tests also simulate registry updates, case-insensitive collisions,
+stale plans, mixed existing collections, parent symlinks, interruption, and
+rollback after an injected write failure. These are not a substitute for compiling/loading the C++
 module in Cardinal or testing its audio behavior.
+
+## Dry-run integration (explicit opt-in)
+
+The scaffolder now has a separate **safe integration command**. It previews
+changes to the existing ModularSynth collection without modifying any file:
+
+```bash
+python3 tools/module-forge/integrate.py module-forge-output/OrbitSine --repo-root .
+```
+
+Review its complete unified diff. Only then apply the same validated plan:
+
+```bash
+python3 tools/module-forge/integrate.py module-forge-output/OrbitSine --repo-root . --apply
+```
+
+The command prepares six edits: the new C++ source and SVG panel, plus
+`plugins/Makefile`, `plugins/plugins.cpp`,
+`plugins/ModularSynth/src/plugin.hpp`, and
+`plugins/ModularSynth/plugin.json`. It checks all anchors, model/slug identity,
+duplicate registration, case-insensitive destination collisions, UTF-8 and SVG
+validity, the exported C++ model symbol, and source/header/compiler namespace
+compatibility before writing. It refuses to
+overwrite existing source/panel files and refuses changes to unsupported loader
+layouts. It never edits the upstream `plugins/Cardinal` collection.
+
+On `--apply`, all replacement content is staged first, then published one
+file at a time. Original registry files are backed up during the transaction.
+If publication fails, the tool attempts to restore every completed edit and
+remove only the new files it created. Multi-file operations cannot be fully
+atomic across process crashes. On POSIX the publisher holds no-follow directory
+handles to prevent parent symlinks from redirecting writes; on other platforms
+it rechecks paths but does not claim security against hostile concurrent edits.
+If restoration fails, it prints the retained
+`.module-forge-transaction-*` backup directory. Do not remove that directory
+until you have recovered the source. Do not run concurrent integration or make
+manual edits to the same files while applying.
+
+**Recovery and review:**
+
+1. Before applying, commit/stash unrelated work and inspect `git status`.
+2. After applying, inspect `git diff` and run tests/builds before committing.
+3. If the command refused, it should have left the project unchanged.
+4. If you need to undo a successful integration, review the exact changed paths
+   with `git diff -- plugins/Makefile plugins/plugins.cpp plugins/ModularSynth`;
+   restore only your intended changes from version control and remove only the
+   two generated module files you just introduced. Avoid broad resets or cleans.
+5. If a process crash left `.module-forge-transaction-*`, review the saved
+   `.bak` registry snapshots and current files before manually recovering.
+
+This tool is a developer convenience, not an installed-module manager or
+untrusted-code sandbox. Review generated C++ and artwork before `--apply`.
 
 ## Manual source integration
 
@@ -93,7 +147,12 @@ Its code demonstrates:
 Keep these constraints when replacing the starter with custom oscillators,
 filters or effects. Also add tests for pitch tracking, bounded levels, host
 sample rates and block sizes, reset, state serialization, CV extremes, NaN/Inf,
-16-channel behavior, and patch restore. Anti-aliasing for discontinuous waves,
+16-channel behavior, and patch restore. The repository's `Makefile.base.mk` requests GNU C++17; the generated source
+uses C++17 `std::clamp`. The HEADLESS fallback mirrors upstream Cardinal's
+minimal `ModuleWidget` port registration pattern (for example, `HostTime.cpp`).
+Still compile-check both regular and headless variants in CI before release.
+
+Anti-aliasing for discontinuous waves,
 oversampling and DSP CPU budgets require separate implementation and
 measurement; a sine starter does not solve those.
 
