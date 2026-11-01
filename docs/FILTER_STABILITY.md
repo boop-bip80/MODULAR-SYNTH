@@ -43,4 +43,19 @@ The test exits nonzero for any failed assertion and prints rate, voice, and fram
 
 Finite bounded output is a **numerical-safety** property, not a guarantee of click-free sound under hard modulation. The filter deliberately recomputes coefficients per sample and does not smooth abrupt frequency/resonance changes; fast CV can sound rough. Input saturation has no oversampling, so this test does not establish alias suppression or analog fidelity. This is not a CPU benchmark, long-term hardware soak, host/plugin integration test, or validation of audio-thread deadlines.
 
-Additional DSP core tests and actual listening tests are still valuable. The reproducible commands above describe executable assertions; see PR checks and execution logs for the toolchain-specific pass evidence.
+## Executed results (2026-11-01, Ubuntu GCC 13.3)
+
+The standalone test compiled with `-Wall -Wextra -Werror -pedantic` and ran to exit **0** in each profile:
+
+- `-O2`: **PASS** all cases.
+- `-O3 -ffast-math`: **PASS** all cases.
+- `-O1 -ffast-math -fsanitize=address,undefined`: **PASS** all cases. LeakSanitizer was disabled (`ASAN_OPTIONS=detect_leaks=0`) because sandbox process inspection is restricted; address and undefined-behavior instrumentation remained enabled.
+
+The three runs produced consistent numeric measurements:
+
+- **786,432** 16-voice CV stress process calls without invalid or out-of-range LP/BP/HP samples.
+- **0.00000000 V** maximum deviation between a selected lane in the polyphonic bank and its independent reference.
+- **0.000e+00**, **0.000e+00** integrator states following 30,000 quiet-input frames.
+- **0.00001022 V** maximum deviation during near-zero drive automation versus the drive=0 baseline (approximately **10.22 µV**), below the **0.001 V** assertion threshold.
+
+These are measured **core-level** regression results on one native runner, not a host/plugin QA or cross-platform certification. Additional DSP checks and actual listening tests remain valuable.
