@@ -1,6 +1,23 @@
 name: build
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+    tags: ['**']
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+# The large build matrix is for integration/release verification, not every
+# feature-branch push and pull request. Those run quality-baseline.yml.
+# Cancel obsolete main pushes but never cancel release tags or manual builds.
+concurrency:
+  group: build-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
 
 env:
   CACHE_VERSION: 15
@@ -19,6 +36,9 @@ env:
 
 jobs:
   linux:
+    # Release uploads need write access; all other jobs stay read-only.
+    permissions:
+      contents: write
     strategy:
       matrix:
         target: [aarch64, armhf, i686, riscv64, x86_64]
@@ -173,6 +193,9 @@ jobs:
             *.tar.xz
 
   macos:
+    # Release uploads need write access; all other jobs stay read-only.
+    permissions:
+      contents: write
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -308,6 +331,9 @@ jobs:
             *.tar.gz
 
   wasm:
+    # Release uploads need write access; all other jobs stay read-only.
+    permissions:
+      contents: write
     strategy:
       matrix:
         target: [simd, nosimd]
@@ -401,6 +427,9 @@ jobs:
             *.zip
 
   windows:
+    # Release uploads need write access; all other jobs stay read-only.
+    permissions:
+      contents: write
     strategy:
       matrix:
         target: [win32, win64]
@@ -547,6 +576,9 @@ jobs:
           make SYSDEPS=true -j $(nproc)
 
   source-tarball:
+    # Release uploads need write access; all other jobs stay read-only.
+    permissions:
+      contents: write
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4

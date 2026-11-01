@@ -1,6 +1,9 @@
 name: irc
 
-on: [push, pull_request]
+# Upstream-only IRC announcements should not create jobs on derivative forks.
+# Kept for historical upstream compatibility; on this fork, manual runs skip.
+on:
+  workflow_dispatch:
 
 jobs:
   notification:
