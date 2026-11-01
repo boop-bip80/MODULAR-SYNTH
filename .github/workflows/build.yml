@@ -569,12 +569,21 @@ jobs:
           zip -r -9 ../${{ github.event.repository.name }}-${{ matrix.target }}-${{ github.event.pull_request.number || env.SHA8 }}.zip $(ls | grep -e lv2 -e vst -e clap)
           popd
           zip -u -9 ${{ github.event.repository.name }}-${{ matrix.target }}-${{ github.event.pull_request.number || env.SHA8 }}.zip LICENSE README.md docs/*.* CardinalJACK.exe CardinalNative.exe
+      - name: Verify Windows release installer and ZIP
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          bash .github/workflows/scripts/verify-windows-release-artifacts.sh \
+            "${{ github.event.repository.name }}" \
+            "${{ matrix.target }}" \
+            "${{ github.event.pull_request.number || env.SHA8 }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.repository.name }}-${{ matrix.target }}-${{ github.event.pull_request.number || env.SHA8 }}
           path: |
-            Cardinal-*.exe
-            Cardinal-*.zip
+            Cardinal-${{ matrix.target }}-*-installer.exe
+            ${{ github.event.repository.name }}-${{ matrix.target }}-*.zip
+          if-no-files-found: ${{ startsWith(github.ref, 'refs/tags/') && 'error' || 'warn' }}
       - uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
@@ -582,9 +591,10 @@ jobs:
           name: ${{ github.ref_name }}
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
           files: |
-            Cardinal-*.exe
-            Cardinal-*.zip
+            Cardinal-${{ matrix.target }}-*-installer.exe
+            ${{ github.event.repository.name }}-${{ matrix.target }}-*.zip
 
   headless:
     runs-on: ubuntu-22.04
