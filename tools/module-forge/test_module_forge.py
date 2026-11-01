@@ -58,12 +58,19 @@ class ModuleForgeTests(unittest.TestCase):
             self.assertTrue(any("missing SafeModule.svg" in error
                                 for error in check_module(destination)))
 
+    def test_detect_invalid_svg(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = generate("SafeModule", "Safe Module", Path(tmp))
+            (destination / "SafeModule.svg").write_text("<svg><invalid></svg>")
+            self.assertTrue(any("invalid generated module" in error
+                                for error in check_module(destination)))
+
     def test_detect_changed_model_registration(self):
         with tempfile.TemporaryDirectory() as tmp:
             destination = generate("SafeModule", "Safe Module", Path(tmp))
             source_path = destination / "SafeModule.cpp"
             source = source_path.read_text().replace(
-                '"MFSafeModule")', '"NotTheModel")'
+                '"SafeModule")', '"NotTheModel")'
             )
             source_path.write_text(source)
             self.assertTrue(any("registration" in error
