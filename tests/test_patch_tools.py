@@ -56,6 +56,69 @@ class PatchInspectorTests(unittest.TestCase):
         report = self.check()
         self.assertTrue(report["ok"], report["errors"])
 
+    def test_all_registered_original_models_have_source_schemas(self) -> None:
+        manifest = json.loads(
+            (ROOT / "plugins" / "ModularSynth" / "plugin.json").read_text(encoding="utf-8")
+        )
+        slugs = [entry["slug"] for entry in manifest["modules"]]
+        self.assertTrue({"MorphVCO", "StateFilter", "Macro8"}.issubset(slugs))
+        for slug in slugs:
+            with self.subTest(model=slug):
+                source = ROOT / "plugins" / "ModularSynth" / "src" / f"{slug}.cpp"
+                self.assertTrue(source.is_file(), f"Missing source for {slug}")
+                schema = inspector._source_bounds(ROOT, "ModularSynth", slug)
+                self.assertIsNotNone(schema, f"Cannot derive port/parameter schema for {slug}")
+                self.assertGreaterEqual(schema["params"], 0)
+                self.assertGreaterEqual(schema["inputs"], 0)
+                self.assertGreaterEqual(schema["outputs"], 0)
+                self.assertEqual(
+                    len(schema["ranges"]), schema["params"],
+                    f"Missing declared parameter range evidence for {slug}",
+                )
+
+    def test_macro8_and_statefilter_source_bounds(self) -> None:
+        macro = inspector._source_bounds(ROOT, "ModularSynth", "Macro8")
+        filt = inspector._source_bounds(ROOT, "ModularSynth", "StateFilter")
+        self.assertIsNotNone(macro)
+        self.assertIsNotNone(filt)
+        self.assertEqual((macro["params"], macro["inputs"], macro["outputs"]), (23, 0, 8))
+        self.assertEqual(macro["ranges"][0], (0.0, 1.0))
+        self.assertEqual(macro["ranges"][22], (0.0, 1.0))
+        self.assertEqual((filt["params"], filt["inputs"], filt["outputs"]), (3, 4, 3))
+        self.assertEqual(filt["ranges"][1], (0.0, 1.0))
+
+    def test_morphing_state_pad_patch(self) -> None:
+        path = ROOT / "patches" / "examples" / "MODULAR_-_Morphing_State_Pad.vcv"
+        self.assertTrue(path.is_file())
+        result = inspector.inspect_patch(path, ROOT)
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["cables"], 9)
+        self.assertEqual(result["module_inventory"]["ModularSynth/MorphVCO"], 1)
+        self.assertEqual(result["module_inventory"]["ModularSynth/StateFilter"], 1)
+        self.assertEqual(result["module_inventory"]["ModularSynth/Macro8"], 1)
+        self.assertEqual(len(result["components"]), 2)  # TextEditor note is disconnected.
+        patch = json.loads(path.read_text(encoding="utf-8"))
+        macro = next(module for module in patch["modules"]
+                     if module["plugin"] == "ModularSynth" and module["model"] == "Macro8")
+        self.assertEqual(macro["data"]["macro8Version"], 1)
+        self.assertEqual(len(macro["data"]["snapshots"][0]), 8)
+        self.assertEqual(len(macro["data"]["snapshots"][1]), 8)
+        self.assertTrue(any("Macro8" in edge and "StateFilter" in edge for edge in result["graph"]))
+
+    def test_macro8_and_filter_reject_bad_values_or_ports(self) -> None:
+        self.patch["modules"][0]["model"] = "Macro8"
+        self.patch["modules"][0]["params"] = [{"id": 0, "value": 1.01}]
+        result = self.check()
+        self.assertFalse(result["ok"])
+        self.assertTrue(any("outside declared" in message for message in result["errors"]))
+        self.patch["modules"][0]["model"] = "StateFilter"
+        self.patch["modules"][0]["params"] = [{"id": 1, "value": 0.5}]
+        self.patch["cables"][0]["outputId"] = 3
+        result = self.check()
+        self.assertFalse(result["ok"])
+        self.assertTrue(any("outputs index 3 exceeds known count 3" in message
+                            for message in result["errors"]))
+
     def test_reject_out_of_range_param(self) -> None:
         self.patch["modules"][0]["params"][1]["value"] = 1.5
         report = self.check()

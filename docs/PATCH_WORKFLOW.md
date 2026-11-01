@@ -75,3 +75,44 @@ Open [`patches/examples/MODULAR_-_Morph_VCO_Performance.vcv`](../patches/example
 6. If new module identifiers, port definitions or parameter IDs change, add regression tests and update the example or document migration behavior.
 
 The validation script should remain **strict about what it knows and honest about what it cannot know**. Do not silence meaningful warnings by inventing module or port schema data.
+
+
+## Second example — Morphing State Pad
+
+Open [`patches/examples/MODULAR_-_Morphing_State_Pad.vcv`](../patches/examples/MODULAR_-_Morphing_State_Pad.vcv) in a fork build containing **all three** first-party models: `MorphVCO`, `StateFilter` and `Macro8`. An upstream Cardinal release or an older fork build without the models will not load this patch correctly.
+
+This performance-oriented patch combines the original Morph VCO, the three-mode trapezoidal-integrator State Filter and Macro8's eight controllable CV outputs/four-slot snapshot bank. Only three macro outputs are initially wired. The MIDI gate drives a stock Fundamental ADSR, the audio route goes through its stock VCA, and HostAudio2's stored gain is reduced to 0.30. No external samples, network resources or non-bundled plugins are required.
+
+| Source | Destination | Behavior |
+| --- | --- | --- |
+| `Cardinal/HostMIDI` output 0 | `ModularSynth/MorphVCO` input 0 | MIDI note pitch |
+| `Cardinal/HostMIDI` output 1 | `Fundamental/ADSR` input 4 | MIDI note gate |
+| `ModularSynth/Macro8` output 0 | `ModularSynth/MorphVCO` input 2 | Unipolar Shape macro CV |
+| `ModularSynth/Macro8` output 1 | `ModularSynth/StateFilter` input 2 | Unipolar Resonance macro CV |
+| `ModularSynth/Macro8` output 2 | `ModularSynth/StateFilter` input 3 | Unipolar Drive macro CV |
+| `ModularSynth/MorphVCO` output 0 | `ModularSynth/StateFilter` input 0 | Morphing oscillator into filter |
+| `ModularSynth/StateFilter` output 0 | `Fundamental/VCA-1` input 1 | Low-pass filtered audio |
+| `Fundamental/ADSR` output 0 | `Fundamental/VCA-1` input 0 | Gate envelope controls loudness |
+| `Fundamental/VCA-1` output 0 | `Cardinal/HostAudio2` input 0 | Controlled audio to the DAW |
+
+### Playing and morphing
+
+1. Route MIDI to the Cardinal Synth plugin and play sustained notes. No MIDI should mean the ADSR closes the VCA.
+2. Adjust Macro8's first three macro knobs, named **Shape**, **Resonance** and **Drive**. Each defaults to the 0-to-10 V output range; Morph VCO and State Filter scale these CV inputs internally. The macro knobs and defaults were chosen to avoid an excessive initial drive/resonance setting.
+3. Macro8 includes two stored example snapshots, **A** (soft) and **B** (brighter/more resonant). While in Recall mode, click A and B to hear the macros transition over the configured 1.0-second settling period. Use **LIVE** to return to the live knob values.
+4. To store your own sound, switch to Macro8 **Store** mode, set the macro knobs, click a snapshot button, and switch back to Recall. Confirm you understand the selected mode before replacing the example slots.
+5. The State Filter's low-pass output is intentionally used; you can experiment with band-pass/high-pass routing only after lowering monitoring level.
+
+### Validation and limitations
+
+- Source-backed schema assertions cover registered first-party models, including 5-parameter/4-input/2-output MorphVCO, 3-parameter/4-input/3-output StateFilter, and 23-parameter/0-input/8-output Macro8.
+- The inspector extracts literal parameter ranges, Rack button ranges, and the simple indexed bank definitions used by Macro8. Complex C++ config logic remains explicitly unverified.
+- The example stores Macro8's documented `macro8Version=1`, names and eight-value snapshot arrays so patch save/reopen can be manually checked.
+- **No listening test, DAW reload test or headless audio render is claimed here.** The graph and parameter bounds are structural only. After a successful fork build, verify MIDI note-on/note-off, snapshot recall and interpolation, gain safety, and project roundtrip in an actual DAW.
+
+To check this particular file:
+
+```sh
+python3 tools/patches/patch_inspector.py inspect patches/examples/MODULAR_-_Morphing_State_Pad.vcv
+python3 -m unittest discover -s tests -p 'test_patch_tools.py' -v
+```
