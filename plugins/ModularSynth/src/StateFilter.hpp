@@ -89,9 +89,13 @@ struct StateFilter {
         // Bypassed at drive=0 to preserve linear DC/low-frequency response.
         const double volts = finiteClamp(inputVoltage, 0.0, -20.0, 20.0);
         double x = volts / 5.0;
-        if (drive01 > 0.000001) {
+        if (drive01 > 0.0) {
             const double gain = 1.0 + 12.0 * drive01 * drive01;
-            x = std::tanh(gain * x) / std::tanh(gain);
+            const double shaped = std::tanh(gain * x) / std::tanh(gain);
+            // Crossfade through drive=0: the normalized tanh function does
+            // not converge to x as gain tends to 1, so abruptly switching
+            // from bypass would otherwise produce an audible gain jump.
+            x += drive01 * (shaped - x);
         }
 
         // Trapezoidal integrator coefficients. g is finite because the

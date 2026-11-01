@@ -28,6 +28,7 @@ Up to **16 independent channels** are processed, following Rack's polyphonic-jac
 
 ### Current limitations
 
+- The input drive uses a continuous dry/saturated crossfade near zero to prevent an abrupt gain jump.
 - The cutoff/resonance coefficients are recomputed sample-by-sample, making audio-rate CV modulation possible but consuming CPU (one tangent per channel/sample).
 - There is **no oversampling** or nonlinear zero-delay feedback; strong input drive can introduce aliasing.
 - Coefficient modulation is not independently smoothed, so abrupt control movement can be audible.

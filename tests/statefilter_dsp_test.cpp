@@ -130,6 +130,22 @@ void testControlBehaviour() {
         driveSum += std::abs(saturated.process(0.35, 48000.0, 400.0, 0.0, 1.0).low);
     }
     expect(driveSum > linearSum, "drive introduces bounded nonlinear gain/saturation");
+
+    // Prior behavior jumped approximately 31% between exactly zero drive
+    // and an infinitesimal positive value. Test continuity and progression.
+    StateFilter atZero, atTiny, atSmall, atLarger;
+    StateFilter::Sample zero{}, tiny{}, small{}, larger{};
+    for (int i = 0; i < 20000; ++i) {
+        zero = atZero.process(0.35, 48000.0, 400.0, 0.0, 0.0);
+        tiny = atTiny.process(0.35, 48000.0, 400.0, 0.0, 1e-5);
+        small = atSmall.process(0.35, 48000.0, 400.0, 0.0, 1e-4);
+        larger = atLarger.process(0.35, 48000.0, 400.0, 0.0, 1e-3);
+    }
+    expect(std::abs(tiny.low - zero.low) < 0.001f,
+           "drive transfer is continuous near zero");
+    expect(zero.low <= tiny.low + 0.00001f && tiny.low <= small.low + 0.00001f
+           && small.low <= larger.low + 0.00001f,
+           "near-zero drive progresses monotonically");
 }
 } // namespace
 
