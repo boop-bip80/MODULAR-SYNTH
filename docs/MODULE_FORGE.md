@@ -1,6 +1,6 @@
-# Module Forge — first-party module development (initial scaffolder)
+# Module Forge — first-party oscillator and effect scaffolding
 
-**Status:** first implementation, developer tooling only. This is not yet an
+**Status:** developer tooling with two starter variants, not a live module forge. This is not yet an
 in-app source editor, just-in-time DSP compiler, module hot loader, or standalone
 plugin exporter. The separate `plugins/ModularSynth` collection is the home
 for original modules; it is distinct from the upstream `plugins/Cardinal`
@@ -8,15 +8,18 @@ collection.
 
 ## What is available
 
-`tools/module-forge/module_forge.py` generates four files for an original
-Rack-compatible module:
+`tools/module-forge/module_forge.py` supports two Rack-compatible C++17 starters:
 
-- A C++ DSP/GUI starter with one 1 V/oct pitch input and a polyphonic sine
-  output, including sample-rate-safe phase integration, reset, and finite CV
-  handling.
-- A self-contained SVG panel.
-- A **single-module JSON fragment** for the `ModularSynth` manifest.
-- Integration steps listing the specific Cardinal build/registration changes.
+- **`--kind oscillator` (default, unchanged):** a four-file, 16-voice sine
+  oscillator with one 1 V/oct pitch input, continuous phase, reset, and
+  bounded frequency across host sample-rate changes.
+- **`--kind effect`:** a five-file stereo, 16-voice TPT one-pole low-pass
+  effect with left/right audio inputs and outputs, right-input normalled
+  from left, and 1 V/oct cutoff CV. Its generated `<Slug>.dsp.hpp` is a
+  Rack-independent, standard-library-only DSP core; `<Slug>.cpp` supplies
+  Rack module metadata and GUI/headless widgets.
+- Both generate an SVG panel, **single-module JSON manifest fragment**, and
+  `INTEGRATION.md` outlining the exact first-party build/registration edits.
 
 It creates a new directory and refuses to overwrite a preexisting generated
 module. No third-party modules are downloaded.
@@ -33,7 +36,19 @@ python3 tools/module-forge/module_forge.py new \
 python3 tools/module-forge/module_forge.py check module-forge-output/OrbitSine
 ```
 
-The output will be `module-forge-output/OrbitSine/`. Read the generated
+Generate a stereo low-pass starter with the same workflow:
+
+```bash
+python3 tools/module-forge/module_forge.py new \
+    --kind effect \
+    --slug StereoTPT \
+    --name "Stereo TPT" \
+    --out module-forge-output
+python3 tools/module-forge/module_forge.py check module-forge-output/StereoTPT
+```
+
+The outputs will be `module-forge-output/OrbitSine/` and
+`module-forge-output/StereoTPT/`. Read each generated
 `INTEGRATION.md` **before** moving source/artwork into
 `plugins/ModularSynth` or registering the model in the static loader.
 Generated sources are not automatically built or installed.
@@ -50,12 +65,16 @@ python3 -m unittest discover -s tools/module-forge \
     -p "test_*.py" -v
 ```
 
-Tests cover generated structure, manifest identity, C++ model/panel references,
-refusal to overwrite user-edited files, and rejection of invalid identifiers.
-The integration tests also simulate registry updates, case-insensitive collisions,
-stale plans, mixed existing collections, parent symlinks, interruption, and
-rollback after an injected write failure. These are not a substitute for compiling/loading the C++
-module in Cardinal or testing its audio behavior.
+Tests cover both deterministic variants, backward-compatible default oscillator
+output, manifest and port metadata, C++ model/panel/DSP header references,
+refusal to overwrite user-edited files, and invalid identifiers. Integration
+fixtures exercise ordinary and effect dry-runs and applies, header collisions,
+registry updates, case-insensitive collisions, stale plans, parent symlinks,
+interruption, and rollback after injected write failures.
+When a C++ compiler is available, `test_effect_core.py` also builds and
+executes a standalone C++17 probe against the generated Rack-free filter header:
+DC convergence, reset, impulse decay, 44.1/48/96 kHz, and nonfinite inputs.
+This does **not** compile or load the Rack/Cardinal module.
 
 ## Dry-run integration (explicit opt-in)
 
@@ -72,14 +91,16 @@ Review its complete unified diff. Only then apply the same validated plan:
 python3 tools/module-forge/integrate.py module-forge-output/OrbitSine --repo-root . --apply
 ```
 
-The command prepares six edits: the new C++ source and SVG panel, plus
+The command prepares **six edits for oscillators** (C++ source and SVG plus
+four collection registry files) or **seven for effects** (the same plus
+`plugins/ModularSynth/src/<Slug>.dsp.hpp`). The four registries are
 `plugins/Makefile`, `plugins/plugins.cpp`,
 `plugins/ModularSynth/src/plugin.hpp`, and
 `plugins/ModularSynth/plugin.json`. It checks all anchors, model/slug identity,
 duplicate registration, case-insensitive destination collisions, UTF-8 and SVG
 validity, the exported C++ model symbol, and source/header/compiler namespace
 compatibility before writing. It refuses to
-overwrite existing source/panel files and refuses changes to unsupported loader
+overwrite existing source, DSP header, or panel files and refuses changes to unsupported loader
 layouts. It never edits the upstream `plugins/Cardinal` collection.
 
 On `--apply`, all replacement content is staged first, then published one
@@ -102,7 +123,8 @@ manual edits to the same files while applying.
 4. If you need to undo a successful integration, review the exact changed paths
    with `git diff -- plugins/Makefile plugins/plugins.cpp plugins/ModularSynth`;
    restore only your intended changes from version control and remove only the
-   two generated module files you just introduced. Avoid broad resets or cleans.
+   two generated module files (oscillator) or three (effect, including the
+   `.dsp.hpp` header) you just introduced. Avoid broad resets or cleans.
 5. If a process crash left `.module-forge-transaction-*`, review the saved
    `.bak` registry snapshots and current files before manually recovering.
 
@@ -117,6 +139,7 @@ generated instructions assume the dedicated first-party collection:
 | Change | File |
 | --- | --- |
 | Add the module source | `plugins/ModularSynth/src/<Slug>.cpp` |
+| Add the Rack-free DSP header (effect only) | `plugins/ModularSynth/src/<Slug>.dsp.hpp` |
 | Install SVG artwork | `plugins/ModularSynth/res/<Slug>.svg` |
 | Add the source to the built-in object list | `plugins/Makefile` |
 | Declare the exported C++ model pointer | `plugins/ModularSynth/src/plugin.hpp` |
@@ -134,8 +157,9 @@ ABI, resource ownership and update-compatibility work.
 
 ## Audio and module conventions
 
-A newly generated sine oscillator is a *starter*, not a flagship DSP module.
-Its code demonstrates:
+Both variants are *starters*, not finished flagship DSP modules.
+
+The sine oscillator demonstrates:
 
 - 1 V/oct pitch conversion, referenced to middle C (261.625565 Hz at 0 V).
 - ±5 V peak sine output and up to the standard Rack 16 polyphonic channels.
@@ -144,7 +168,20 @@ Its code demonstrates:
 - A process callback without explicit heap allocation, locking, filesystem
   access, network use, logging, or synchronous UI work.
 
-Keep these constraints when replacing the starter with custom oscillators,
+The stereo effect demonstrates:
+
+- Two audio inputs and outputs, with right input normalled to left, and up to
+  16 polyphonic voices (including CV-polyphony expansion).
+- Cutoff offset in octaves and 1 V/oct CV, with nonfinite CV reset to 0 and
+  bounded tuning before frequency conversion.
+- A bilinear/TPT one-pole low-pass core in a reusable Rack-independent header,
+  with finite audio handling, reset, coefficient clamping to 5 Hz–0.45 ×
+  sample rate, and no dynamic allocation.
+- Separate per-voice left/right state so stereo paths and polyphonic voices
+  cannot contaminate one another. Recompute coefficients when the host's
+  sample rate changes; an audible patch test remains necessary.
+
+Keep these constraints when replacing the starters with custom oscillators,
 filters or effects. Also add tests for pitch tracking, bounded levels, host
 sample rates and block sizes, reset, state serialization, CV extremes, NaN/Inf,
 16-channel behavior, and patch restore. The repository's `Makefile.base.mk` requests GNU C++17; the generated source
@@ -162,15 +199,16 @@ indexes are part of patch compatibility, so never silently reorder them.
 
 ## Next Module Forge milestones
 
-1. Run generated-module compilation and host smoke tests automatically in CI.
-2. Provide an atomic command that integrates new modules with reviewed edits
-   to `plugins/Makefile`, model declaration, model registry and manifest.
-3. Add a reusable DSP utility library and deterministic offline unit tests.
-4. Build editable panel templates and a configurable module manifest schema.
-5. Offer an optional scripting/DSL workflow compiled outside the real-time
+1. Add generated-module regular and HEADLESS Cardinal compilation plus host
+   smoke tests in CI, once the full toolchain is available.
+2. Extend offline DSP tests with precise frequency-response, CPU/aliasing and
+   CV/polyphony regression cases; the Rack-independent TPT core is the first
+   example, not a shared DSP framework yet.
+3. Build editable panel templates and a configurable, validated module schema.
+4. Offer an optional scripting/DSL workflow compiled outside the real-time
    audio callback, with caching and trusted-module policies.
-6. Evaluate a separate development edition for external modules only after a
-   clear security and ABI design.
+5. Evaluate external modules only after a clear security, licensing and ABI
+   design.
 
 This project continues to inherit GPL-3.0-or-later obligations from Cardinal
 and relevant Rack components. All contributed code, sample assets and panel art

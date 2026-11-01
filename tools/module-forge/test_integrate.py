@@ -299,6 +299,82 @@ class IntegrationTests(unittest.TestCase):
                              error_output.getvalue())
             self.assertEqual(list(root.glob(".module-forge-transaction-*")), [])
 
+    def test_effect_dry_run_includes_header_and_is_read_only(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _ = fixture_root(Path(temporary), LOADER_BRACED)
+            effect = generate("StereoTPT", "Stereo TPT", root / "generated",
+                              kind="effect")
+            before = registered_files(root)
+            first = integration_plan(effect, root)
+            second = integration_plan(effect, root)
+            self.assertEqual(len(first), 7)
+            self.assertEqual(plan_diff(first, root), plan_diff(second, root))
+            self.assertIn("+++ b/plugins/ModularSynth/src/StereoTPT.dsp.hpp",
+                          plan_diff(first, root))
+            self.assertIn("p->addModel(modelMSStereoTPT)", plan_diff(first, root))
+            self.assertEqual(registered_files(root), before)
+            self.assertFalse(
+                (root / "plugins/ModularSynth/src/StereoTPT.dsp.hpp").exists())
+
+    def test_effect_apply_copies_header_and_registers_one_model(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _ = fixture_root(Path(temporary), LOADER_BRACED)
+            effect = generate("StereoTPT", "Stereo TPT", root / "generated",
+                              kind="effect")
+            apply_plan(integration_plan(effect, root), root)
+            header = root / "plugins/ModularSynth/src/StereoTPT.dsp.hpp"
+            cpp = root / "plugins/ModularSynth/src/StereoTPT.cpp"
+            self.assertEqual(header.read_bytes(),
+                             (effect / "StereoTPT.dsp.hpp").read_bytes())
+            self.assertIn('#include "StereoTPT.dsp.hpp"', cpp.read_text())
+            makefile = (root / "plugins/Makefile").read_text()
+            self.assertEqual(makefile.count(
+                "PLUGIN_FILES += ModularSynth/src/StereoTPT.cpp"), 1)
+            self.assertNotIn("StereoTPT.dsp.hpp", makefile)
+            manifest = json.loads(
+                (root / "plugins/ModularSynth/plugin.json").read_text())
+            self.assertEqual([item["slug"] for item in manifest["modules"]],
+                             ["MorphVCO", "StereoTPT"])
+            self.assertEqual(manifest["modules"][1]["tags"],
+                             ["Filter", "Polyphonic"])
+            self.assertEqual(
+                (root / "plugins/plugins.cpp").read_text().count(
+                    "p->addModel(modelMSStereoTPT);"), 1)
+            with self.assertRaises(IntegrationError):
+                integration_plan(effect, root)
+
+    def test_effect_header_collision_never_overwrites_user_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _ = fixture_root(Path(temporary))
+            effect = generate("StereoTPT", "Stereo TPT", root / "generated",
+                              kind="effect")
+            existing = root / "plugins/ModularSynth/src/stereotpt.DSP.hpp"
+            existing.write_text("important user header", encoding="utf-8")
+            before = registered_files(root)
+            with self.assertRaisesRegex(IntegrationError, "collision"):
+                integration_plan(effect, root)
+            self.assertEqual(existing.read_text(), "important user header")
+            self.assertEqual(before, registered_files(root))
+            self.assertFalse(
+                (root / "plugins/ModularSynth/src/StereoTPT.cpp").exists())
+
+    def test_effect_missing_or_symlinked_header_blocks_integration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _ = fixture_root(Path(temporary))
+            effect = generate("StereoTPT", "Stereo TPT", root / "generated",
+                              kind="effect")
+            core = effect / "StereoTPT.dsp.hpp"
+            before = registered_files(root)
+            core.unlink()
+            with self.assertRaises(IntegrationError):
+                integration_plan(effect, root)
+            self.assertEqual(registered_files(root), before)
+            if os.name != "nt":
+                core.symlink_to(effect / "StereoTPT.cpp")
+                with self.assertRaises(IntegrationError):
+                    integration_plan(effect, root)
+                self.assertEqual(registered_files(root), before)
+
 
 if __name__ == "__main__":
     unittest.main()

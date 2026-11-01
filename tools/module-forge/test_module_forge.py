@@ -94,6 +94,99 @@ class ModuleForgeTests(unittest.TestCase):
             self.assertTrue(any("registration" in error
                                 for error in check_module(destination)))
 
+    def test_default_kind_preserves_oscillator_output(self):
+        original = render_files("OrbitSine", "Orbit Sine")
+        explicit = render_files("OrbitSine", "Orbit Sine", kind="oscillator")
+        self.assertEqual(original, explicit)
+        self.assertEqual(len(original), 4)
+        self.assertNotIn("OrbitSine.dsp.hpp", original)
+        self.assertIn("phase[voice]", original["OrbitSine.cpp"])
+
+    def test_effect_generation_validation_and_port_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = generate("StereoTPT", "Stereo TPT", Path(tmp),
+                                   kind="effect")
+            self.assertEqual(check_module(destination), [])
+            self.assertEqual(len(list(destination.iterdir())), 5)
+            manifest = json.loads((destination / "StereoTPT.module.json").read_text())
+            self.assertEqual(manifest["slug"], "StereoTPT")
+            self.assertEqual(manifest["tags"], ["Filter", "Polyphonic"])
+            source = (destination / "StereoTPT.cpp").read_text()
+            self.assertIn('enum InputIds { LEFT_INPUT, RIGHT_INPUT, CUTOFF_CV_INPUT, NUM_INPUTS }', source)
+            self.assertIn('enum OutputIds { LEFT_OUTPUT, RIGHT_OUTPUT, NUM_OUTPUTS }', source)
+            self.assertIn('configInput(CUTOFF_CV_INPUT, "Cutoff modulation (1 V/oct)")', source)
+            self.assertIn('getPolyVoltage(voice) : left', source)
+            self.assertIn('setChannels(voices)', source)
+            self.assertIn('#include "StereoTPT.dsp.hpp"', source)
+            core = (destination / "StereoTPT.dsp.hpp").read_text()
+            self.assertIn("namespace moduleforge", core)
+            self.assertIn("struct MSStereoTPTOnePole", core)
+            self.assertNotIn('#include "rack.hpp"', core)
+            self.assertIn("StereoTPT.dsp.hpp", (destination / "INTEGRATION.md").read_text())
+
+    def test_effect_generation_is_deterministic(self):
+        left = render_files("TidalLP", "Tidal LP", kind="effect")
+        right = render_files("TidalLP", "Tidal LP", kind="effect")
+        self.assertEqual(left, right)
+        self.assertEqual(set(left), {
+            "TidalLP.cpp", "TidalLP.dsp.hpp", "TidalLP.svg",
+            "TidalLP.module.json", "INTEGRATION.md"})
+        self.assertNotIn("@@SLUG@@", "".join(left.values()))
+
+    def test_reject_unknown_kind_before_writing(self):
+        with self.assertRaisesRegex(ValueError, "kind"):
+            render_files("SafeEffect", "Safe Effect", kind="invalid")
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "kind"):
+                generate("SafeEffect", "Safe Effect", Path(tmp), kind="other")
+            self.assertFalse((Path(tmp) / "SafeEffect").exists())
+
+    def test_effect_missing_header_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = generate("StereoTPT", "Stereo TPT", Path(tmp),
+                                   kind="effect")
+            (destination / "StereoTPT.dsp.hpp").unlink()
+            self.assertTrue(any("missing or symlinked StereoTPT.dsp.hpp" in e
+                                for e in check_module(destination)))
+
+    def test_effect_header_symbol_tamper_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = generate("StereoTPT", "Stereo TPT", Path(tmp),
+                                   kind="effect")
+            core = destination / "StereoTPT.dsp.hpp"
+            core.write_text(core.read_text().replace(
+                "struct MSStereoTPTOnePole", "struct AnotherSymbol"))
+            self.assertTrue(any("header symbol" in e
+                                for e in check_module(destination)))
+
+    def test_effect_source_and_manifest_tamper_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = generate("StereoTPT", "Stereo TPT", Path(tmp),
+                                   kind="effect")
+            source = destination / "StereoTPT.cpp"
+            source.write_text(source.read_text().replace(
+                '#include "StereoTPT.dsp.hpp"', '#include "not_the_header.hpp"'))
+            self.assertTrue(any("must include StereoTPT.dsp.hpp" in e
+                                for e in check_module(destination)))
+            source.write_text(render_files("StereoTPT", "Stereo TPT",
+                                           kind="effect")["StereoTPT.cpp"])
+            fragment = destination / "StereoTPT.module.json"
+            payload = json.loads(fragment.read_text())
+            payload["tags"] = ["Utility"]
+            fragment.write_text(json.dumps(payload))
+            self.assertTrue(any("effect manifest" in e
+                                for e in check_module(destination)))
+
+    def test_effect_refuses_to_overwrite_user_dsp_edits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = generate("StereoTPT", "Stereo TPT", Path(tmp),
+                                   kind="effect")
+            core = destination / "StereoTPT.dsp.hpp"
+            core.write_text("// custom DSP, do not overwrite")
+            with self.assertRaises(FileExistsError):
+                generate("StereoTPT", "Stereo TPT", Path(tmp), kind="effect")
+            self.assertEqual(core.read_text(), "// custom DSP, do not overwrite")
+
 
 if __name__ == "__main__":
     unittest.main()
