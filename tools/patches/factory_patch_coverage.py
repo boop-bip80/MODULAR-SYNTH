@@ -504,6 +504,24 @@ def _check_dual_envelope_pulse_roles(
     return False
 
 
+def _matches_free_lfo_rate(log2_hz: object, expected_hz: float) -> bool:
+    """Bound saved ClockedLFO RATE_PARAM0 before exponentiating.
+
+    Source configParam(RATE_PARAM, -6.0f, 4.0f, ...) defines the finite
+    permitted knob domain. Compare the numeric range before math.isfinite:
+    an untrusted arbitrarily large Python integer could itself overflow
+    during an eager int-to-float conversion by math.isfinite.
+    """
+    if type(log2_hz) not in (int, float):
+        return False
+    if not -6.0 <= log2_hz <= 4.0:
+        return False
+    if not math.isfinite(log2_hz):
+        return False
+    return math.isclose(2.0 ** log2_hz, expected_hz,
+                        rel_tol=0.0, abs_tol=1e-4)
+
+
 def _check_macro_snapshots(modules_by_id: dict[int, dict],
                            names_prefix: tuple[str, ...],
                            populated_count: int) -> bool:
@@ -626,11 +644,8 @@ def analyze(root: Path = ROOT, examples_dir: Path | None = None) -> dict:
                 lfo = lfos[0]
                 params = {p["id"]: p["value"] for p in lfo.get("params", [])}
                 rate_log2 = params.get(0)
-                rate_ok = (isinstance(rate_log2, (int, float))
-                           and not isinstance(rate_log2, bool)
-                           and math.isclose(2.0 ** rate_log2,
-                                            spec.free_lfo_rate_hz,
-                                            rel_tol=0.0, abs_tol=1e-4))
+                rate_ok = _matches_free_lfo_rate(
+                    rate_log2, spec.free_lfo_rate_hz)
                 clock_or_reset = any(
                     cable["inputModuleId"] == lfo["id"]
                     and cable["inputId"] in (1, 2)

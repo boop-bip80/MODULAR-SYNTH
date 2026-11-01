@@ -283,6 +283,27 @@ class CinematicPulseScoreTests(unittest.TestCase):
                     "expected free-running LFO" in err for err in result["errors"]
                 ), result["errors"])
 
+    def test_extreme_or_nonfinite_saved_lfo_rate_rejects_gracefully(self) -> None:
+        # Exercise the guard directly: structural inspection would normally
+        # reject malformed/range-breaking JSON *before* this coverage branch.
+        for value in (1e308, -1e308, float("inf"), float("-inf"),
+                      float("nan"), 10 ** 1000, True, "huge", None):
+            with self.subTest(value=repr(value)):
+                self.assertFalse(coverage._matches_free_lfo_rate(value, 0.8))
+        self.assertTrue(coverage._matches_free_lfo_rate(
+            -0.3219280948873623, 0.8))
+
+        # Also prove real saved JSON fails with a report, not OverflowError.
+        patch = self.source()
+        lfo = self.unit(patch, "ModularSynth", "ClockedLFO")
+        next(p for p in lfo["params"] if p["id"] == 0)["value"] = 1e308
+        self.write(patch)
+        report = self.analyze()
+        self.assertFalse(report["ok"])
+        self.assertTrue(report["errors"])
+        self.assertTrue(any("ClockedLFO" in error or "free-running LFO" in error
+                            for error in report["errors"]), report["errors"])
+
     def test_changed_lfo_free_rate_breaks_documented_08_hz(self) -> None:
         p = self.source()
         lfo = self.unit(p, "ModularSynth", "ClockedLFO")
