@@ -33,8 +33,8 @@
     <circle cx="40" cy="215" r="16"/><circle cx="113" cy="215" r="16"/>
     <circle cx="187" cy="215" r="16"/><circle cx="260" cy="215" r="16"/>
   </g>
-  <rect x="177" y="246" width="83" height="41" rx="9" fill="#29233C" stroke="#765BA9"/>
-  <g stroke="#755D9E" stroke-width="1.1" fill="#27213F">
+  <rect x="177" y="246" width="83" height="41" rx="9" fill="#29233C" stroke="#8267B5"/>
+  <g stroke="#8169AA" stroke-width="1.1" fill="#27213F">
     <circle cx="34" cy="329" r="17"/><circle cx="91" cy="329" r="17"/>
     <circle cx="148" cy="329" r="17"/><circle cx="205" cy="329" r="17"/>
     <circle cx="262" cy="329" r="17"/>

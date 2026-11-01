@@ -72,7 +72,7 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("UNKNOWN TEXT MACRO 8 #F6F2FF", result.stdout)
         self.assertIn("gradient-stop swatches", result.stdout)
         self.assertIn("not local contrast", result.stdout)
-        self.assertIn("WARN SVG OUTLINE", result.stdout)
+        self.assertNotIn("WARN SVG OUTLINE", result.stdout)
         self.assertIn("no rendered contrast", result.stdout)
         self.assertNotIn("MEASURED TEXT", result.stdout)
 
@@ -96,14 +96,24 @@ class PanelContrastTests(unittest.TestCase):
                       result.stdout)
         self.assertIn("low text", result.stdout)
 
-    def test_actual_solid_svg_outline_swatches_are_quantified(self) -> None:
+    def test_current_decorative_outlines_meet_advisory(self) -> None:
         result = self.run_cli(REPO)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("SVG OUTLINE", result.stdout)
-        self.assertIn("advisory 3:1", result.stdout)
-        self.assertIn("low outline swatches", result.stdout)
+        self.assertIn("SVG OUTLINE #61768F vs fill #20243B: 3.27:1 (x3", result.stdout)
+        self.assertIn("SVG OUTLINE #8169AA vs fill #27213F: 3.30:1 (x5", result.stdout)
+        self.assertIn("SVG OUTLINE #8267B5 vs fill #29233C: 3.25:1 (x1", result.stdout)
+        self.assertIn("0 low outline swatches", result.stdout)
         strict = self.run_cli(REPO, "--fail-on-low-contrast")
+        self.assertEqual(strict.returncode, 0, strict.stdout + strict.stderr)
+
+    def test_degraded_snapshot_ring_still_triggers_strict_warning(self) -> None:
+        root = self.fixture()
+        source = root / "plugins/ModularSynth/res/Macro8.svg"
+        self.replace_once(source, 'stroke="#8169AA"', 'stroke="#755D9E"')
+        strict = self.run_cli(root, "--fail-on-low-contrast")
         self.assertEqual(strict.returncode, 2, strict.stdout + strict.stderr)
+        self.assertIn("WARN SVG OUTLINE #755D9E vs fill #27213F: 2.77:1 (x5",
+                      strict.stdout)
 
     def test_missing_svg_is_a_fatal_audit_error(self) -> None:
         root = self.fixture()

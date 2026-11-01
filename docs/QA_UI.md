@@ -156,6 +156,19 @@ below **4.5:1** for small text and **3:1** for SVG control outlines as
 **advisory warnings**. Use `--fail-on-low-contrast` to turn those measured
 warnings into exit status 2; the default is report-only.
 
+For the original panel SVGs, the source-swatches of the three Morph VCO
+knob surrounds, five Macro8 snapshot-button rings, and Macro8 store-mode
+switch rim were adjusted to approximately **3.27:1**, **3.30:1** and
+**3.25:1**, respectively, against their adjacent flat circle/rect fills.
+The source-level check should now complete successfully in strict mode:
+
+```sh
+python3 tools/ui-check/contrast_audit.py --fail-on-low-contrast
+```
+
+These numbers measure SVG decorative fill/stroke colors, **not** the
+actual Rack widget controls after drawing/compositing.
+
 **Important uncertainty:** The current SVG panels use gradient/layered
 backgrounds. The tool marks the actual label underlay **UNKNOWN** and
 may report contrast against known gradient *stop swatches* only as
