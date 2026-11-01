@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 struct ModularSynthMorphVCO : Module {
     enum ParamIds {
@@ -97,9 +98,14 @@ struct ModularSynthMorphVCO : Module {
 
 #ifndef HEADLESS
 struct ModularSynthMorphVCOWidget : ModuleWidget {
+    std::shared_ptr<Font> labelFont;
+
     explicit ModularSynthMorphVCOWidget(ModularSynthMorphVCO* const module) {
         setModule(module);
         setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/MorphVCO.svg")));
+        // Existing Cardinal modules use this bundled, known font. Keep a
+        // real Font handle rather than assuming NanoVG font ID zero exists.
+        labelFont = APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
 
         addChild(createWidget<ScrewSilver>(Vec(0.0f, 0.0f)));
         addChild(createWidget<ScrewSilver>(Vec(box.size.x - RACK_GRID_WIDTH, 0.0f)));
@@ -135,7 +141,9 @@ struct ModularSynthMorphVCOWidget : ModuleWidget {
     void draw(const DrawArgs& args) override {
         ModuleWidget::draw(args);
 
-        nvgFontFaceId(args.vg, 0);
+        if (!labelFont)
+            return;
+        nvgFontFaceId(args.vg, labelFont->handle);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg, nvgRGB(0xF3, 0xF1, 0xFF));
         nvgFontSize(args.vg, 17.0f);
