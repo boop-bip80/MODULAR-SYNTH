@@ -13,6 +13,9 @@ class MappingError(ValueError):
     """A Macro8 source cable conflicts with a known source port contract."""
 
 
+CLOCKED_LFO_CONTRACT = "modular-synth-v2-clockedlfo-inputs-v1"
+
+
 class InputSpec(NamedTuple):
     enum: str
     label: str
@@ -25,6 +28,18 @@ class InputSpec(NamedTuple):
 # automation or a direct cable to a Rack ParamId.
 FIRST_PARTY_INPUTS: dict[str, tuple[InputSpec, ...]] = {
     "Macro8": (),
+    "ClockedLFO": (
+        InputSpec("RATE_CV_INPUT", "Free-rate CV (1 V/oct)",
+                  "cv", (0, "Free-run frequency")),
+        InputSpec("CLOCK_INPUT", "External tempo pulse (2 V rising threshold)",
+                  "cv"),
+        InputSpec("RESET_INPUT", "Phase reset trigger (2 V rising threshold)",
+                  "cv"),
+        InputSpec("PHASE_CV_INPUT", "Output phase CV (10 V per cycle)",
+                  "cv", (2, "Output phase offset")),
+        InputSpec("WIDTH_CV_INPUT", "Pulse width CV (10 V full range)",
+                  "cv", (3, "Pulse width")),
+    ),
     "MorphVCO": (
         InputSpec("PITCH_INPUT", "Pitch CV (1 V/oct)", "cv"),
         InputSpec("FM_INPUT", "Exponential FM CV (5 V/oct at 100% depth)", "cv"),
@@ -56,7 +71,8 @@ FIRST_PARTY_INPUTS: dict[str, tuple[InputSpec, ...]] = {
 }
 
 
-def _destination(module: dict, input_id: int) -> dict:
+def _destination(module: dict, input_id: int, *,
+                 clocked_lfo_known: bool) -> dict:
     plugin, model = module["plugin"], module["model"]
     result = {
         "moduleId": module["id"],
@@ -67,7 +83,8 @@ def _destination(module: dict, input_id: int) -> dict:
         "inputLabel": None,
         "modulatesParameter": None,
     }
-    if plugin != "ModularSynth" or model not in FIRST_PARTY_INPUTS:
+    if (plugin != "ModularSynth" or model not in FIRST_PARTY_INPUTS
+            or (model == "ClockedLFO" and not clocked_lfo_known)):
         return result
     ports = FIRST_PARTY_INPUTS[model]
     if input_id >= len(ports):
@@ -83,7 +100,8 @@ def _destination(module: dict, input_id: int) -> dict:
     return result
 
 
-def derive_control_mappings(patch: dict, macro8: list[dict]) -> list[dict]:
+def derive_control_mappings(patch: dict, macro8: list[dict], *,
+                            clocked_lfo_known: bool = True) -> list[dict]:
     """Map only direct saved Macro8 output cables to input ports.
 
     Call after the patch/module/cable graph and Macro8 state are validated.
@@ -117,7 +135,8 @@ def derive_control_mappings(patch: dict, macro8: list[dict]) -> list[dict]:
                 "range": controller["ranges"][output_id],
             },
             "destination": _destination(
-                modules[cable["inputModuleId"]], cable["inputId"]),
+                modules[cable["inputModuleId"]], cable["inputId"],
+                clocked_lfo_known=clocked_lfo_known),
         })
     routes.sort(key=lambda route: (
         route["source"]["moduleId"], route["source"]["outputId"],
