@@ -196,6 +196,7 @@ not on a recorded plugin-tooltip screenshot.
 | **Morph VCO** | Snapped octave offset **−4 to +4**; fine tune **−100 to +100 cents**; wave morph **0–100%**; pulse width **5–95%**; FM depth **0–100%** | Pitch **1 V/oct**; FM **5 V/oct at full depth**; morph and PWM CV each add **0.1 normalized units per volt** to their knobs; morphed/sine audio outputs nominally **±5 V** |
 | **State Filter** | Cutoff shows actual Hz (about **20 Hz–20 kHz**, **1 kHz** default) despite log2 internal storage; resonance/drive show **0–100% of normalized control range** | Cutoff CV adds **1 octave per volt**; resonance/drive CV each add **0.1 normalized units per volt**; LP/BP/HP outputs are filtered audio |
 | **Macro8** | Eight macro positions show **0–100%**; snapshot transition time **0–5 s** represents **99.9% settling** | Each CV output selects **0 to +10 V** unipolar or **−5 to +5 V** bipolar; A–D buttons **store or recall according to mode**; LIVE returns to physical macro knobs |
+| **StereoEcho** | Echo time **1–1000 ms** (**250 ms** default); feedback **0–90%** (**35%** default); wet mix **0–100%** (**40%** default); ping-pong crossfeed **0–100%** (**50%** default) | Unpatched **right input uses left audio**; signed TIME CV adds **100 ms/V**, feedback and wet-mix CV add **0.1 normalized units (10 percentage points) per volt**; L/R outputs are mixed wet/dry audio |
 
 The percentages describe *control positions*, not linear acoustic
 gain, resonance Q, or the instantaneous CV when a snapshot is selected.
@@ -233,6 +234,11 @@ none are promoted to a contrast pass by inspecting gradient stops.
   once in the browser and displays a correctly scaled 16 HP panel.
 - [ ] Inspect TIME, FEEDBACK, DRY/WET, PING-PONG knobs; IN L/R, TIME/FB/MIX CV
   inputs; L/R outputs and all painted labels at normal and HiDPI zoom.
+- [ ] Hover these StereoEcho knobs and jacks; verify their units,
+  250 ms/35%/40%/50% defaults, maximum feedback 90%, and additive CV
+  descriptions in a real Rack/DAW tooltip, including negative TIME CV.
+- [ ] Check unpatched RIGHT follows LEFT and patching RIGHT overrides the
+  normalled input; confirm the L/R mixed wet/dry output tooltips are clear.
 - [ ] Patch mono-to-stereo, explicit left/right, all three CV controls and
   host outputs; verify port mapping, normalled right input and controls.
 - [ ] Save/reopen both a standalone patch and a DAW project with StereoEcho
