@@ -10,11 +10,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
 
 namespace modular_synth {
 namespace dsp {
 
 struct MorphOscillator {
+    static_assert(sizeof(float) == 4 && sizeof(double) == 8
+                  && std::numeric_limits<float>::is_iec559
+                  && std::numeric_limits<double>::is_iec559,
+                  "Morph VCO DSP requires IEEE-754 float and double");
     static constexpr double kTwoPi = 6.283185307179586476925286766559;
     double phase = 0.0;
     float smoothedMorph = 0.0f;
@@ -25,6 +32,30 @@ struct MorphOscillator {
         float sine;
         float morph;
     };
+
+    // Bitwise IEEE-754 checks remain reliable even if a standalone client
+    // compiles this header with -ffast-math/-ffinite-math-only. Cardinal
+    // currently re-enables non-finite checks, but the DSP has no such
+    // compile-flag requirement.
+    static bool finite(double value) noexcept {
+        std::uint64_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return (bits & UINT64_C(0x7ff0000000000000)) != UINT64_C(0x7ff0000000000000);
+    }
+
+    static bool finite(float value) noexcept {
+        std::uint32_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return (bits & UINT32_C(0x7f800000)) != UINT32_C(0x7f800000);
+    }
+
+    // Rack's 1 V/oct convention uses C4 at 0 V.
+    static double frequencyForPitch(double volts) noexcept {
+        if (!finite(volts))
+            volts = 0.0;
+        const double safe = std::min(20.0, std::max(-20.0, volts));
+        return 261.6255653005986 * std::exp2(safe);
+    }
 
     static double polyBlep(double t, double dt) noexcept {
         if (dt <= 0.0)
@@ -48,16 +79,16 @@ struct MorphOscillator {
     }
 
     Sample process(double hz, double sampleRate, float morph, float width) noexcept {
-        if (!std::isfinite(hz) || !std::isfinite(sampleRate) || sampleRate < 1.0)
+        if (!finite(hz) || !finite(sampleRate) || sampleRate < 1.0)
             return {0.0f, 0.0f};
 
         // Keep the step below Nyquist. polyBLEP reduces discontinuity aliasing,
         // but is NOT a guarantee of alias-free output at high pitch.
         const double step = std::min(std::max(hz, 0.0), 0.45 * sampleRate) / sampleRate;
         const float targetMorph = std::min(1.0f, std::max(0.0f,
-                                  std::isfinite(morph) ? morph : 0.0f));
+                                  finite(morph) ? morph : 0.0f));
         const float targetWidth = std::min(0.95f, std::max(0.05f,
-                                  std::isfinite(width) ? width : 0.5f));
+                                  finite(width) ? width : 0.5f));
 
         // Avoid shape-control zipper noise. Reset/startup sets the controls
         // directly so loading a saved patch does not produce a fake glide.
