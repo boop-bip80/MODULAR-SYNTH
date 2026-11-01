@@ -138,6 +138,49 @@ LIVE bars remain the physical knob values even when snapshot A–D is selected.
 It does **not** alter Rack panels, provide a reskinnable runtime UI, execute
 audio, or export a plugin.
 
+### Source-bundle compatibility preflight
+
+Use `check` to verify a `.msinstrument` **source bundle** and compare only
+its first-party model slugs against the repository's
+`plugins/ModularSynth/plugin.json`:
+
+```bash
+python3 tools/instrument-builder/instrument_builder.py check \
+  Morphing_State_Pad.msinstrument
+
+python3 tools/instrument-builder/instrument_builder.py check \
+  Morphing_State_Pad.msinstrument --format json
+
+# Optional: inspect against a different MODULAR-SYNTH source checkout.
+python3 tools/instrument-builder/instrument_builder.py check \
+  Morphing_State_Pad.msinstrument --repo-root /path/to/MODULAR-SYNTH --json
+```
+
+The command first validates the ZIP member allowlist, saved patch, manifest
+schema and SHA-256 and independently re-derives `requiredPlugins` (the same
+integrity checks as `inspect`). Next it reads the first-party collection
+manifest and groups model references by plugin/model, sorted deterministically
+with stable Rack module IDs. It reports:
+
+| Status | Exact meaning |
+| --- | --- |
+| `DECLARED` | A `ModularSynth/<model>` slug is present **with exact case** in this checkout's first-party manifest |
+| `MISSING` | A patch references `ModularSynth/<model>` that is absent from the manifest |
+| `UNKNOWN` | All other plugin/model references, including `Cardinal` and `Fundamental`; their availability is deliberately **not** assessed |
+
+The default text report and `--format json` / `--json` output have stable
+ordering, counts and no machine-specific absolute paths or timestamps.
+Exit code **0** means no missing first-party declarations; **1** means at
+least one missing first-party slug (report still printed); **2** means the
+bundle, schema or collection manifest is invalid/unreadable. Third-party
+`UNKNOWN` references alone do **not** cause failure.
+
+**Important:** `DECLARED` does not establish that the model was compiled,
+registered in a specific build, installed in the user's host, or loadable in a
+DAW. It does not inspect third-party plugins, third-party port indices,
+dynamic libraries, audio behavior or external sample paths. This is a
+source-level compatibility aid, not a Rack plugin installer or validator.
+
 ## Performance workflow
 
 1. Create a Macro8 and connect outputs **1–8** to oscillator, filter, envelope,
@@ -229,7 +272,12 @@ python3 -m unittest discover -s tools/instrument-builder -p "test_*.py" -v
 They exercise real factory Macro8 data, deterministic ZIP bytes, pack/inspect/
 unpack/repack roundtrips, strict schemas, malformed snapshots and ranges,
 source-identity mismatches, hostile ZIP paths/symlinks/compression, and
-non-overwriting destinations. The SVG preview tests additionally verify XML
+non-overwriting destinations. Compatibility tests scan the **nine genuine**
+`MODULAR_-` factory patches, then exercise verified bundles for the four
+that contain Macro8 (the other five lack Macro8 and are tested as raw model
+references, since `pack` requires Macro8). They cover missing first-party
+slugs, explicitly UNKNOWN external modules, manifest collisions, tampering,
+deterministic text/JSON and exit codes. The SVG preview tests additionally verify XML
 escaping against markup injection, accessible contrast, 64-character title
 wrapping, eight fixed control labels, four snapshots, deterministic output,
 multiple controllers, invalid bundles, and non-overwriting SVG generation.
