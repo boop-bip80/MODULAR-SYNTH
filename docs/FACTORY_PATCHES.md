@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Factory Patches — original examples
 
-These original patch arrangements are stored in `patches/examples/` for Cardinal's **File → Demo patches** menu and direct `.vcv` loading. The original three use already bundled modules; newer performance patches demonstrate the fork's own `MorphVCO`, `StateFilter` and `Macro8`. A patch file is not evidence that a particular installed binary can load or sound-test it.
+These original patch arrangements are stored in `patches/examples/` for Cardinal's **File → Demo patches** menu and direct `.vcv` loading. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `Macro8` and `StereoEcho` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
 
 | Patch | Purpose | Interaction |
 | --- | --- | --- |
@@ -12,6 +12,8 @@ These original patch arrangements are stored in `patches/examples/` for Cardinal
 | `MODULAR_-_Cinematic_Drift_Pad.vcv` | Long ADSR performance pad and four macros including bipolar cutoff CV | Alternate 4-second Macro8 A/B transitions |
 | `MODULAR_-_Rhythmic_Grit_Bass.vcv` | Tightly gated bass with Macro8 cutoff modulation | Play short external MIDI rhythms; recall 0.20-second transitions |
 | `MODULAR_-_Polyphonic_Motion_Pad.vcv` | **Eight-voice MIDI polyphonic** Morph VCO → per-note keytracked StateFilter → ADSR/VCA | Hold chords and recall four 1.8-second Macro8 snapshots; see polyphonic notes below |
+| `MODULAR_-_Stereo_Echo_Showcase.vcv` | MIDI-gated Morph VCO and StateFilter LP/HP stereo split into StereoEcho | Play notes to explore saved 360 ms delay and crossfeed; adjust Echo knobs |
+| `MODULAR_-_Echo_Motion_Performance.vcv` | Three Macro8 outputs change StereoEcho time, feedback and wet mix; fourth moves oscillator shape | Play MIDI and recall four A/B/C/D scenes with 1.2-second transitions; details below |
 
 ## Loading
 
@@ -24,7 +26,7 @@ These original patch arrangements are stored in `patches/examples/` for Cardinal
 ## Scope and compatibility
 
 - These are **patch examples**, not new DSP modules or a finished preset management system.
-- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter and Macro8).
+- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, Macro8 and StereoEcho).
 - MIDI/transport mapping and sample-rate behavior are inherited from the built-in modules and host.
 - The examples target `Cardinal/HostAudio2`. Some use two saved input routes; others feed a single host input. Polyphonic Motion Pad sends the same summed voice signal to both channels, **not** an independently panned stereo image. They are not standalone VST3 exports.
 - They use plain-text VCV Rack 2.x patch JSON for reproducibility.
@@ -51,6 +53,8 @@ The original three patches were initially parsed as JSON and checked for:
 - Morphing State Pad: macro Shape/Resonance/Drive controls and A/B snapshots affect timbre without unexpected gain jumps.
 - Cinematic Drift Pad and Rhythmic Grit Bass: confirm bipolar cutoff CV, four macro routes and documented 4.0/0.20-second snapshot morph settings.
 - Polyphonic Motion Pad: hold 2, 4 and 8 simultaneous MIDI notes; check each pitch follows its own channel, releases independently and filter cutoff keytracks each note. Check four Macro8 A-D recalls, output gain, and audible clipping.
+- Stereo Echo Showcase: play MIDI; compare saved low-pass versus high-pass echo inputs and listen for left/right delay and note-off tails.
+- Echo Motion Performance: recall all four Macro8 A/B/C/D scenes while playing MIDI; check Echo time, feedback and wet changes, wave timbre, stereo channels and release tails. Do not assume transitions are click-free until heard.
 - For each patch: save under a new filename, reload, and compare module/cable counts and playback.
 - Test at 44.1/48/96 kHz and block sizes 64/128/256 when practical. Verify silence on stop and no plugin crash.
 
@@ -81,6 +85,43 @@ python3 -m unittest discover -s tests -p 'test_factory_patch_coverage.py' -v
 ```
 
 These checks inspect saved MIDI channel/mode values, every advertised cable, first-party port bounds, four versioned Macro8 snapshots and bipolar Width mode. **They do not execute MIDI voice allocation, DSP, DAW transport, patch reopen, eight-voice audio levels or sample-rate changes.** Before calling this preset production-tested, audition 1/2/4/8 simultaneous note-on/off events in a real fork-built host at 44.1, 48 and 96 kHz; verify voice stealing under a ninth note, retriggering, CPU load and monitoring level.
+
+## Echo Motion Performance — manual A/B/C/D delay moves
+
+[Open Echo Motion Performance](../patches/examples/MODULAR_-_Echo_Motion_Performance.vcv) in a fork build with all four registered original modules. The saved **9-module, 13-cable** source graph uses Cardinal HostMIDI/HostAudio2, Fundamental ADSR/VCA-1 and first-party MorphVCO, StateFilter, StereoEcho and Macro8 (plus an explanatory TextEditor). No external samples or BPM/tempo synchronization are configured.
+
+MIDI pitch reaches `MorphVCO` input 0; gate reaches ADSR input 4. Oscillator output → gated VCA → StateFilter audio input 0, then low-pass output 0 → StereoEcho left input 0 and high-pass output 2 → Echo right input 1. The echo's output 0 and 1 connect separately to host audio jacks 0 and 1. This is **two different saved audio paths**, not evidence of audible width or a completed stereo audition.
+
+| Macro8 output | Saved label | Routed first-party CV destination | Source-defined output/effect |
+| --- | --- | --- | --- |
+| 0 | Time | StereoEcho time input **2** | Unipolar 0–10 V; adds **100 ms/V** to the 120 ms base knob |
+| 1 | Feedback | StereoEcho feedback input **3** | Unipolar 0–10 V; adds **10 percentage points/V** to the 10% base |
+| 2 | Wet | StereoEcho mix input **4** | Unipolar 0–10 V; adds **10 percentage points/V** to the 12% base |
+| 3 | Wave | MorphVCO wave morph input **2** | Unipolar 0–10 V; adds the normalized 0–1 morph span to its 0.05 base |
+
+All four Macro8 range switches (saved params 15–18) select **unipolar** operation. With the four stored scenes, the additive CV formulas in `StereoEcho.cpp` imply these *nominal static settings*:
+
+| Recall | Echo time | Feedback | Wet mix | Oscillator morph |
+| --- | ---: | ---: | ---: | ---: |
+| A — Slap | 190 ms | 18% | 28% | 0.17 |
+| B — Chamber | 340 ms | 28% | 40% | 0.35 |
+| C — Cascade | 550 ms | 41% | 48% | 0.53 |
+| D — Ripples | 800 ms | 54% | 57% | 0.67 |
+
+Macro8 saves four complete version-1, eight-value snapshots and a **1.2-second 99.9%-settling transition**. It opens in **LIVE** mode (`selectedSlot=-1`) with independently saved knob positions; press A/B/C/D to recall the stored values, or LIVE to use the knobs again. This is performer-initiated snapshot motion, **not** an autonomous LFO, MIDI automation or host-tempo delay. Changing delay time may affect playback pitch/timing; it has not been listened to or characterized in a host.
+
+The VCA level knob is saved at **0.24** and HostAudio2 output level **0.14**, with StateFilter drive **0.035**, Echo ping-pong crossfeed **68%** and scene feedback never above **54%** based on saved normalized values. These are conservative intended settings, **not** a measured clipping, tail-length, CPU, memory or mix-safety guarantee. Start monitoring quietly.
+
+To reproduce saved-source checks:
+
+```sh
+python3 tools/patches/patch_inspector.py validate patches/examples/MODULAR_-_Echo_Motion_Performance.vcv
+python3 tools/patches/factory_patch_coverage.py
+python3 tools/patches/patch_catalog.py --format markdown
+python3 -m unittest discover -s tests -p 'test_echo_motion_patch.py' -v
+```
+
+Before advertising this preset as performance-tested, load it in a fork-built host, audition MIDI note-on/off and A–D/LIVE transitions, test both audio channels and gain, and save/reopen the patch. Do not infer audio results or 44.1/48/96 kHz runtime behavior from JSON alone.
 
 ## Future work
 
