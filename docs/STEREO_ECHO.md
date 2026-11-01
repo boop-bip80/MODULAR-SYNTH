@@ -32,6 +32,12 @@ The feedback matrix blends each channel's own delayed sample with the opposite d
 
 The internal hard voltage bound is a safety limit, **not** a model of an analog saturation circuit. If intentionally driven into that bound, hard clipping can introduce distortion and aliasing. For clean echo trails, use ordinary ±5 V levels and moderate feedback.
 
+### Feedback tail extinction and denormal safety
+
+The feedback rings now write **exact zero** whenever the *sanitized internal sample* has magnitude below **1×10⁻²⁰ V** (−400 dB relative to 1 V). This is many orders of magnitude below any meaningful audio signal and is applied before floating-point narrowing; normal-level signals are unchanged. Direct dry inputs are not subject to this silence floor.
+
+Why: at 90% feedback, repeated multiplication of the very smallest IEEE-754 float can round back to that same subnormal value, trapping a microscopic feedback pulse indefinitely. A pre-fix standalone probe (48 kHz, 1 ms, 90% feedback, fully wet, single 4 V impulse, five seconds) observed **4,156 subnormal output frames** and a repeated **5.60519386×10⁻⁴⁵ V** echo at repeats 1,000 through 5,000. In the fixed DSP, the identical regression observed **zero subnormals** and the last nonzero sample at **frame 21,648** (0.451 seconds); all later feedback samples were exactly zero. The tiny threshold avoids denormal processing for the feedback path, but no host CPU speedup is claimed. Inputs containing subnormals can still reach the direct dry output path.
+
 ## Exact memory and CPU implications
 
 Stereo Echo reserves all delay memory **once when the module is constructed**. Its pure DSP process and reset paths do not allocate, lock, resize a vector, clear a large buffer, call a file API, or wait for another thread.
@@ -42,7 +48,7 @@ Stereo Echo reserves all delay memory **once when the module is constructed**. I
 - This memory is reserved even when using just one mono/stereo pair. Several Stereo Echo instances can meaningfully increase host RAM consumption.
 - Each active lane/sample performs four interpolated-history ring reads, two sample writes, feedback/dry-wet arithmetic and finite bounds. Cost scales as **O(active polyphonic lanes × sample rate)**; the exponential smoothing coefficient is recalculated only when sample rate changes.
 
-An isolated x86-64 GCC 13.3 C++17 -O3 -ffast-math benchmark exercising 16 lanes for one simulated second measured:
+An earlier isolated x86-64 GCC 13.3 C++17 -O3 -ffast-math *pre-denormal-floor* benchmark exercising 16 lanes for one simulated second measured:
 
 | Sample rate | Voice sample updates | Measured total CPU time | Approx. ns / voice update |
 | --- | ---: | ---: | ---: |
@@ -50,7 +56,11 @@ An isolated x86-64 GCC 13.3 C++17 -O3 -ffast-math benchmark exercising 16 lanes 
 | 96 kHz | 1,536,000 | 29.7 ms | 19.3 ns |
 | 192 kHz | 3,072,000 | 51.7 ms | 16.8 ns |
 
-This is **only a standalone hot-loop result in the current executor**; it excludes Rack graph scheduling, UI, other modules, cache contention, and actual DAW buffer deadlines. Do not interpret it as a tested plugin CPU percentage or realtime guarantee.
+These historical values describe the pre-floor code, **not a post-fix speed comparison**. They are only standalone hot-loop numbers; they exclude Rack graph scheduling, UI, other modules, cache contention and DAW buffer deadlines.
+
+A separate **post-fix deterministic stress run** executed **16,800,000 lane updates** across 44.1/48/96/192/384 kHz, with per-sample randomized stereo audio, bounded/unbounded CV, repeated full-ring wraps, rate changes, finite guards, bitwise hashing and reference-lane comparisons. On the current executor (2026-11-01), this took about **1.9 s at -O2**, **1.5 s with production optimization**, and **1.5 s under aggressive -ffast-math**. Its elapsed times include the pseudorandom generator and validation work and are **not** a pure DSP throughput benchmark. Hashes vary between compiler profiles; deterministic bitwise replay is required only within the same executable.
+
+The standalone allocation probe intercepts C++ `new`/`new[]` and observed **zero calls** while processing, resetting and switching rates, after the voice rings were constructed. This does **not** instrument arbitrary C `malloc` calls or the Rack wrapper. There is no measured host realtime CPU percentage or deadline guarantee.
 
 ## DSP regression
 
@@ -59,8 +69,19 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic \
   tests/stereo_echo_dsp_test.cpp -o /tmp/stereo-echo-test
 /tmp/stereo-echo-test
 
-# After integration, the repository CI runner auto-discovers this test:
+# Deterministic 16-lane long-run, rate/CV, denormal and allocation stress:
+c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic \
+  tests/stereo_echo_stress_dsp_test.cpp -o /tmp/stereo-echo-stress
+/tmp/stereo-echo-stress
+
+# CI auto-discovers both tests (strict O2, production and aggressive fastmath):
 python3 tests/run_dsp_tests.py
+
+# Optional sanitizer run; disable LeakSanitizer only if /proc is restricted:
+c++ -std=c++17 -O1 -g -fno-omit-frame-pointer \
+  -fsanitize=address,undefined -fno-sanitize-recover=all \
+  tests/stereo_echo_stress_dsp_test.cpp -o /tmp/stereo-echo-stress-sanitized
+ASAN_OPTIONS=detect_leaks=0 /tmp/stereo-echo-stress-sanitized
 ~~~
 
 The standalone tests cover:
@@ -70,8 +91,11 @@ The standalone tests cover:
 - Dry, 50% mix and fully wet behavior; 50% ping-pong feedback decay across four echoes.
 - 25 ms delay-time smoothing, history invalidation across host sample-rate changes, and 16 independent lane states.
 - Fixed ring-memory bounds and an impulse arriving at exactly 192,000 history samples at both 192/384 kHz, 384 kHz reduced maximum time, extreme CV/audio values, NaN/Inf sanitation under strict fast-math and recovery after invalid rates.
+- Deterministic 16-lane stress for **210,000 frames at each of 44.1/48/96/192/384 kHz** (16.8 million lane updates), including repeated ring wraps, rapid delay-time sweeps, non-finite controls, output ±10 V bounds and bitwise independent replay of lane 0.
+- Quantitative 25 ms time-slew settling at 48/192/384 kHz, sample-rate history invalidation including 44.1 kHz fractional taps, 384 kHz 500 ms maximum, invalid-rate recovery and no C++ allocations in process/reset.
+- Five-second impulse feedback decay at 90% and 1 ms, including exact tail extinction after 21,648 frames and zero subnormal samples under strict and aggressive compiler modes.
 
-**Actually executed (2026-11-01):** GCC 13.3 C++17 -O2 and -O3 -ffast-math/-fno-finite-math-only and strict -O3 -ffast-math compiled and ran the full core test successfully. AddressSanitizer/UndefinedBehaviorSanitizer also passed with LeakSanitizer disabled due sandbox /proc inspection restrictions. The Rack plugin wrapper has not been successfully built or auditioned inside Cardinal yet.
+**Actually executed (2026-11-01):** The repository's **8 standalone DSP tests × 3 compiler profiles (24 executions) passed** including the new StereoEcho long-run stress. The new test also compiled and ran with `-O2 -pedantic -Wall -Wextra -Werror` and combined AddressSanitizer/UndefinedBehaviorSanitizer, with LeakSanitizer disabled only because this sandbox denies /proc inspection. Baseline tests, strict `-O3 -ffast-math` and production `-fno-finite-math-only` all passed. The Rack plugin wrapper has **not** been successfully built or auditioned inside Cardinal.
 
 ## Exact module indices and suggested factory routing
 
@@ -91,23 +115,19 @@ The Rack enums are contiguous and begin at zero; these numeric values are import
 | Output | LEFT_OUTPUT | 0 |
 | Output | RIGHT_OUTPUT | 1 |
 
-The plugin slug is ModularSynth, module slug StereoEcho. For a factory **stereo** demo with only the existing original modules:
+The plugin slug is ModularSynth, module slug StereoEcho. The shipped `MODULAR_-_Stereo_Echo_Showcase.vcv` stereo example saves these signal routes:
 
-1. MorphVCO MORPH_OUTPUT (0) → StateFilter AUDIO_INPUT (0).
-2. StateFilter LOWPASS_OUTPUT (0) → StereoEcho LEFT_INPUT (0).
-3. StateFilter HIGHPASS_OUTPUT (2) → StereoEcho RIGHT_INPUT (1).
-4. StereoEcho LEFT_OUTPUT (0) / RIGHT_OUTPUT (1) → host audio left / right.
+1. HostMIDI pitch (output 0) → MorphVCO pitch (input 0); HostMIDI gate (output 1) → Fundamental ADSR gate (input 4).
+2. MorphVCO MORPH_OUTPUT (0) → Fundamental VCA-1 audio (input 1); ADSR envelope (output 0) → VCA-1 CV (input 0); VCA-1 audio (output 0) → StateFilter AUDIO_INPUT (0).
+3. StateFilter LOWPASS_OUTPUT (0) → StereoEcho LEFT_INPUT (0); StateFilter HIGHPASS_OUTPUT (2) → StereoEcho RIGHT_INPUT (1).
+4. StereoEcho LEFT_OUTPUT (0) / RIGHT_OUTPUT (1) → HostAudio2 inputs 0 / 1.
 
 The LP/HP split makes the left and right inputs genuinely different, so the crossfeed knob has a noticeable stereo effect. **Important:** leaving RIGHT_INPUT unpatched normals it to LEFT_INPUT, which is convenient dual-mono routing but produces identical left/right histories. With two identical channels, ping-pong crossfeed alone cannot create stereo width. For classic L-only alternating echoes, patch a zero-volt source into RIGHT_INPUT instead.
 
-## Integration ownership
+## Integration status and remaining host checks
 
-This feature branch adds only new, isolated files. The integrating maintainer should:
+StereoEcho is registered in the first-party plugin header, Cardinal's static plugin loader and Makefile source list, and the ModularSynth manifest. The original `StereoEcho.svg` panel is part of the resource glob; the `MODULAR_-_Stereo_Echo_Showcase.vcv` factory example wires StateFilter low/high-pass outputs to distinct StereoEcho channels and both delay outputs to HostAudio2. Source-backed registration, panel geometry/contrast and saved factory routing checks run in Python.
 
-1. Add an extern for modelStereoEcho to the first-party plugin.hpp registry.
-2. Register modelStereoEcho in the ModularSynth plugin initializer in plugins/plugins.cpp.
-3. Add ModularSynth/src/StereoEcho.cpp to the source build list in plugins/Makefile and verify res/StereoEcho.svg is packaged.
-4. Add a StereoEcho manifest entry in plugins/ModularSynth/plugin.json, with Delay and Polyphonic category tags according to the host's current schema.
-5. Run the real Cardinal plugin build, headless build, UI/panel test, patch persistence test and an auditory host check before describing the module as release-ready.
+**Still required before a release-ready claim:** the complete Cardinal plugin build (including headless target), an actual host instance loading the module and factory patch, parameter serialization/restore in Rack and audible evaluation of latency, time sweeps and stereo feedback.
 
 **Not established:** real host CPU usage, transport/BPM synchronization (not implemented), phase-coherent tempo changes, plugin panel correctness in all targets, automation behavior in a DAW, or subjective sound quality.
