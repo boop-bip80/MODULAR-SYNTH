@@ -76,9 +76,12 @@ recompute its contents and SHA-256 and refuse any inconsistency. Editing
 ### Safety and limits
 
 - The source `.vcv` is parsed as strict JSON: duplicate keys, NaN/Inf,
-  nonfinite exponent overflow, inconsistent cable endpoints, bad module IDs,
-  unsupported Macro8 state versions, malformed names/snapshots/ranges, and
-  missing Macro8 modules are rejected before output is created.
+  nonfinite exponent overflow, inconsistent cable module endpoints, bad module
+  IDs, unsupported Macro8 state versions, malformed names/snapshots/ranges,
+  and missing Macro8 modules are rejected before output is created. This is
+  **structural/schema/graph validation**, not a Rack loader: the tool does
+  **not** know third-party modules' input/output port bounds or confirm that
+  Cardinal or a DAW can actually load every model or restore its runtime state.
 - The ZIP must have **exactly two** allowlisted file entries. It rejects
   traversal (`../`), absolute/drive paths, backslash paths, duplicate names,
   Unix symlink entries, encryption, unsupported compression, and unknown files.
