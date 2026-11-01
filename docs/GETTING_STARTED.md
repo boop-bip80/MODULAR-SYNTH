@@ -9,7 +9,7 @@
 | Item | What exists | What is still unverified |
 | --- | --- | --- |
 | First-party modules | Five registered `ModularSynth` models: `MorphVCO`, `StateFilter`, `Macro8`, `StereoEcho`, `ClockedLFO` | Installation, GUI operation, listening quality and DAW roundtrips on real binaries |
-| Factory patches | [Twelve checked-in `.vcv` arrangements](FACTORY_PATCHES.md) under `patches/examples/`; the inspector and coverage checker validate saved graphs and source-backed first-party bounds | Audible sound, MIDI/transport responsiveness, CPU use, clipping, patch/DAW reopen in a plugin |
+| Factory patches | [Thirteen checked-in `.vcv` arrangements](FACTORY_PATCHES.md) under `patches/examples/`; the inspector and coverage checker validate saved graphs and source-backed first-party bounds | Audible sound, MIDI/transport responsiveness, CPU use, clipping, patch/DAW reopen in a plugin |
 | Module Forge | Original C++17 oscillator **and** stereo-effect source/manifest/SVG starters, schema checks and dry-run/opt-in static integration | An in-app compiler, runtime hot loader, standalone instrument exporter or sandbox for arbitrary code |
 | Instrument Builder | Offline `.msinstrument` v1 source bundles and opt-in v2 saved Macro8 cable mappings, static SVG concept preview, manifest/integrity checks | A playable instrument panel, DAW parameter automation, VST/CLAP/AU export or host-tested patch roundtrip |
 | Plugin formats | The inherited Cardinal/DPF project has AU, CLAP, LV2, VST2, VST3 and standalone build variants | Whether a **MODULAR-SYNTH** build for a particular platform/host has passed real testing |
@@ -129,10 +129,11 @@ Source: [`ClockedLFO.cpp`](../plugins/ModularSynth/src/ClockedLFO.cpp), [standal
 | [Echo Motion Performance](../patches/examples/MODULAR_-_Echo_Motion_Performance.vcv) | Four-scene modulation of StereoEcho | Recall A–D while holding MIDI; check CV cable routing |
 | [Clocked Modulation Studio](../patches/examples/MODULAR_-_Clocked_Modulation_Studio.vcv) | HostTime pulse-synchronized modulation | Start transport and play MIDI; check Beat/Reset-to-LFO cables |
 | [Cinematic Pulse Score](../patches/examples/MODULAR_-_Cinematic_Pulse_Score.vcv) | Free-running rhythmic texture via dual ADSRs | Play MIDI; a separate LFO pulse gates the low-pass echo layer |
+| [Noir Expressive Lead](../patches/examples/MODULAR_-_Noir_Expressive_Lead.vcv) | Mono cinematic lead with aftertouch timbre and mod-wheel Echo wet control | Play MIDI phrases; use channel pressure/CC1 if supported, recall Macro8 A–D scenes |
 
 There is also the simpler [Morph VCO Performance](../patches/examples/MODULAR_-_Morph_VCO_Performance.vcv) patch, which introduces the oscillator before adding State Filter and Macro8.
 
-The **Cinematic Drift** patch is driven by held MIDI and *manual* snapshot morphs, not a self-running LFO; the **Rhythmic Grit** patch's rhythm comes from incoming MIDI, not an internal sequencer. **Clocked Modulation Studio** needs transport pulses for beat lock, whereas **Cinematic Pulse Score** deliberately free-runs without HostTime. The saved gains are conservative choices, **not** listening-tested headroom guarantees. The [twelve-patch catalog](FACTORY_PATCHES.md) also lists bundled-only community-module arrangements, and [Patch Workflow](PATCH_WORKFLOW.md) explains inspection limits.
+The **Cinematic Drift** patch is driven by held MIDI and *manual* snapshot morphs, not a self-running LFO; the **Rhythmic Grit** patch's rhythm comes from incoming MIDI, not an internal sequencer. **Clocked Modulation Studio** needs transport pulses for beat lock, whereas **Cinematic Pulse Score** deliberately free-runs without HostTime. The saved gains are conservative choices, **not** listening-tested headroom guarantees. The [thirteen-patch catalog](FACTORY_PATCHES.md) also lists bundled-only community-module arrangements, and [Patch Workflow](PATCH_WORKFLOW.md) explains inspection limits.
 
 ## 5. Validate a patch before recording
 

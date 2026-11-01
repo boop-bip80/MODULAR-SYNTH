@@ -2,8 +2,8 @@
 """Inspect and validate plaintext VCV/Cardinal .vcv patch graphs offline.
 
 The tool deliberately does not claim to load a patch or verify its sound.
-Only first-party source-backed port bounds are authoritative; third-party
-module ports and ranges are reported as unverified.
+Only source-backed first-party and selected checked-in Cardinal host port
+bounds are authoritative; other bundled module ports remain unverified.
 """
 from __future__ import annotations
 
@@ -85,8 +85,71 @@ def _enum_members(source: str, enum_name: str, sentinel: str) -> list[str] | Non
     return members[:-1]
 
 
+def _cardinal_host_bounds(root: Path, model: str) -> dict | None:
+    """Verify the checked-in contracts of host endpoints used by examples.
+
+    Cardinal host modules are not generic Rack modules: some use alternate
+    ordinal enums or templated port counts. Each rule is deliberately narrow,
+    and returns *unknown* when its expected C++ declarations drift.
+    """
+    filenames = {
+        "HostMIDI": "HostMIDI.cpp",
+        "HostTime": "HostTime.cpp",
+        "HostAudio2": "HostAudio.cpp",
+    }
+    filename = filenames.get(model)
+    if filename is None:
+        return None
+    path = root / "plugins" / "Cardinal" / "src" / filename
+    if not path.is_file():
+        return None
+    source = path.read_text(encoding="utf-8")
+
+    if model == "HostMIDI":
+        params = _enum_members(source, "ParamIds", "NUM_PARAMS")
+        inputs = _enum_members(source, "InputIds", "NUM_INPUTS")
+        outputs = _enum_members(source, "OutputIds", "NUM_OUTPUTS")
+        configured = re.search(
+            r"\bconfig\s*\(\s*NUM_PARAMS\s*,\s*NUM_INPUTS\s*,\s*"
+            r"NUM_OUTPUTS\s*,\s*NUM_LIGHTS\s*\)", source
+        )
+        if params is None or inputs is None or outputs is None or not configured:
+            return None
+        return {"params": len(params), "inputs": len(inputs),
+                "outputs": len(outputs), "ranges": {}}
+
+    if model == "HostTime":
+        params = _enum_members(source, "ParamIds", "NUM_PARAMS")
+        inputs = _enum_members(source, "InputIds", "NUM_INPUTS")
+        outputs = _enum_members(source, "HostTimeIds", "kHostTimeCount")
+        configured = re.search(
+            r"\bconfig\s*\(\s*NUM_PARAMS\s*,\s*NUM_INPUTS\s*,\s*"
+            r"kHostTimeCount\s*,\s*kHostTimeCount\s*\)", source
+        )
+        if params is None or inputs is None or outputs is None or not configured:
+            return None
+        return {"params": len(params), "inputs": len(inputs),
+                "outputs": len(outputs), "ranges": {}}
+
+    # HostAudio2's parent declares two Rack-facing input/output jacks even
+    # though actual terminal processing varies with Cardinal plugin variant.
+    # Its one gain parameter is configured only for the two-channel model.
+    if not all(re.search(pattern, source) for pattern in (
+        r"\bstruct\s+HostAudio2\s*:\s*HostAudio\s*<\s*2\s*>",
+        r"\bnumParams\s*\(\s*numIO\s*==\s*2\s*\?\s*1\s*:\s*0\s*\)",
+        r"\bconfig\s*\(\s*numParams\s*,\s*numIO\s*,\s*numIO\s*,\s*0\s*\)",
+        r"\bconfigParam\s*\(\s*0\s*,\s*0(?:\.0*)?[fF]?\s*,\s*"
+        r"2(?:\.0*)?[fF]?\s*,",
+    )):
+        return None
+    return {"params": 1, "inputs": 2, "outputs": 2,
+            "ranges": {0: (0.0, 2.0)}}
+
+
 def _source_bounds(root: Path, plugin: str, model: str) -> dict | None:
     """Read numeric port counts and configParam ranges from our owned C++ module."""
+    if plugin == "Cardinal":
+        return _cardinal_host_bounds(root, model)
     if plugin != "ModularSynth":
         return None
     source_file = root / "plugins" / plugin / "src" / f"{model}.cpp"

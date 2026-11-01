@@ -128,9 +128,9 @@ oscillator morph. Those are saved signal/CV routes, not an audio audition.
 HostTime beat/reset routing and Clocked LFO modulation to VCO, filter,
 ADSR retrigger and Echo wet mix; it needs host transport for beat lock. **Cinematic Pulse Score** instead leaves HostTime/CLK disconnected, uses a free-running LFO PULSE to gate a second ADSR/VCA on its low-pass left path, and keeps high-pass right separate. Its four A–D Macro8 scenes are saved CV positions, not auditioned film-score audio.
 
-## Twelve factory patches
+## Thirteen factory patches
 
-All twelve links below are actual `.vcv` files under
+All thirteen links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
 existing plugin collection and does not require one of these five first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
@@ -149,18 +149,19 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Echo Motion Performance](../patches/examples/MODULAR_-_Echo_Motion_Performance.vcv) | Originals | Play MIDI; recall Macro8 A–D to change echo time/feedback/wet and VCO wave morph |
 | [Clocked Modulation Studio](../patches/examples/MODULAR_-_Clocked_Modulation_Studio.vcv) | Originals | Start host transport and play eight-voice MIDI; clocked sine/tri/pulse/EOC modulate VCO, filter, Echo and envelope |
 | [Cinematic Pulse Score](../patches/examples/MODULAR_-_Cinematic_Pulse_Score.vcv) | Originals | Play MIDI over a **free-running** 0.8 Hz pulse-gated LP left channel, direct HP right, and four Macro8 tension/echo scenes; no host BPM sync |
+| [Noir Expressive Lead](../patches/examples/MODULAR_-_Noir_Expressive_Lead.vcv) | Originals | Mono MIDI voice; aftertouch moves wave morph, mod wheel raises Echo wet and Macro8 A–D recall dark-to-tense scenes |
 
 If the examples folder is included in the build, open a patch through
 **File → Open demo / example project**; otherwise load its `.vcv` directly.
 **Clockwork Pulses** is transport-driven; **Clocked Modulation Studio** uses
-host transport beats *and* MIDI notes; the remaining ten accept MIDI notes.
+host transport beats *and* MIDI notes; the remaining eleven accept MIDI notes.
 Begin at a conservative
 monitor level. [Factory-patch details and structural validation](FACTORY_PATCHES.md)
 and [offline patch checks](PATCH_WORKFLOW.md) provide more context.
 
 ## What is—and is not—verified
 
-The manifest, module C++ metadata and all twelve saved patch graphs can be
+The manifest, module C++ metadata and all thirteen saved patch graphs can be
 checked offline with:
 
 ```sh

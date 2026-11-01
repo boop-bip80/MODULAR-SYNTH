@@ -25,7 +25,7 @@ As of the current update there is **no verified fork-specific release and no suc
 | Milestone | Current status | Remaining exit evidence |
 | --- | --- | --- |
 | Baseline provenance | Documented | Preserve upstream attribution and license checks in new contributions |
-| Phase 1 — Original voice and trustworthy baseline | **Five registered first-party models** (MorphVCO, StateFilter, Macro8, StereoEcho, ClockedLFO), **twelve fork-authored source example patches** (some using bundled third-party modules), offline routing/semantic/catalog/coverage tools, five-panel UI source checks and standalone DSP suites | Full fork plugin/standalone build, live module browser, MIDI/audio audition, patch/DAW save-reload, host checks and verified artifact |
+| Phase 1 — Original voice and trustworthy baseline | **Five registered first-party models** (MorphVCO, StateFilter, Macro8, StereoEcho, ClockedLFO), **thirteen fork-authored source example patches** (some using bundled third-party modules), offline routing/semantic/catalog/coverage tools, five-panel UI source checks and standalone DSP suites | Full fork plugin/standalone build, live module browser, MIDI/audio audition, patch/DAW save-reload, host checks and verified artifact |
 | Phase 2 — Module Forge developer workflow | Oscillator and stereo-effect C++/SVG starters and opt-in static integrator implemented; **38 generator/integration/core tests** and strict first-party notice preflight pass locally | Generate, compile, browse, play and reload both module types in a real Cardinal host |
 | Phase 3 — Patch-to-Instrument Builder | Macro8 CV/snapshots plus deterministic offline `.msinstrument` v1/v2 source bundles, manifest integrity, direct saved cable-to-CV mapping for five first-party models, unpack/inspect, static SVG preview and model-declaration preflight; **56 tool tests** | Live patch grouping, custom playable panel, actual host parameter mappings/automation, DAW roundtrip and standalone/plugin instrument export |
 | Phase 4 — Flagship synthesis | MorphVCO/StateFilter quantitative tests, original 16-lane StereoEcho delay/denormal guards and 16-lane ClockedLFO external-clock/dropout DSP checks; source-backed spectral, stability and timing stress tests | New flagship engines, real audio/host renders, performance/latency measurements and musician evaluation |
@@ -232,7 +232,7 @@ Possible experiments: a local AI patch assistant, procedural/generative composit
 - [Cardinal build instructions](BUILDING.md)
 - [Cardinal license inventory](LICENSES.md)
 - [First-party module quick reference](MODULE_QUICK_REFERENCE.md)
-- [Twelve example patch coverage](PATCH_COVERAGE.md)
+- [Thirteen example patch coverage](PATCH_COVERAGE.md)
 - [Instrument Builder source prototype](INSTRUMENT_BUILDER.md)
 - [Source-only license/provenance QA](COMPLIANCE_QA.md)
 
