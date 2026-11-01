@@ -17,6 +17,24 @@
         "Oscillator",
         "Polyphonic"
       ]
+    },
+    {
+      "slug": "StateFilter",
+      "name": "State Filter",
+      "description": "Original 16-channel TPT multimode state-variable filter with simultaneous low-pass, band-pass and high-pass outputs, CV modulation and smoothly controlled nonlinear drive.",
+      "tags": [
+        "Filter",
+        "Polyphonic"
+      ]
+    },
+    {
+      "slug": "Macro8",
+      "name": "Macro8 Performance Macros",
+      "description": "Eight named performance CV outputs with four recallable, smoothly morphing snapshots, and per-output unipolar or bipolar voltage modes.",
+      "tags": [
+        "Controller",
+        "Utility"
+      ]
     }
   ]
 }
