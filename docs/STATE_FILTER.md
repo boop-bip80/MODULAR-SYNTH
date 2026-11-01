@@ -62,4 +62,6 @@ The test exercises:
 - Recovery from invalid sample rates and sample-rate changes.
 - Bounded nonlinear-drive effect.
 
+**Executed in an isolated feature-branch checkout (2026-11-01):** GCC 13.3 optimized C++17 build with `-Wall -Wextra -Werror -pedantic` compiled and ran successfully (`StateFilter: all DSP regression tests passed`). An AddressSanitizer/UndefinedBehaviorSanitizer build also passed with leak detection disabled because LeakSanitizer could not inspect `/proc` in the sandbox. This is pure-core evidence, not proof of plugin integration.
+
 **Not yet established:** full plugin-host integration, an audio-rate modulation listening test, host state restoration, CPU benchmarking, and cross-platform executable validation. These must be verified once this module is registered.
