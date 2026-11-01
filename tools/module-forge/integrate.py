@@ -172,12 +172,15 @@ def integration_plan(module_dir: Path, repo_root: Path) -> list[FileEdit]:
         raise IntegrationError("generated module directory does not exist")
     slug = module.name
     validate_slug(slug)
+    dsp_source = module / f"{slug}.dsp.hpp"
     generated_paths = (
         module / f"{slug}.cpp",
         module / f"{slug}.svg",
         module / f"{slug}.module.json",
         module / "INTEGRATION.md",
     )
+    if dsp_source.exists() or dsp_source.is_symlink():
+        generated_paths += (dsp_source,)
     if any(path.is_symlink() or not path.is_file() for path in generated_paths):
         raise IntegrationError("generated module has missing or symlinked files")
     errors = check_module(module)
@@ -195,7 +198,11 @@ def integration_plan(module_dir: Path, repo_root: Path) -> list[FileEdit]:
 
     source_dest = root / "plugins" / "ModularSynth" / "src" / f"{slug}.cpp"
     panel_dest = root / "plugins" / "ModularSynth" / "res" / f"{slug}.svg"
-    for target in (source_dest, panel_dest):
+    dsp_dest = root / "plugins" / "ModularSynth" / "src" / f"{slug}.dsp.hpp"
+    destinations = [source_dest, panel_dest]
+    if dsp_source in generated_paths:
+        destinations.append(dsp_dest)
+    for target in destinations:
         relative = _within_root(root, target)
         if not target.parent.is_dir():
             raise IntegrationError(f"missing module destination directory: {relative.parent}")
@@ -237,6 +244,9 @@ def integration_plan(module_dir: Path, repo_root: Path) -> list[FileEdit]:
     edits.append(FileEdit(
         panel_dest, before=None,
         after=(module / f"{slug}.svg").read_bytes()))
+    if dsp_source in generated_paths:
+        edits.append(FileEdit(
+            dsp_dest, before=None, after=dsp_source.read_bytes()))
     return sorted(edits, key=lambda item: str(item.path.relative_to(root)))
 
 
