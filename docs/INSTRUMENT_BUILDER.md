@@ -64,10 +64,19 @@ for A–D. Unknown state versions are ignored rather than guessed; malformed
 snapshot entries are skipped, and finite numeric values are clamped.
 
 Snapshot values are atomics and use a generation counter so an audio-thread
-load is bounded and never waits for a concurrent state update. The DSP hot
-path has no heap allocation, string handling, mutex, file access, host UI
-calls, or blocking operations. The eight smoothers share one transition-time
-parameter but maintain independent state.
+load is bounded and never waits for a concurrent state update. If a slot is
+temporarily being published, the callback holds its current output while
+retaining the selected slot and retries on the next sample. Patch serialization
+makes bounded retries to reduce the chance of losing a slot to an in-flight
+capture. Editable labels are published as immutable shared strings so GUI
+drawing and non-UI host state serialization do not race.
+
+The DSP hot path has no heap allocation, string handling, mutex, file access,
+host UI calls, or blocking operations. The eight smoothers use **double**
+accumulators (to avoid float rounding stalls at high sample rates), cache
+the per-sample coefficient when time/sample rate are unchanged, and maintain
+independent output state. IEEE-754 bitwise finite checks work even when
+`-ffast-math` is enabled.
 
 **Current limits:** Snapshot capture has no dedicated undo-history item;
 macro labels are not automatically synchronized with DAW automation names;
@@ -103,8 +112,9 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread \
 ```
 
 This checks 8 independent controls, 0–10 V/bipolar voltage conversion,
-finite-input handling, one-second morphing, every snapshot slot, recapture,
-invalid slot IDs and reset behavior. It does not test host GUI/rendering.
+finite-input handling under strict fast-math, one-second morphing, five-second
+morphing at 48/96/192 kHz, every snapshot slot, transient-write detection,
+recapture, invalid slot IDs and reset behavior. It does not test host GUI/rendering.
 
 **Release acceptance still required after integration:**
 

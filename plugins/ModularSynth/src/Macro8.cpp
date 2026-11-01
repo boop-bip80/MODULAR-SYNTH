@@ -70,13 +70,29 @@ struct ModularSynthMacro8 : Module {
     std::array<dsp::SchmittTrigger, 4> slotTriggers{};
     dsp::SchmittTrigger liveTrigger;
     std::atomic<int> selectedSlot{-1}; // -1 = live performer knobs
-    std::array<std::string, 8> macroNames{{
-        "Macro 1", "Macro 2", "Macro 3", "Macro 4",
-        "Macro 5", "Macro 6", "Macro 7", "Macro 8"
-    }};
+    // Names are published as immutable strings. Rack hosts may serialize
+    // state on a non-UI thread while the editor draws or edits a label.
+    // Shared_ptr atomic load/store is only used OUTSIDE process().
+    std::array<std::shared_ptr<const std::string>, 8> macroNames{};
+
+    std::string nameAt(int index) const {
+        const auto ptr = std::atomic_load_explicit(
+            &macroNames[static_cast<std::size_t>(index)], std::memory_order_acquire);
+        return ptr ? *ptr : ("Macro " + std::to_string(index + 1));
+    }
+
+    void setNameAt(int index, const std::string& text) {
+        std::shared_ptr<const std::string> value =
+            std::make_shared<const std::string>(macro8SafeName(text, index));
+        std::atomic_store_explicit(
+            &macroNames[static_cast<std::size_t>(index)],
+            std::move(value), std::memory_order_release);
+    }
 
     ModularSynthMacro8() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
+        for (int i = 0; i < 8; ++i)
+            setNameAt(i, "Macro " + std::to_string(i + 1));
 
         for (int i = 0; i < 8; ++i) {
             const std::string label = "Macro " + std::to_string(i + 1);
@@ -137,6 +153,14 @@ struct ModularSynthMacro8 : Module {
         // A bounded snapshot read returns false rather than spinning if a
         // patch-save/restore on another thread is updating the slot.
         bool usingSnapshot = active >= 0 && snapshots.load(active, target);
+        if (!usingSnapshot && active >= 0 && snapshots.mayExist(active)) {
+            // The other thread is temporarily publishing new snapshot bytes.
+            // Hold the current audible values for this one sample, retaining
+            // selection. A subsequent process tick will retry the snapshot.
+            for (int i = 0; i < 8; ++i)
+                target[i] = static_cast<float>(smoother.current[static_cast<std::size_t>(i)]);
+            usingSnapshot = true;
+        }
         if (!usingSnapshot) {
             active = -1;
             selectedSlot.store(-1, std::memory_order_relaxed);
@@ -165,14 +189,21 @@ struct ModularSynthMacro8 : Module {
         json_object_set_new(root, "macro8Version", json_integer(1));
 
         json_t* const names = json_array();
-        for (int i = 0; i < 8; ++i)
-            json_array_append_new(names, json_string(macroNames[static_cast<std::size_t>(i)].c_str()));
+        for (int i = 0; i < 8; ++i) {
+            const std::string label = nameAt(i);
+            json_array_append_new(names, json_string(label.c_str()));
+        }
         json_object_set_new(root, "names", names);
 
         json_t* const bank = json_array();
         for (int slot = 0; slot < 4; ++slot) {
             float values[8];
-            if (!snapshots.load(slot, values)) {
+            bool loaded = snapshots.load(slot, values);
+            // dataToJson is not an audio callback: bounded retries allow a
+            // concurrent eight-value STORE to finish instead of saving null.
+            for (int retry = 0; !loaded && retry < 4096 && snapshots.mayExist(slot); ++retry)
+                loaded = snapshots.load(slot, values);
+            if (!loaded) {
                 json_array_append_new(bank, json_null());
                 continue;
             }
@@ -200,8 +231,7 @@ struct ModularSynthMacro8 : Module {
             for (int i = 0; i < 8; ++i) {
                 const json_t* const value = json_array_get(names, i);
                 if (json_is_string(value))
-                    macroNames[static_cast<std::size_t>(i)] =
-                        macro8SafeName(json_string_value(value), i);
+                    setNameAt(i, json_string_value(value));
             }
         }
 
@@ -249,15 +279,15 @@ struct Macro8NameField : ui::TextField {
 
     Macro8NameField(ModularSynthMacro8* m, int i) : module(m), index(i) {
         box.size.x = 185.0f;
-        text = module->macroNames[static_cast<std::size_t>(index)];
+        text = module->nameAt(index);
     }
     void step() override {
         if (module) {
             const std::string clean = macro8CleanName(text);
             if (clean != text)
                 setText(clean);
-            if (module->macroNames[static_cast<std::size_t>(index)] != clean)
-                module->macroNames[static_cast<std::size_t>(index)] = clean;
+            if (module->nameAt(index) != macro8SafeName(clean, index))
+                module->setNameAt(index, clean);
         }
         ui::TextField::step();
     }
@@ -327,7 +357,7 @@ struct ModularSynthMacro8Widget : ModuleWidget {
         nvgFillColor(args.vg, nvgRGB(0xD6, 0xD9, 0xF7));
         for (int i = 0; i < 8; ++i) {
             const std::string label = macro
-                ? macro8SafeName(macro->macroNames[static_cast<std::size_t>(i)], i)
+                ? macro->nameAt(i)
                 : ("Macro " + std::to_string(i + 1));
             nvgText(args.vg, columns[i % 4], i < 4 ? 55.0f : 145.0f,
                     label.c_str(), nullptr);

@@ -18,6 +18,7 @@
 
 using modular_synth::dsp::Macro8Smoother;
 using modular_synth::dsp::Macro8SnapshotBank;
+using modular_synth::dsp::macro8Finite;
 
 static bool expect(bool condition, const char* message) {
     if (!condition)
@@ -54,7 +55,7 @@ int main() {
     float previous = smooth.current[0];
     for (int i = 0; i < 48000; ++i) {
         smooth.process(sampleTime, 1.0f, one);
-        good &= expect(std::isfinite(smooth.current[0]), "morphing output must remain finite");
+        good &= expect(macro8Finite(smooth.current[0]), "morphing output must remain finite");
         good &= expect(smooth.current[0] >= previous &&
                        smooth.current[0] <= 1.0f, "morph must be monotonic without overshoot");
         previous = smooth.current[0];
@@ -64,6 +65,27 @@ int main() {
     smooth.process(sampleTime, 0.0f, zero);
     good &= expect(smooth.current[0] == 0.0f,
                    "zero transition time must jump immediately");
+
+    // A float accumulator stalls near the destination at high sample rates.
+    // Double-precision state must meet the same 99.9% settling guarantee
+    // at 48k, 96k and 192k with an identical five-second morph time.
+    for (int rate : {48000, 96000, 192000}) {
+        smooth.reset();
+        smooth.process(1.0f / rate, 0.0f, zero);
+        for (int sample = 0; sample < rate * 5; ++sample)
+            smooth.process(1.0f / rate, 5.0f, one);
+        good &= expect(std::fabs(smooth.current[0] - 0.999) < 0.0003,
+                       "five-second morph must settle consistently across sample rates");
+        for (int sample = 0; sample < rate * 5; ++sample)
+            smooth.process(1.0f / rate, 5.0f, one);
+        good &= expect(smooth.current[0] > 0.99999,
+                       "continued morph must not stall at a float precision floor");
+    }
+
+    good &= expect(!macro8Finite(std::numeric_limits<float>::quiet_NaN()) &&
+                   !macro8Finite(std::numeric_limits<float>::infinity()) &&
+                   !macro8Finite(std::numeric_limits<double>::infinity()),
+                   "IEEE-754 finite guards must survive aggressive fast-math");
 
     Macro8SnapshotBank bank;
     float readback[8] = {};
@@ -87,6 +109,17 @@ int main() {
                     std::numeric_limits<float>::infinity(), -0.1f, 0.3f, 0.9f, 3.0f};
     good &= expect(bank.store(0, bad), "recapture A must succeed");
     good &= expect(bank.load(0, readback), "recaptured A must load");
+    good &= expect(bank.mayExist(0), "published snapshot validity must persist");
+
+    // Simulate a short writer window. The audio callback must not confuse
+    // an odd generation with a missing slot and discard selected snapshot A.
+    const auto version = bank.slots[0].generation.load(std::memory_order_relaxed);
+    bank.slots[0].generation.store(version | 1u, std::memory_order_release);
+    good &= expect(!bank.load(0, readback) && bank.mayExist(0),
+                   "transient snapshot write must remain distinguishable from empty slot");
+    bank.slots[0].generation.store((version | 1u) + 1u, std::memory_order_release);
+    good &= expect(bank.load(0, readback), "snapshot read must recover after writer completes");
+
     good &= expect(readback[0] == 0.0f && readback[1] == 1.0f &&
                    readback[2] == 0.0f && readback[3] == 0.0f &&
                    readback[7] == 1.0f, "saved values must be finite and clamped");
