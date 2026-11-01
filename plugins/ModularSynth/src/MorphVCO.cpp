@@ -37,6 +37,7 @@ struct ModularSynthMorphVCO : Module {
 
     // Rack uses at most 16 polyphony lanes per jack.
     modular_synth::dsp::MorphOscillator voices[16];
+    int previousChannels = 0;
 
     ModularSynthMorphVCO() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -60,6 +61,7 @@ struct ModularSynthMorphVCO : Module {
     void onReset() override {
         for (auto& voice : voices)
             voice.reset();
+        previousChannels = 0;
     }
 
     void process(const ProcessArgs& args) override {
@@ -68,6 +70,13 @@ struct ModularSynthMorphVCO : Module {
         channels = std::max(channels, inputs[MORPH_CV_INPUT].getChannels());
         channels = std::max(channels, inputs[PWM_CV_INPUT].getChannels());
         channels = std::min(channels, 16);
+
+        // A lane that disappears when polyphony shrinks must not resume its
+        // frozen phase and smoothed controls when the cable grows again.
+        // Only retired lanes are reset; active lanes remain phase-continuous.
+        for (int c = channels; c < previousChannels; ++c)
+            voices[c].reset();
+        previousChannels = channels;
 
         outputs[MORPH_OUTPUT].setChannels(channels);
         outputs[SINE_OUTPUT].setChannels(channels);
