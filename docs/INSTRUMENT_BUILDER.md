@@ -104,6 +104,40 @@ resolved. Opening `patch/main.vcv` still requires a compatible Cardinal build
 and the patch's dependencies. Bundles are not cryptographically signed; the
 SHA-256 detects internal mismatches, not malicious replacement of both entries.
 
+### Static SVG performance-panel preview
+
+After packing a bundle, create a portable **concept image** from its verified
+performance manifest:
+
+```bash
+python3 tools/instrument-builder/instrument_builder.py preview \
+  Morphing_State_Pad.msinstrument --out Morphing_State_Pad.svg
+```
+
+The command generates a self-contained, deterministic SVG (no scripts, external
+fonts/assets, URLs or runtime code) showing up to eight Macro8 sections. Each
+section has eight named controls with their saved live knob positions, explicit
+**0…+10 V / −5…+5 V** polarity, four A–D snapshot buttons with stored/empty
+and selected state, and static badges for LIVE/snapshot selection,
+STORE/RECALL mode, and morph time. Populated snapshots show eight small value
+bars. Multiple Macro8 controllers sort by their stable Rack module IDs;
+the visible headings are friendly `MACRO CONTROLLER 1`, `2`, etc., while
+the exact IDs remain in SVG `data-module-id` attributes and accessible
+controller descriptions for identity-preserving tooling.
+
+Labels are XML-escaped so characters such as `<`, `>` and `&` display as
+text, not markup. The 1–12 character Macro8 labels fit within their fixed cards;
+instrument titles up to 64 characters wrap to at most two lines. Text/background
+palette pairs are tested for at least WCAG AA 4.5:1 contrast. SVG `title` and
+`desc` provide an accessible summary.
+
+`preview` checks the entire source bundle and derived manifest **before**
+writing and refuses to overwrite an existing `.svg` file or follow symlink
+output parents. The SVG represents *saved metadata* and is **not interactive**:
+LIVE bars remain the physical knob values even when snapshot A–D is selected.
+It does **not** alter Rack panels, provide a reskinnable runtime UI, execute
+audio, or export a plugin.
+
 ## Performance workflow
 
 1. Create a Macro8 and connect outputs **1–8** to oscillator, filter, envelope,
@@ -195,8 +229,11 @@ python3 -m unittest discover -s tools/instrument-builder -p "test_*.py" -v
 They exercise real factory Macro8 data, deterministic ZIP bytes, pack/inspect/
 unpack/repack roundtrips, strict schemas, malformed snapshots and ranges,
 source-identity mismatches, hostile ZIP paths/symlinks/compression, and
-non-overwriting destinations. The tool uses the patch's saved performance
-state; tests do not load or render a host plugin.
+non-overwriting destinations. The SVG preview tests additionally verify XML
+escaping against markup injection, accessible contrast, 64-character title
+wrapping, eight fixed control labels, four snapshots, deterministic output,
+multiple controllers, invalid bundles, and non-overwriting SVG generation.
+The tool uses saved performance state; tests do not load or render a host plugin.
 
 Run the Rack-independent DSP test:
 
