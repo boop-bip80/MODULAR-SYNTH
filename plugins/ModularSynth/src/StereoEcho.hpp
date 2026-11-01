@@ -29,6 +29,8 @@ public:
     static constexpr double kMinDelayMs = 1.0;
     static constexpr double kMaxDelayMs = 1000.0;
     static constexpr double kMaxFeedback = 0.90;
+    // -400 dB relative to 1 V; prevent immortal rounded subnormal tails.
+    static constexpr double kFeedbackSilenceFloorVolts = 1.0e-20;
     static constexpr int kMaxFullRateHz = 192000;
     static constexpr std::size_t kCapacityFrames =
         static_cast<std::size_t>(kMaxFullRateHz) + 2u;
@@ -136,10 +138,11 @@ public:
         // the linear echo loop contractive, even at full ping-pong mode.
         const double nextL = safeL + fb * ((1.0 - swap) * delayedL + swap * delayedR);
         const double nextR = safeR + fb * ((1.0 - swap) * delayedR + swap * delayedL);
-        leftBuffer_[writeIndex_] = static_cast<float>(
-            clampFinite(nextL, 0.0, -20.0, 20.0));
-        rightBuffer_[writeIndex_] = static_cast<float>(
-            clampFinite(nextR, 0.0, -20.0, 20.0));
+        // Sanitize and zero below -400 dB before converting to float.
+        // A float's smallest subnormal can round 0.9 * x back to x,
+        // otherwise leaving a perpetual feedback tail and denormal costs.
+        leftBuffer_[writeIndex_] = ringVoltage(nextL);
+        rightBuffer_[writeIndex_] = ringVoltage(nextR);
 
         ++writeIndex_;
         if (writeIndex_ == kCapacityFrames)
@@ -154,6 +157,12 @@ public:
     }
 
 private:
+    static float ringVoltage(double value) noexcept {
+        const double safe = clampFinite(value, 0.0, -20.0, 20.0);
+        return safe > -kFeedbackSilenceFloorVolts && safe < kFeedbackSilenceFloorVolts
+            ? 0.0f : static_cast<float>(safe);
+    }
+
     double readAge(const std::vector<float>& data, std::size_t samplesAgo) const noexcept {
         if (samplesAgo == 0u || samplesAgo > validFrames_
             || samplesAgo >= kCapacityFrames)
