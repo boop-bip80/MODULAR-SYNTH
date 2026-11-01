@@ -1,4 +1,61 @@
-# DISTRHO Cardinal
+# MODULAR-SYNTH
+
+> **A Cardinal-derived modular sound-design workstation — early development.** Our direction is to let musicians design original DSP modules, build complete instruments from patches, and use those instruments reliably in professional audio workflows.
+
+**Development status: Phase 1 started. No verified MODULAR-SYNTH build or release is currently available.** The fork initially matched [DISTRHO Cardinal](https://github.com/DISTRHO/Cardinal) exactly at upstream commit [`0a530b7`](https://github.com/DISTRHO/Cardinal/commit/0a530b73273afc914ec71a78e9165cd28c53b599) (July 28, 2026). All inherited Cardinal, Rack, DPF and third-party functionality remains credited to its original authors. New features should be assessed through merged code, CI evidence and tested audio artifacts, not this roadmap.
+
+## What exists now, and what is planned
+
+| Area | Current foundation inherited from Cardinal | MODULAR-SYNTH development goal |
+| --- | --- | --- |
+| Modular patching | VCV Rack-derived graph and bundled third-party modules | Better patch navigation, diagnostics, grouping and performance controls |
+| Synthesis | Existing Cardinal/Rack module collection | Original oscillators, filters, FM, wavetable, granular, spectral and physical-modeling modules |
+| Module development | Adding modules at build time; no arbitrary runtime loading | **Module Forge** C++ templates, validation, authoring tools and an eventual optional experimental loader |
+| Instrument design | Patches and module controls | **Patch-to-Instrument Builder** for macros, custom panel layouts, snapshots and reusable instruments |
+| DAW integration | Existing Cardinal plugin variants and host/MIDI/CV mapping | Richer host automation, expression, stable save/restore and performance testing |
+| Distribution | Upstream build configuration and documentation | Independently verified fork-owned binaries, installers, screenshots, demos and release notes |
+
+These future capabilities are **not yet implemented** simply because they appear in the right-hand column.
+
+## Development roadmap and acceptance gates
+
+Our [six-phase development roadmap](docs/DEVELOPMENT_ROADMAP.md) defines scope, dependencies and verifiable exit criteria:
+
+1. **Phase 1 — Foundation and first original module:** provenance, first-party oscillator, developer baseline, initial usability and patch work, reproducible validation.
+2. **Phase 2 — Module Forge:** a documented workflow to create, register, build and test new DSP modules.
+3. **Phase 3 — Instrument Builder:** group patches, expose macros and custom panels, save/reopen and automate instruments.
+4. **Phase 4 — Flagship sound engines:** original analog-inspired, spectral, granular, FM, physical-modeling and effects modules.
+5. **Phase 5 — Production readiness:** professional UI, host compatibility, accessibility, performance, robust release packaging.
+6. **Phase 6 — Experimental frontier:** opt-in AI assistance, generative composition and research-grade extensibility.
+
+**A phase only closes when all required evidence exists.** We will not use feature counts or unsupported completion percentages as substitutes for running builds, listening tests, regression suites and DAW project roundtrips.
+
+## Build and downloads
+
+- **Fork release downloads:** [MODULAR-SYNTH releases](https://github.com/boop-bip80/MODULAR-SYNTH/releases). **None have been verified or published as of 2026-11-01.**
+- **Fork CI:** [MODULAR-SYNTH Actions](https://github.com/boop-bip80/MODULAR-SYNTH/actions). The inherited [build workflow](.github/workflows/build.yml) contains cross-platform build jobs, self-tests and LV2/VST validation, but no completed runs had been recorded on this fork at roadmap initialization.
+- **Source checkout:** `git clone --recurse-submodules https://github.com/boop-bip80/MODULAR-SYNTH.git`
+- **Source build:** Follow [Cardinal's inherited build instructions](docs/BUILDING.md). They describe an upstream build process; they are not evidence of a completed fork build.
+
+**Important:** The Cardinal release/download links and screenshots in the upstream reference section below belong to **DISTRHO/Cardinal**, not this fork. Do not treat those artifacts as MODULAR-SYNTH releases. We will add fork-specific download links and screenshots only after successful builds and verification.
+
+## Contributing and engineering rules
+
+Contributions should focus on original capabilities, verified sound quality and a maintainable codebase. Start with [the roadmap and PR acceptance policy](docs/DEVELOPMENT_ROADMAP.md), [project structure](docs/OVERVIEW.md), [build instructions](docs/BUILDING.md) and [third-party license inventory](docs/LICENSES.md). Each PR should include an explicit behavior change, evidence of tests or exact reproduction steps, and accurate limitations. Keep `src/override/` modifications small and justified because they track upstream Rack implementation details.
+
+Cardinal is licensed under **GPL-3.0-or-later**, while bundled modules, artwork, fonts and dependencies can have separate licenses. Preserve original copyright notices and obtain any necessary permissions before introducing or redistributing assets. MODULAR-SYNTH does not incorporate VCV Rack Pro proprietary code or proprietary paid modules.
+
+## Upstream attribution
+
+This repository is derived from **[DISTRHO Cardinal](https://github.com/DISTRHO/Cardinal)** by Filipe Coelho/falkTX and contributors, itself using the [VCV Rack](https://github.com/VCVRack/Rack) engine and numerous open-source modules. Its architecture, original modules, compatibility layers, build workflow and extensive existing sound libraries are primarily upstream work. This fork's distinctive features will be identified by original commits and documented evidence, not implied ownership of the inherited source.
+
+---
+
+## Upstream Cardinal README (reference, retained for attribution and inherited behavior)
+
+The following material is the inherited Cardinal README. References to `DISTRHO/Cardinal` releases, build downloads, screenshots, status and project policies describe the **upstream Cardinal project**; fork-specific information is maintained above and in our roadmap.
+
+# Upstream reference: DISTRHO Cardinal
 
 *Cardinal, the Rack!*
 
