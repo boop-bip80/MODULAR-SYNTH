@@ -4,6 +4,8 @@ on: [push, pull_request]
 
 jobs:
   notification:
+    # Upstream Cardinal announcements must not run from derivative forks.
+    if: github.repository == 'DISTRHO/Cardinal'
     runs-on: ubuntu-latest
     name: IRC notification
     steps:
