@@ -715,10 +715,10 @@ jobs:
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
+          # Both archives are created in the checkout's parent directory.
+          # Use one pattern: fail_on_unmatched_files checks each pattern.
           files: |
-            /home/runner/cardinal*.tar.xz
-            /home/runner/*/cardinal*.tar.xz
-            /home/runner/*/*/cardinal*.tar.xz
+            ../cardinal*.tar.xz
 
   plugin-validation:
     runs-on: ubuntu-22.04
