@@ -97,6 +97,7 @@ def _parse_patch(patch: dict[str, Any]) -> tuple[dict[int, dict[str, Any]], list
         if not isinstance(entries, list):
             raise PatchComparisonError(f"{context}.params must be an array")
         params: dict[int, int | float] = {}
+        param_metadata: dict[int, dict[str, Any]] = {}
         for pindex, entry in enumerate(entries):
             if not isinstance(entry, dict):
                 raise PatchComparisonError(f"{context}.params[{pindex}] must be an object")
@@ -107,6 +108,8 @@ def _parse_patch(patch: dict[str, Any]) -> tuple[dict[int, dict[str, Any]], list
             if pid in params:
                 raise PatchComparisonError(f"{context}: duplicate parameter ID {pid}")
             params[pid] = val
+            param_metadata[pid] = {key: value for key, value in entry.items()
+                                   if key not in {"id", "value"}}
         data = raw.get("data", {})
         if data is None:
             data = {}
@@ -116,7 +119,8 @@ def _parse_patch(patch: dict[str, Any]) -> tuple[dict[int, dict[str, Any]], list
                     if key not in {"id", "plugin", "model", "params", "data"}
                     and key not in VIEW_ONLY_MODULE_FIELDS}
         modules[mid] = {"plugin": plugin, "model": model, "params": params,
-                        "data": data, "metadata": metadata}
+                        "param_metadata": param_metadata, "data": data,
+                        "metadata": metadata}
 
     cables: list[dict[str, int]] = []
     seen: set[int] = set()
@@ -128,12 +132,17 @@ def _parse_patch(patch: dict[str, Any]) -> tuple[dict[int, dict[str, Any]], list
         if cid in seen:
             raise PatchComparisonError(f"duplicate cable ID {cid}")
         seen.add(cid)
-        cable: dict[str, int] = {}
+        cable: dict[str, Any] = {}
         for key in ("outputModuleId", "outputId", "inputModuleId", "inputId"):
             cable[key] = _natural_id(raw.get(key), f"{context}.{key}")
         for key in ("outputModuleId", "inputModuleId"):
             if cable[key] not in modules:
                 raise PatchComparisonError(f"{context}.{key}: missing module {cable[key]}")
+        # Cable IDs and colors are presentation/bookkeeping fields; unknown
+        # fields might be serialized routing state and must not be discarded.
+        cable["metadata"] = {key: value for key, value in raw.items()
+                             if key not in {"id", "color", "outputModuleId",
+                                            "outputId", "inputModuleId", "inputId"}}
         cables.append(cable)
     return modules, cables
 
@@ -286,11 +295,59 @@ def _macro8_changes(old: dict[str, Any], new: dict[str, Any]) -> list[dict[str, 
     return changes
 
 
-def _edges(cables: list[dict[str, int]], refs: dict[int, str]) -> Counter[tuple[str, int, str, int]]:
+def _edges(cables: list[dict[str, Any]], refs: dict[int, str]) -> Counter[tuple[str, int, str, int]]:
     return Counter(
         (refs[c["outputModuleId"]], c["outputId"], refs[c["inputModuleId"]], c["inputId"])
         for c in cables
     )
+
+
+def _saved_identity(value: Any) -> tuple:
+    """Hashable saved JSON identity: numeric 1/1.0 equal, boolean 1 distinct."""
+    if isinstance(value, dict):
+        return ("dict", tuple((key, _saved_identity(item))
+                              for key, item in sorted(value.items())))
+    if isinstance(value, list):
+        return ("list", tuple(_saved_identity(item) for item in value))
+    if type(value) in (int, float):
+        return ("number", value)
+    return (type(value).__name__, value)
+
+
+def _cable_saved_state(
+    before: list[dict[str, Any]], after: list[dict[str, Any]],
+    old_refs: dict[int, str], new_refs: dict[int, str],
+) -> list[dict[str, Any]]:
+    """Compare extra cable fields independent of cable IDs and array order."""
+    def group(cables: list[dict[str, Any]], refs: dict[int, str]) -> dict[tuple, list[dict[str, Any]]]:
+        result: dict[tuple, list[dict[str, Any]]] = defaultdict(list)
+        for cable in cables:
+            edge = (refs[cable["outputModuleId"]], cable["outputId"],
+                    refs[cable["inputModuleId"]], cable["inputId"])
+            result[edge].append(cable["metadata"])
+        return result
+
+    old_groups, new_groups = group(before, old_refs), group(after, new_refs)
+    changes: list[dict[str, Any]] = []
+    for edge in sorted(old_groups.keys() & new_groups.keys()):
+        old_items, new_items = old_groups[edge], new_groups[edge]
+        # Endpoint additions/removals are reported separately. Without equal
+        # multiplicity there is no unambiguous existing cable to compare.
+        if len(old_items) != len(new_items):
+            continue
+        record = {"source": edge[0], "output": edge[1],
+                  "destination": edge[2], "input": edge[3]}
+        if len(old_items) == 1:
+            changes.extend({**record, **entry} for entry in
+                           _nested_changes("cable", old_items[0], new_items[0]))
+        elif Counter(map(_saved_identity, old_items)) != Counter(map(_saved_identity, new_items)):
+            # Duplicate same-endpoint cables have no stable identity: avoid
+            # pairing arbitrary IDs and report a deterministic group-level diff.
+            order = lambda metadata: json.dumps(metadata, sort_keys=True, ensure_ascii=True)
+            changes.append({**record, "field": "cable.metadata", "change": "changed",
+                            "before": sorted(old_items, key=order),
+                            "after": sorted(new_items, key=order)})
+    return changes
 
 
 def _edge_record(edge: tuple[str, int, str, int], count: int) -> dict[str, Any]:
@@ -326,6 +383,11 @@ def compare_patches(
                     **pair, "parameter_id": pid, "change": entry["change"],
                     "before": entry["before"], "after": entry["after"],
                 })
+            if pid in old[lhs]["params"] and pid in new[rhs]["params"]:
+                persisted_state.extend({**pair, **detail} for detail in
+                                       _nested_changes(f"param[{pid}]",
+                                                       old[lhs]["param_metadata"][pid],
+                                                       new[rhs]["param_metadata"][pid]))
         if _kind(old[lhs]) == ("ModularSynth", "Macro8"):
             macros.extend({**pair, **entry} for entry in _macro8_changes(old[lhs]["data"], new[rhs]["data"]))
             # Known Macro8 fields retain the existing fine-grained report;
@@ -348,6 +410,7 @@ def compare_patches(
          if k not in {"modules", "cables"} and k not in VIEW_ONLY_PATCH_FIELDS},
     )
     before_edges, after_edges = _edges(old_cables, old_refs), _edges(new_cables, new_refs)
+    cable_state = _cable_saved_state(old_cables, new_cables, old_refs, new_refs)
     cable_added: list[dict[str, Any]] = []
     cable_removed: list[dict[str, Any]] = []
     for edge in sorted(set(before_edges) | set(after_edges)):
@@ -365,13 +428,14 @@ def compare_patches(
         "macro8_state_changed": len(macros),
         "persisted_state_changed": len(persisted_state),
         "patch_state_changed": len(patch_state),
+        "cable_state_changed": len(cable_state),
         "cables_added": sum(c["count"] for c in cable_added),
         "cables_removed": sum(c["count"] for c in cable_removed),
     }
     summary["changed"] = any(summary[key] for key in (
         "modules_added", "modules_removed", "parameters_changed",
         "macro8_state_changed", "persisted_state_changed", "patch_state_changed",
-        "cables_added", "cables_removed",
+        "cable_state_changed", "cables_added", "cables_removed",
     ))
     return {
         "before": before_label, "after": after_label, "summary": summary,
@@ -381,7 +445,8 @@ def compare_patches(
             "persisted_state": persisted_state,
         },
         "patch_state": patch_state,
-        "cables": {"added": cable_added, "removed": cable_removed},
+        "cables": {"added": cable_added, "removed": cable_removed,
+                   "saved_state": cable_state},
     }
 
 
@@ -405,6 +470,7 @@ def format_report(report: dict[str, Any]) -> str:
         f"{stats['macro8_state_changed']} Macro8 state fields, "
         f"{stats['persisted_state_changed']} other saved module fields, "
         f"{stats['patch_state_changed']} patch fields, "
+        f"{stats['cable_state_changed']} saved cable fields, "
         f"{stats['cables_added']} cables added, {stats['cables_removed']} cables removed"
     )
     for heading, items, prefix in (
@@ -432,6 +498,14 @@ def format_report(report: dict[str, Any]) -> str:
         for item in report["patch_state"]:
             lines.append(
                 f"  {item['field']}: "
+                f"{_display_value(item, 'before')} -> {_display_value(item, 'after')}"
+            )
+    if report["cables"]["saved_state"]:
+        lines.append("Saved cable state changes:")
+        for item in report["cables"]["saved_state"]:
+            lines.append(
+                f"  {item['source']}:out{item['output']} -> "
+                f"{item['destination']}:in{item['input']} {item['field']}: "
                 f"{_display_value(item, 'before')} -> {_display_value(item, 'after')}"
             )
     for heading, items, prefix in (
