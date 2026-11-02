@@ -246,7 +246,9 @@ identifier; old source-bundle claims must not be silently reinterpreted.
 Use `routes` to see the **actual saved direct Macro8 cable graph** in
 performer-friendly text, including each Macro8 control number/name/range,
 destination model and input port, source-declared audio/CV label, and the
-related knob (when the module source associates one with that CV port):
+related knob (when the module source associates one with that CV port).
+Rows sort deterministically by Macro8 controller, control number, and
+destination, so performers can scan one control's fan-out together:
 
 ```bash
 python3 tools/instrument-builder/instrument_builder.py routes \
