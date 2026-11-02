@@ -22,7 +22,8 @@ import zipfile
 from panel_preview import PreviewError, render_svg
 from compatibility import CompatibilityError, compatibility_report, text_report
 from control_mapping import (
-    CLOCKED_LFO_CONTRACT, FOLD_DRIVE_CONTRACT, FM_VOICE_CONTRACT, MappingError,
+    CHANCE_HOLD_CONTRACT, CLOCKED_LFO_CONTRACT, FOLD_DRIVE_CONTRACT,
+    FM_VOICE_CONTRACT, MappingError,
     derive_control_mappings)
 from verified_routes import verified_routes_report
 from route_report import build_route_report, text_route_report
@@ -243,13 +244,14 @@ def build_manifest(patch_bytes: bytes, name: str, *,
                    format_version: int = FORMAT_VERSION,
                    legacy_v2_mapping: bool = False,
                    legacy_fold_drive_mapping: bool | None = None,
-                   legacy_fm_voice_mapping: bool | None = None) -> dict:
+                   legacy_fm_voice_mapping: bool | None = None,
+                   legacy_chance_hold_mapping: bool | None = None) -> dict:
     name = _validate_display_name(name)
     if not _is_int(format_version) or format_version not in SUPPORTED_FORMAT_VERSIONS:
         raise InstrumentError("unsupported instrument manifest format/version")
     # Historical v2 contracts are cumulative, not mutable. An old unmarked
-    # bundle predates ClockedLFO, FoldDrive and FMVoice; a FoldDrive-marked
-    # archive cannot inherit later FMVoice port labels on read.
+    # bundle predates ClockedLFO, FoldDrive, FMVoice and ChanceHold; older
+    # markers never inherit later source-port labels on read.
     if legacy_fold_drive_mapping is None:
         legacy_fold_drive_mapping = legacy_v2_mapping
     elif legacy_v2_mapping and not legacy_fold_drive_mapping:
@@ -257,6 +259,10 @@ def build_manifest(patch_bytes: bytes, name: str, *,
     if legacy_fm_voice_mapping is None:
         legacy_fm_voice_mapping = legacy_fold_drive_mapping
     elif legacy_fold_drive_mapping and not legacy_fm_voice_mapping:
+        raise InstrumentError("incompatible historical v2 mapping contracts")
+    if legacy_chance_hold_mapping is None:
+        legacy_chance_hold_mapping = legacy_fm_voice_mapping
+    elif legacy_fm_voice_mapping and not legacy_chance_hold_mapping:
         raise InstrumentError("incompatible historical v2 mapping contracts")
     performance, plugins = patch_performance(patch_bytes)
     manifest = {
@@ -280,11 +286,20 @@ def build_manifest(patch_bytes: bytes, name: str, *,
                 _decode_json(patch_bytes, "VCV patch"), performance,
                 clocked_lfo_known=not legacy_v2_mapping,
                 fold_drive_known=not legacy_fold_drive_mapping,
-                fm_voice_known=not legacy_fm_voice_mapping)
+                fm_voice_known=not legacy_fm_voice_mapping,
+                chance_hold_known=not legacy_chance_hold_mapping)
         except MappingError as exc:
             raise InstrumentError(f"Macro8 control mapping: {exc}") from exc
         manifest["performance"]["controlMappings"] = mappings
-        if not legacy_fm_voice_mapping and any(
+        if not legacy_chance_hold_mapping and any(
+            route["destination"]["plugin"] == "ModularSynth"
+            and route["destination"]["model"] == "ChanceHold"
+            for route in mappings
+        ):
+            # Only newly packed ChanceHold destinations opt into the eighth
+            # model's labels. All historical v2 port contracts are immutable.
+            manifest["performance"]["controlMappingContract"] = CHANCE_HOLD_CONTRACT
+        elif not legacy_fm_voice_mapping and any(
             route["destination"]["plugin"] == "ModularSynth"
             and route["destination"]["model"] == "FMVoice"
             for route in mappings
@@ -395,7 +410,7 @@ def read_bundle(bundle_bytes: bytes) -> tuple[dict, bytes]:
                 if isinstance(performance, dict) else None)
     if contract is not None and contract not in (
             CLOCKED_LFO_CONTRACT, FOLD_DRIVE_CONTRACT,
-            FM_VOICE_CONTRACT):
+            FM_VOICE_CONTRACT, CHANCE_HOLD_CONTRACT):
         raise InstrumentError("unsupported control mapping contract")
     expected = build_manifest(
         patch, manifest.get("name"), format_version=manifest["formatVersion"],
@@ -403,10 +418,14 @@ def read_bundle(bundle_bytes: bytes) -> tuple[dict, bytes]:
                            and contract is None),
         legacy_fold_drive_mapping=(
             manifest["formatVersion"] == MAPPING_FORMAT_VERSION
-            and contract not in (FOLD_DRIVE_CONTRACT, FM_VOICE_CONTRACT)),
+            and contract not in (FOLD_DRIVE_CONTRACT, FM_VOICE_CONTRACT,
+                                 CHANCE_HOLD_CONTRACT)),
         legacy_fm_voice_mapping=(
             manifest["formatVersion"] == MAPPING_FORMAT_VERSION
-            and contract != FM_VOICE_CONTRACT))
+            and contract not in (FM_VOICE_CONTRACT, CHANCE_HOLD_CONTRACT)),
+        legacy_chance_hold_mapping=(
+            manifest["formatVersion"] == MAPPING_FORMAT_VERSION
+            and contract != CHANCE_HOLD_CONTRACT))
     if manifest != expected:
         raise InstrumentError("instrument manifest does not match its patch")
     return manifest, patch

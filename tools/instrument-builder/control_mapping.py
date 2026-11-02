@@ -19,6 +19,8 @@ CLOCKED_LFO_CONTRACT = "modular-synth-v2-clockedlfo-inputs-v1"
 FOLD_DRIVE_CONTRACT = "modular-synth-v2-folddrive-inputs-v1"
 # The newest seven-model v2 contract includes ClockedLFO and FoldDrive.
 FM_VOICE_CONTRACT = "modular-synth-v2-fmvoice-inputs-v1"
+# A new eighth-model contract extends all preceding verified source ports.
+CHANCE_HOLD_CONTRACT = "modular-synth-v2-chancehold-inputs-v1"
 
 
 class InputSpec(NamedTuple):
@@ -91,13 +93,27 @@ FIRST_PARTY_INPUTS: dict[str, tuple[InputSpec, ...]] = {
         InputSpec("FEEDBACK_CV_INPUT", "Feedback CV (10 V adds 95%)",
                   "cv", (4, "Modulator self-feedback")),
     ),
+    "ChanceHold": (
+        InputSpec("RATE_CV_INPUT", "Free clock rate CV (1 V/oct)",
+                  "cv", (0, "Free-run sample rate")),
+        InputSpec("CLOCK_INPUT", "External sample clock (2 V rising threshold)",
+                  "cv"),
+        InputSpec("RESET_INPUT",
+                  "Reproducible random sequence reset (2 V rising threshold)",
+                  "cv"),
+        InputSpec("CHANCE_CV_INPUT", "Sample probability CV (+10 V adds 100%)",
+                  "cv", (1, "Probability of taking a sample")),
+        InputSpec("GLIDE_CV_INPUT", "Glide duration CV (+10 V adds 2 seconds)",
+                  "cv", (2, "Glide time (99% settling)")),
+    ),
 }
 
 
 def _destination(module: dict, input_id: int, *,
                  clocked_lfo_known: bool,
                  fold_drive_known: bool,
-                 fm_voice_known: bool) -> dict:
+                 fm_voice_known: bool,
+                 chance_hold_known: bool) -> dict:
     plugin, model = module["plugin"], module["model"]
     result = {
         "moduleId": module["id"],
@@ -111,7 +127,8 @@ def _destination(module: dict, input_id: int, *,
     if (plugin != "ModularSynth" or model not in FIRST_PARTY_INPUTS
             or (model == "ClockedLFO" and not clocked_lfo_known)
             or (model == "FoldDrive" and not fold_drive_known)
-            or (model == "FMVoice" and not fm_voice_known)):
+            or (model == "FMVoice" and not fm_voice_known)
+            or (model == "ChanceHold" and not chance_hold_known)):
         return result
     ports = FIRST_PARTY_INPUTS[model]
     if input_id >= len(ports):
@@ -130,7 +147,8 @@ def _destination(module: dict, input_id: int, *,
 def derive_control_mappings(patch: dict, macro8: list[dict], *,
                             clocked_lfo_known: bool = True,
                             fold_drive_known: bool = True,
-                            fm_voice_known: bool = True) -> list[dict]:
+                            fm_voice_known: bool = True,
+                            chance_hold_known: bool = True) -> list[dict]:
     """Map only direct saved Macro8 output cables to input ports.
 
     Call after the patch/module/cable graph and Macro8 state are validated.
@@ -167,7 +185,8 @@ def derive_control_mappings(patch: dict, macro8: list[dict], *,
                 modules[cable["inputModuleId"]], cable["inputId"],
                 clocked_lfo_known=clocked_lfo_known,
                 fold_drive_known=fold_drive_known,
-                fm_voice_known=fm_voice_known),
+                fm_voice_known=fm_voice_known,
+                chance_hold_known=chance_hold_known),
         })
     routes.sort(key=lambda route: (
         route["source"]["moduleId"], route["source"]["outputId"],
