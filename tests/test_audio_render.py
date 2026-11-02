@@ -271,6 +271,13 @@ class AudioRenderTest(unittest.TestCase):
         self.assertRegex(checksum, r"^[0-9a-f]{16}$")
         self.assertGreater(peak, 0.15)
         self.assertGreater(rms, 0.02)
+        # Long feedback flushing must also remain finite under -ffast-math.
+        _, checksum, peak, rms = self.render(
+            "aggressive-fastmath", 48000, "fastmath-echo-tail-48000.wav",
+            echo=True, tail_seconds=2)
+        self.assertRegex(checksum, r"^[0-9a-f]{16}$")
+        self.assertGreater(peak, 0.15)
+        self.assertGreater(rms, 0.02)
 
     def test_dangling_symlink_does_not_create_target(self) -> None:
         # Without a file-entry check, an ifstream probe of a dangling
