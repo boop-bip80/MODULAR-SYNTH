@@ -156,4 +156,34 @@ def text_report(report: dict) -> str:
     lines.append(
         "No DAW/Rack load, third-party availability, port-bounds, or DSP checks."
     )
+    if "verifiedRoutes" in report:
+        routes = report["verifiedRoutes"]
+        counts = routes["summary"]
+        lines.append("")
+        lines.append(
+            f"Strict Macro8 source route check: {routes['status']} "
+            f"(bundle v{routes['bundleFormatVersion']})")
+        if routes["reason"] == "V1_NO_ROUTE_CONTRACT":
+            lines.append(
+                "No stored cable mapping contract in v1; repack from source "
+                "with --format-version 2.")
+        elif routes["reason"] == "NO_DIRECT_MACRO8_ROUTES":
+            lines.append("No saved direct Macro8 output cables; strict route check fails.")
+        else:
+            lines.append(
+                f"Routes: {counts['sourceVerified']} source-verified, "
+                f"{counts['unverified']} unverified of {counts['total']}.")
+        for route in routes["routes"]:
+            lines.append(
+                f"{route['status']:15} cable {route['cableId']} "
+                f"Macro8 {route['sourceModuleId']} output {route['sourceOutputId']} "
+                f"-> {route['plugin']}/{route['model']} "
+                f"module {route['destinationModuleId']} input {route['inputId']} "
+                f"({route['inputKind']})")
+        lines.append(
+            "SOURCE_VERIFIED = saved cable targets a first-party input port "
+            "described by this source revision; not DAW parameter automation.")
+        lines.append(
+            "Only v2 mapped first-party Macro8 destination indices are checked; "
+            "other patch cables and host port availability are not validated.")
     return "\n".join(lines) + "\n"
