@@ -7,6 +7,7 @@ This fork inherits the substantial upstream Cardinal build matrix. It also has a
 | Workflow | Automatic triggers | Manual trigger | Purpose |
 | --- | --- | --- | --- |
 | `quality-baseline.yml` | Pull requests and pushes to `main` | Yes | Fast repository/patch tests, offline submodule preflight, Module Forge and Instrument Builder suites, and standalone DSP compile/smoke tests (optimization and runtime-probed sanitizers) |
+| `real-rack-headers.yml` | PRs and `main` pushes changing original wrapper source, Rack/DPF pins or the check itself | Yes | Five original HEADLESS C++ translation-unit syntax checks against exact pinned **real** Rack/DPF dependency headers; no linking or host execution |
 | `build.yml` | Pushes to `main` (except documentation-only changes) and all tag pushes | Yes | Full cross-platform builds, plugin validation, platform packaging, release uploads |
 | `irc.yml` | None | Yes, but its upstream-only job is skipped on this fork | Prevent derivative activity from posting announcements to Cardinal's upstream IRC channel |
 
@@ -57,6 +58,58 @@ python3 -m unittest discover -s tools/module-forge -p 'test_*.py' -v
 python3 -B -m unittest discover -s tools/instrument-builder -p 'test_*.py' -v
 python3 -B tests/run_dsp_tests.py --sanitize=auto
 ```
+
+## Real Rack header compatibility preflight
+
+[`tools/ci/check_real_rack_headers.py`](../tools/ci/check_real_rack_headers.py)
+adds a **separate, narrower Linux source compatibility signal** beyond the
+`tests/rack_stub` test double. It parses the actual five
+`plugins/ModularSynth/src/*.cpp` translation units individually with the
+production `pluginInstance` alias, `HEADLESS` and `USING_CARDINAL_NOT_RACK`
+definitions, actual pinned Rack/DPF API headers, and authentic dependency
+headers. It checks **exact Gitlink revisions** of Rack, DPF and all six
+required nested Rack submodules before compiling. It never fetches sources,
+installs packages, or checks in generated dependency headers itself.
+
+From a Linux source checkout, without cloning all other plugin submodules:
+
+```sh
+git submodule update --init --depth 1 src/Rack dpf
+git -C src/Rack submodule update --init --depth 1 \
+  dep/glfw dep/nanosvg dep/oui-blendish dep/pffft dep/simde dep/speexdsp
+
+# Supply Jansson development headers (for example, apt install libjansson-dev).
+python3 -B tools/ci/check_real_rack_headers.py
+```
+
+Dependencies remain pinned through this repository's `src/Rack` Gitlink
+(`8c6f41b778b4bf8860b89b36d5503fd37924077f`), DPF Gitlink
+(`461ea6d45d842d273ae4d53ad5490e43459419cc`), and each nested Rack
+Gitlink—not a floating branch. The isolated CI job fetches only these two
+top-level SDK submodules and six nested dependencies. It uses the same
+official Xiph SpeexDSP mirror URL rewrite already configured for the full
+build workflow while preserving Rack's pinned SpeexDSP commit
+`27ddf98b627ab425d5337b1a0d8b80d7528f9b30`.
+
+For non-installed Jansson headers, pass `--jansson-include /path/to/usr/include`
+where both `jansson.h` and `jansson_config.h` reside. For SDKs already checked
+out elsewhere, pass `--rack-root /path/to/pinned/Rack` and
+`--dpf-root /path/to/pinned/dpf`; their revisions must **still match** this
+repository's Gitlinks. `--preflight-only` validates exact source revisions and
+headers without compiling. On missing/wrong dependencies the check exits 2
+with a targeted setup message; source compilation failure exits 1. The
+SpeexDSP Linux type header is generated from the pinned upstream `.in`
+template in an automatically removed temporary directory—never vendored.
+
+**Local evidence (2026-11-01):** GCC 13.3.0 `-fsyntax-only` completed for
+**MorphVCO, StateFilter, Macro8, StereoEcho and ClockedLFO (5/5)** against
+the exact Rack and DPF Gitlinks, exact six nested dependency Gitlinks,
+and official Ubuntu 24.04 `libjansson-dev` 2.14-2build2 headers. The runner
+does **not link** Rack/Cardinal libraries, build GUI widgets in a running host,
+exercise the Rack plugin ABI, produce `.so`/CLAP/VST3 binaries, load any DAW,
+or establish audio quality/performance. A hosted green job must be observed
+before reporting the gate as passing on GitHub Actions. A real full host
+build and manual patch/audio/DAW QA remain required for Phase 1 acceptance.
 
 The auto-discovered [five-original wrapper smoke](../tests/test_rack_wrapper_smoke.py) builds actual first-party `.cpp` wrappers as HEADLESS translation units and exercises basic processing/state against **`tests/rack_stub`**, a deliberately small fake Rack API. [Module Forge's generated wrapper tests](../tools/module-forge/test_generated_wrappers.py) compile both fresh oscillator/effect starters using the **same stub** under ordinary and aggressive optimization modes. These are valuable additional C++ source checks, **not real Rack SDK headers, binary ABI compatibility, GUI builds, plugin packaging, DAW loading or audio auditions**.
 
