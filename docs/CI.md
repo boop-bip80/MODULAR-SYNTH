@@ -43,6 +43,28 @@ The release-producing jobs alone receive GitHub token `contents: write` permissi
 
 The full matrix ignores pushes that change only Markdown/documentation files, to avoid rebuilding every platform for wording-only edits. Every tag push can still trigger a full release build, regardless of changed paths.
 
+## Source archive release safeguards
+
+The inherited source-tarball job builds two archives in the checkout's parent
+directory: `cardinal-<version>.tar.xz` and `cardinal+deps-<version>.tar.xz`,
+where `<version>` comes from `make -s version`. A new pre-upload check
+requires **both** files to be nonempty and verifies that GNU tar can list their
+contents using the Makefile's existing `--lzma` encoder. Tag artifact uploads
+now fail if no files match, and the GitHub Release step uses a **single**
+parent-relative file pattern and fails when it matches nothing. The one-pattern
+contract matters because `softprops/action-gh-release` rejects each unmatched
+pattern individually; the old three alternative `/home/runner` path depths
+would cause false failures if used with strict matching. [Offline release-gate tests](../tests/test_ci_source_tarball.py)
+exercise successful archive validation and rejection of missing, empty, corrupt
+and unsafe-version inputs.
+
+**Caveat:** The upstream Makefile uses GNU tar `--lzma` despite the
+`.tar.xz` filename extension; the guard deliberately tests the *current
+encoding*, not a claim of standard xz encoding. A later archive-format
+migration needs its own compatibility review. These safeguards are source
+and offline-test evidence only: no latest-main full build, published tarball,
+download validation or fork-owned Release is established by them.
+
 ## Offline submodule and dependency preflight
 
 Before a costly recursive checkout or full build, run:
