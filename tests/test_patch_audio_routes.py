@@ -260,5 +260,87 @@ class AudioRoutesTests(unittest.TestCase):
         )
 
 
+    def test_direct_source_verified_signal_route(self) -> None:
+        result = self.audit()
+        self.assertEqual(result["source_verified_signal_routes"], [{
+            "module_id": 1,
+            "model": "ModularSynth/MorphVCO",
+            "host_module_id": 2,
+            "host_input_port": 0,
+            "via_module_ids": [1],
+        }])
+        self.assertEqual(result["unverified_first_party_signal_routes"], [])
+        self.assertIn("not proof of audible output", format_output_routes(result))
+
+    def test_cv_only_first_party_hop_is_not_a_verified_signal_route(self) -> None:
+        # Module reachability alone once misrepresented this as a complete
+        # generator route even though the VCO enters StateFilter CUTOFF_CV.
+        self.patch["modules"].append(module(3, "ModularSynth", "StateFilter"))
+        self.patch["cables"] = [wire(11, 1, 3, 0, 1), wire(12, 3, 2)]
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["unrouted_first_party_generators"], [])
+        self.assertEqual(result["source_verified_signal_routes"], [])
+        self.assertEqual(result["unverified_first_party_signal_routes"], [
+            {"module_id": 1, "model": "ModularSynth/MorphVCO"},
+        ])
+        self.assertTrue(any("CV-only" in a for a in result["advisories"]))
+
+    def test_source_declared_audio_chain_has_stable_module_path(self) -> None:
+        self.patch["modules"].extend([
+            module(3, "ModularSynth", "StateFilter"),
+            module(4, "ModularSynth", "FoldDrive"),
+            module(5, "ModularSynth", "StereoEcho"),
+        ])
+        self.patch["cables"] = [
+            wire(11, 1, 3, 0, 0),  # MorphVCO audio -> filter audio, not cutoff CV
+            wire(12, 3, 4, 0, 0),  # low-pass -> wavefolder audio
+            wire(13, 4, 5, 0, 0),  # wavefolder -> echo Left
+            wire(14, 5, 2, 1, 0),  # echo Right -> host Left/M
+        ]
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["source_verified_signal_routes"], [{
+            "module_id": 1, "model": "ModularSynth/MorphVCO",
+            "host_module_id": 2, "host_input_port": 0,
+            "via_module_ids": [1, 3, 4, 5],
+        }])
+        self.assertEqual(result["unrouted_first_party_generators"], [])
+
+    def test_opaque_third_party_hop_remains_unverified(self) -> None:
+        self.patch["modules"].append(module(3, "ThirdParty", "UnknownVCA"))
+        self.patch["cables"] = [wire(11, 1, 3), wire(12, 3, 2)]
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["unrouted_first_party_generators"], [])
+        self.assertEqual(result["source_verified_signal_routes"], [])
+        self.assertEqual(result["unverified_first_party_signal_routes"], [
+            {"module_id": 1, "model": "ModularSynth/MorphVCO"},
+        ])
+
+    def test_source_verified_route_gate_is_strict_and_opt_in(self) -> None:
+        script = ROOT / "tools" / "patches" / "patch_audio_routes.py"
+        self.path.write_text(json.dumps(self.patch), encoding="utf-8")
+
+        def call(*flags: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(script), str(self.path), *flags],
+                cwd=ROOT, capture_output=True, text=True, check=False,
+            )
+
+        strong = "--require-source-verified-signal-route"
+        self.assertEqual(call(strong).returncode, 0)
+        self.patch["modules"].append(module(3, "ModularSynth", "StateFilter"))
+        self.patch["cables"] = [wire(11, 1, 3, 0, 1), wire(12, 3, 2)]
+        self.path.write_text(json.dumps(self.patch), encoding="utf-8")
+        # Graph-only compatibility gate continues to accept this cable path.
+        self.assertEqual(call("--require-generator-route").returncode, 0)
+        self.assertEqual(call(strong).returncode, 1)
+        report = json.loads(call(strong, "--json").stdout)[0]
+        self.assertEqual(report["source_verified_signal_routes"], [])
+        self.assertEqual(len(report["unverified_first_party_signal_routes"]), 1)
+
+
+
 if __name__ == "__main__":
     unittest.main()
