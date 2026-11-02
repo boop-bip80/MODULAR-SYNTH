@@ -80,7 +80,8 @@ The validation script should remain **strict about what it knows and honest abou
 To review a patch after a save/reload or handoff, compare the two saved `.vcv`
 files with [`patch_compare.py`](PATCH_COMPARISON.md). Its conservative state diff
 now detects changed HostMIDI mappings, arbitrary module `data`, bypass/version
-metadata and unknown top-level patch state as well as parameters and cables;
+metadata, unknown extra parameter/cable state and top-level patch state as well
+as parameters and cable endpoints;
 only documented view-only layout fields are ignored. This is useful evidence of
 serialized differences, **not** proof that a DAW successfully restored or
 executed the patch, and it cannot detect changes in external referenced assets.

@@ -212,6 +212,77 @@ class PatchCompareTests(unittest.TestCase):
         after["modules"][0]["data"] = {}
         self.assertFalse(compare_patches(before, after)["summary"]["changed"])
 
+    def test_unknown_parameter_entry_fields_are_tracked_by_parameter_id(self) -> None:
+        before = fixture()
+        before["modules"][1]["params"][0]["hostMapping"] = {"cc": [7, 74]}
+        after = copy.deepcopy(before)
+        after["modules"][1]["params"].reverse()
+        after["modules"][1]["params"][1]["hostMapping"]["cc"][1] = 71
+        after["modules"][1]["params"][1]["locked"] = True
+        report = compare_patches(before, after)
+        self.assertEqual(report["summary"]["persisted_state_changed"], 2)
+        self.assertEqual([entry["field"] for entry in report["modules"]["persisted_state"]],
+                         ["param[0].hostMapping.cc[1]", "param[0].locked"])
+        self.assertEqual(report["summary"]["parameters_changed"], 0)
+
+    def test_unknown_cable_metadata_is_detected_without_ids_or_colors(self) -> None:
+        before = fixture()
+        before["cables"][0]["routing"] = {"gain": 1.0, "enabled": True}
+        after = copy.deepcopy(before)
+        after["cables"][0]["routing"]["gain"] = 0.5
+        after["cables"][0]["routing"]["enabled"] = 1
+        after["cables"][0]["id"] = 999
+        after["cables"][0]["color"] = "#ffffff"
+        report = compare_patches(before, after)
+        self.assertEqual(report["summary"]["cable_state_changed"], 2)
+        self.assertEqual([x["field"] for x in report["cables"]["saved_state"]],
+                         ["cable.routing.enabled", "cable.routing.gain"])
+        self.assertEqual(report["summary"]["cables_added"], 0)
+        self.assertIn("cable.routing.gain: 1.0 -> 0.5", format_report(report))
+
+    def test_duplicate_cable_metadata_is_order_independent_and_grouped(self) -> None:
+        before = fixture()
+        before["cables"][0]["modulation"] = {"level": 1, "enabled": True}
+        duplicate = copy.deepcopy(before["cables"][0])
+        duplicate["id"] = 99
+        duplicate["modulation"] = {"level": 2, "enabled": False}
+        before["cables"].append(duplicate)
+        after = copy.deepcopy(before)
+        after["cables"].reverse()
+        for wire in after["cables"]:
+            wire["id"] += 1000
+        self.assertFalse(compare_patches(before, after)["summary"]["changed"])
+        after["cables"][-1]["modulation"]["level"] = 3
+        report = compare_patches(before, after)
+        self.assertEqual(report["summary"]["cable_state_changed"], 1)
+        self.assertEqual(report["cables"]["saved_state"][0]["field"], "cable.metadata")
+        self.assertEqual(report["summary"]["cables_added"], 0)
+        self.assertEqual(report["summary"]["cables_removed"], 0)
+
+    def test_cable_metadata_numeric_equivalence_and_type_distinction(self) -> None:
+        before = fixture()
+        extra = copy.deepcopy(before["cables"][0])
+        extra["id"] = 999
+        before["cables"].append(extra)
+        before["cables"][0]["routeMode"] = 1
+        before["cables"][-1]["routeMode"] = 0
+        after = copy.deepcopy(before)
+        after["cables"][0]["routeMode"] = 1.0
+        self.assertFalse(compare_patches(before, after)["summary"]["changed"])
+        after["cables"][0]["routeMode"] = True
+        self.assertEqual(compare_patches(before, after)["summary"]["cable_state_changed"], 1)
+
+    def test_rewired_cable_does_not_double_report_saved_state(self) -> None:
+        before = fixture()
+        before["cables"][0]["gain"] = 0.1
+        after = copy.deepcopy(before)
+        after["cables"][0]["outputId"] = 1
+        after["cables"][0]["gain"] = 0.9
+        report = compare_patches(before, after)
+        self.assertEqual(report["summary"]["cable_state_changed"], 0)
+        self.assertEqual(report["summary"]["cables_added"], 1)
+        self.assertEqual(report["summary"]["cables_removed"], 1)
+
     def test_multiple_identical_type_instances_without_stable_ids_are_conservative(self) -> None:
         before = patch([
             module(1, "Fundamental", "VCA-1"),
