@@ -156,7 +156,8 @@ shipping.
 
 ### Fresh generated modules against pinned real Rack headers
 
-A separate Linux/HEADLESS compatibility gate generates both starter variants
+A separate Linux/HEADLESS compatibility gate generates all three oscillator
+waveform/effect variants (sine, opt-in polyBLEP saw and stereo TPT low-pass)
 into a temporary directory, validates each output, and syntax-checks each
 actual `.cpp` against the **real pinned Rack/DPF/Jansson headers**. It shares
 the exact Gitlink/dependency preflight and Cardinal C++ definitions of
@@ -175,10 +176,13 @@ python3 -B tools/module-forge/check_real_generated_headers.py
 The dedicated
 [`Module Forge pinned Rack header syntax`](../.github/workflows/module-forge-real-headers.yml)
 workflow runs this gate and its fail-closed orchestration unit tests on relevant
-changes. A pass means **the default sine oscillator and effect HEADLESS translation
-units compile at the C++ syntax/API layer** against that pinned SDK. The opt-in
-saw has its own HEADLESS test-shim compile/process/alias test, but **is not yet
-included in this pinned real-Rack header workflow**. It does not link Cardinal,
+changes. A successful hosted run means **the default sine oscillator, opt-in
+polyBLEP saw, and stereo TPT effect HEADLESS translation units compile at the
+C++ syntax/API layer** against that pinned SDK. The orchestration tests verify
+that the saw source actually contains the BLEP correction, reject tampered
+generated saw output before compilation, and fail if the saw compiler step fails.
+These mocked orchestration tests alone are **not** a real SDK compile; the separate
+hosted gate must complete successfully to establish that evidence. It does not link Cardinal,
 compile the non-HEADLESS UI widgets, validate GUI resources, instantiate a
 VST3/CLAP/LV2 host, or render or audition DAW audio. A missing submodule, a
 wrong pinned Gitlink or an absent system header is a gate failure rather than
