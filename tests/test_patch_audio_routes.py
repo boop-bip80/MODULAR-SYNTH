@@ -342,5 +342,41 @@ class AudioRoutesTests(unittest.TestCase):
 
 
 
+    def test_dual_vca_only_propagates_its_source_declared_audio_lanes(self) -> None:
+        manifest = json.loads(
+            (ROOT / "plugins" / "ModularSynth" / "plugin.json")
+            .read_text(encoding="utf-8"))
+        if not any(model["slug"] == "DualVCA"
+                   for model in manifest.get("modules", [])):
+            self.skipTest("DualVCA module source lands in another PR")
+        self.patch["modules"].append(module(3, "ModularSynth", "DualVCA"))
+
+        # Audio fed to lane A must NOT be treated as reaching lane B output.
+        self.patch["cables"] = [wire(10, 1, 3, 0, 0), wire(11, 3, 2, 1, 0)]
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["source_verified_signal_routes"], [])
+        self.assertEqual(len(result["unverified_first_party_signal_routes"]), 1)
+
+        # A signal reaches both lane A output and summed output, but not B.
+        for output_port in (0, 2):
+            self.patch["cables"][1]["outputId"] = output_port
+            result = self.audit()
+            self.assertTrue(result["ok"], result["errors"])
+            self.assertEqual(result["source_verified_signal_routes"][0]["via_module_ids"],
+                             [1, 3])
+
+        # Lane B input reaches B output.
+        self.patch["cables"][0]["inputId"] = 2
+        self.patch["cables"][1]["outputId"] = 1
+        result = self.audit()
+        self.assertEqual(len(result["source_verified_signal_routes"]), 1)
+
+        # Gain CV without an audio input does not certify the signal chain.
+        self.patch["cables"][0]["inputId"] = 1
+        result = self.audit()
+        self.assertEqual(result["source_verified_signal_routes"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
