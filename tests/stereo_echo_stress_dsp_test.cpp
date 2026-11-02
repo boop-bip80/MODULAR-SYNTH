@@ -99,6 +99,43 @@ std::uint64_t hashFloat(std::uint64_t hash, float value) {
     return (hash ^ floatBits(value)) * fnvPrime;
 }
 
+void testDryInputAndOutputDenormalFloor() {
+    const double smallestDouble = std::numeric_limits<double>::denorm_min();
+    const double smallestFloat = std::numeric_limits<float>::denorm_min();
+    // 1e-35 is still representable as a normal float. Suppressing it proves
+    // the floor is effective independent of the host's FTZ/DAZ configuration.
+    constexpr double microscopicNormal = 1.0e-35;
+    constexpr int rate = 48000;
+
+    for (double wet : {0.0, 0.5, 1.0}) {
+        StereoEchoDSP echo;
+        const auto out = echo.process(
+            microscopicNormal, -smallestFloat, rate, 1.0, 0.9, wet, 0.5);
+        expect(floatBits(out.left) == 0u && floatBits(out.right) == 0u,
+               "subnormal and microscopic inputs must not leak into dry/wet host outputs");
+        for (int i = 0; i < rate / 100; ++i) {
+            const auto tail = echo.process(
+                smallestDouble, -microscopicNormal, rate, 1.0, 0.9, wet, 1.0);
+            if (isSubnormal(tail.left) || isSubnormal(tail.right)
+                || tail.left != 0.0f || tail.right != 0.0f) {
+                expect(false, "microscopic dry inputs and feedback must remain exact silence");
+                break;
+            }
+        }
+    }
+
+    expect(floatBits(StereoEchoDSP::outputVoltage(microscopicNormal)) == 0u
+           && floatBits(StereoEchoDSP::outputVoltage(-microscopicNormal)) == 0u,
+           "wet/dry cancellation residue must be suppressed at the output boundary");
+
+    StereoEchoDSP audible;
+    const auto normal = audible.process(1.0e-12, -1.0e-12, rate,
+                                       1.0, 0.0, 0.0, 0.0);
+    expect(std::abs(static_cast<double>(normal.left) - 1.0e-12) < 1.0e-18
+           && std::abs(static_cast<double>(normal.right) + 1.0e-12) < 1.0e-18,
+           "normal low-level audio well above the -400 dB floor must be preserved");
+}
+
 void testOneMillisecondLongFeedbackTail() {
     StereoEchoDSP echo;
     constexpr int rate = 48000;
@@ -306,6 +343,7 @@ void testDeterministicSixteenLaneRateAndCvStress() {
 } // namespace
 
 int main() {
+    testDryInputAndOutputDenormalFloor();
     testOneMillisecondLongFeedbackTail();
     testLongSlewsAtExtremeRates();
     testChangingSampleRateInvalidatesHistory();
@@ -314,7 +352,7 @@ int main() {
         std::fprintf(stderr, "StereoEcho long-run stress: %d failure(s)\n", failures);
         return 1;
     }
-    std::puts("PASS: StereoEcho 16-lane long-run CV/rate stress, bounded tail, "
+    std::puts("PASS: StereoEcho dry/output denormal floor, 16-lane CV/rate stress, bounded tail, "
               "denormal extinction and zero process/reset allocations");
     return 0;
 }
