@@ -40,6 +40,7 @@ void testMemoryAndDryWet() {
     const auto dry = delay.process(1.5, -0.75, 48000.0, 100.0, 0.0, 0.0, 0.0);
     expect(dry.left == 1.5f && dry.right == -0.75f,
            "zero wet must reproduce dry stereo inputs");
+    delay.reset();
     const auto half = delay.process(2.0, -1.0, 48000.0, 100.0, 0.0, 0.5, 0.0);
     expect(half.left == 1.0f && half.right == -0.5f,
            "50% wet must half dry when delay history is still silent");
@@ -167,6 +168,56 @@ void testSixteenVoiceIsolation() {
     }
 }
 
+void testControlAutomationSlew() {
+    constexpr int rate = 48000;
+    constexpr double targetFeedback = 0.9;
+    StereoEchoDSP echo;
+    echo.process(0.0, 0.0, rate, 5.0, 0.0, 0.0, 0.0);
+    expect(echo.currentFeedback() == 0.0 && echo.currentWet() == 0.0
+           && echo.currentCrossfeed() == 0.0,
+           "the first requested feedback, wet and crossfeed must initialize immediately");
+
+    echo.process(0.0, 0.0, rate, 5.0, targetFeedback, 1.0, 1.0);
+    const double amount = 1.0 - std::exp(
+        -6.907755278982137 / (StereoEchoDSP::kControlSlewSecondsTo99Point9Percent * rate));
+    expect(std::abs(echo.currentFeedback() - targetFeedback * amount) < 1e-12
+           && std::abs(echo.currentWet() - amount) < 1e-12
+           && std::abs(echo.currentCrossfeed() - amount) < 1e-12,
+           "stepped controls must move by just one bounded 10 ms slew increment");
+
+    for (int i = 0; i < rate / 100; ++i)
+        echo.process(0.0, 0.0, rate, 5.0, targetFeedback, 1.0, 1.0);
+    expect(std::abs(echo.currentFeedback() - targetFeedback) < 0.00091
+           && 1.0 - echo.currentWet() < 0.00101
+           && 1.0 - echo.currentCrossfeed() < 0.00101,
+           "stepped controls must reach at least 99.9% of target after 10 ms");
+
+    echo.reset();
+    echo.process(0.0, 0.0, rate, 5.0, 0.3, 0.25, 0.75);
+    expect(echo.currentFeedback() == 0.3 && echo.currentWet() == 0.25
+           && echo.currentCrossfeed() == 0.75,
+           "reset must adopt the new control values without a stale ramp");
+    echo.process(0.0, 0.0, 96000.0, 5.0, 0.4, 0.6, 0.2);
+    expect(echo.currentFeedback() == 0.4 && echo.currentWet() == 0.6
+           && echo.currentCrossfeed() == 0.2,
+           "sample-rate change must reinitialize all control slews immediately");
+
+    // Put one delayed impulse into the ring while the wet setting is zero.
+    // A fully wet single-sample switch would jump to 4 V exactly at the echo;
+    // the ramp restricts the first echo-only transition to about 57 mV.
+    StereoEchoDSP clickProbe;
+    for (int i = 0; i < 48; ++i)
+        clickProbe.process(0.0, 0.0, rate, 1.0, 0.0, 0.0, 0.0);
+    clickProbe.process(4.0, 0.0, rate, 1.0, 0.0, 0.0, 0.0);
+    for (int i = 0; i < 47; ++i)
+        clickProbe.process(0.0, 0.0, rate, 1.0, 0.0, 0.0, 0.0);
+    const auto firstWetStep = clickProbe.process(
+        0.0, 0.0, rate, 1.0, 0.0, 1.0, 0.0);
+    expect(firstWetStep.left > 0.0f && firstWetStep.left < 0.1f
+           && firstWetStep.right == 0.0f,
+           "first wet-automation sample must avoid a full-scale delayed-signal jump");
+}
+
 void testHostileValuesUnderFastMath() {
     constexpr double inf = std::numeric_limits<double>::infinity();
     const double nan = std::numeric_limits<double>::quiet_NaN();
@@ -211,6 +262,7 @@ int main() {
     testMaximumBufferBoundary();
     testPingPongDecay();
     testTimeSlewAndSampleRateReset();
+    testControlAutomationSlew();
     testSixteenVoiceIsolation();
     testHostileValuesUnderFastMath();
 
@@ -218,6 +270,6 @@ int main() {
         std::fprintf(stderr, "StereoEcho: %d DSP tests failed\n", failures);
         return 1;
     }
-    std::puts("PASS: StereoEcho impulse timing, ping-pong, 16 voices, fastmath safety and reset");
+    std::puts("PASS: StereoEcho impulse timing, control automation slew, ping-pong, 16 voices, fastmath safety and reset");
     return 0;
 }
