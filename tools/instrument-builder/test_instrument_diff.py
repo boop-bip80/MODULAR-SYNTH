@@ -74,6 +74,16 @@ class SavedInstrumentDifferenceTests(unittest.TestCase):
         self.assertIn("Only source JSON serialization/order changed",
                       text_diff_report(report))
 
+    def test_absent_patch_metadata_differs_from_explicit_null(self) -> None:
+        previous = sample_patch()
+        current = deepcopy(previous)
+        current["notes"] = None
+        old = self.bundle(patch_bytes(previous), "Pad", "old")
+        new = self.bundle(patch_bytes(current), "Pad", "new")
+        report = self.compare(old, new)
+        self.assertTrue(report["changed"])
+        self.assertEqual(report["changes"]["patchMetadataFields"], ["notes"])
+
     def test_macro_values_labels_and_scenes_identify_changed_controls(self) -> None:
         original = sample_patch()
         edited = deepcopy(original)
