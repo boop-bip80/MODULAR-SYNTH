@@ -110,7 +110,7 @@ class AudioRenderTest(unittest.TestCase):
         command = [
             str(self.binaries[profile]), "--sample-rate", str(rate),
             "--output", str(output),
-            *("--with-stereo-echo",) if echo else (),
+            *(("--with-stereo-echo",) if echo else ()),
         ]
         result = subprocess.run(command, text=True, capture_output=True,
                                 check=False, timeout=30)
