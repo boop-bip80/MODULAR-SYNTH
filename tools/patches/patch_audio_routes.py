@@ -52,11 +52,26 @@ SIGNAL_PORT_CONTRACTS = {
         ("AUDIO_INPUT", "DRIVE_CV_INPUT", "BIAS_CV_INPUT", "MIX_CV_INPUT"),
         ("AUDIO_OUTPUT",), (0,), (0,),
     ),
+    "DualVCA": (
+        ("AUDIO_A_INPUT", "CV_A_INPUT", "AUDIO_B_INPUT", "CV_B_INPUT"),
+        ("AUDIO_A_OUTPUT", "AUDIO_B_OUTPUT", "SUM_OUTPUT"), (0, 2), (0, 1, 2),
+    ),
     "StereoEcho": (
         ("LEFT_INPUT", "RIGHT_INPUT", "TIME_CV_INPUT", "FEEDBACK_CV_INPUT",
          "MIX_CV_INPUT"),
         ("LEFT_OUTPUT", "RIGHT_OUTPUT"), (0, 1), (0, 1),
     ),
+}
+
+
+# Only source-backed *signal input -> output* relationships are followed.
+# In particular, DualVCA's A input cannot reach its B-only output, while
+# either input may contribute to SUM. The CV inputs never qualify.
+SIGNAL_PORT_TRANSFERS = {
+    "StateFilter": {0: (0, 1, 2)},
+    "FoldDrive": {0: (0,)},
+    "StereoEcho": {0: (0, 1), 1: (0, 1)},
+    "DualVCA": {0: (0, 2), 2: (1, 2)},
 }
 
 
@@ -125,8 +140,11 @@ def _source_verified_signal_route(
             signal_ports = _verified_signal_ports(root, target["model"])
             if signal_ports is None or target_port not in signal_ports[0]:
                 continue
-            for next_port in signal_ports[1]:
-                queue.append((target_id, next_port, ancestry + (target_id,)))
+            outputs = SIGNAL_PORT_TRANSFERS.get(target["model"], {}).get(
+                target_port, ())
+            for next_port in outputs:
+                if next_port in signal_ports[1]:
+                    queue.append((target_id, next_port, ancestry + (target_id,)))
     return None
 
 
