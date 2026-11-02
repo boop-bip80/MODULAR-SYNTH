@@ -35,6 +35,11 @@ public:
     static constexpr std::size_t kCapacityFrames =
         static_cast<std::size_t>(kMaxFullRateHz) + 2u;
     static constexpr double kSlewSecondsTo99Point9Percent = 0.025;
+    // Large discontinuous time changes crossfade two fixed read heads in
+    // 25 ms, avoiding the extreme pitch glide of a single rapidly moving tap.
+    // Slow/continuous modulation retains the existing read-tap slew.
+    static constexpr double kAbruptTimeJumpMs = 20.0;
+    static constexpr double kAbruptTimeCrossfadeSeconds = 0.025;
     // Wet, feedback and stereo crossfeed reach 99.9% of a new setting in 10 ms.
     // Initialization/reset keep the first requested setting immediate.
     static constexpr double kControlSlewSecondsTo99Point9Percent = 0.010;
@@ -92,6 +97,12 @@ public:
         validFrames_ = 0;
         previousSampleRate_ = 0.0;
         currentDelaySamples_ = 0.0;
+        lastTimeTargetSamples_ = 0.0;
+        crossfadeFromSamples_ = 0.0;
+        crossfadeToSamples_ = 0.0;
+        crossfadeProgress_ = 0.0;
+        crossfadeStep_ = 1.0;
+        crossfadeActive_ = false;
         slewAmount_ = 1.0;
         controlSlewAmount_ = 1.0;
         currentFeedback_ = 0.0;
@@ -129,6 +140,9 @@ public:
             previousSampleRate_ = sampleRate;
             initialized_ = false;
             controlsInitialized_ = false;
+            crossfadeActive_ = false;
+            crossfadeProgress_ = 0.0;
+            crossfadeStep_ = 1.0 / (kAbruptTimeCrossfadeSeconds * sampleRate);
             slewAmount_ = 1.0 - std::exp(
                 -6.907755278982137 / (kSlewSecondsTo99Point9Percent * sampleRate));
             controlSlewAmount_ = 1.0 - std::exp(
@@ -161,19 +175,47 @@ public:
 
         if (!initialized_) {
             currentDelaySamples_ = targetSamples;
+            lastTimeTargetSamples_ = targetSamples;
             initialized_ = true;
         } else {
+            // Only a discontinuous request of at least 20 ms starts a second
+            // read head. During a fade, further requests are deferred until
+            // the current transition finishes; the most recent target is
+            // re-evaluated next sample. Gradual time sweeps are unchanged.
+            if (!crossfadeActive_ && std::abs(targetSamples - lastTimeTargetSamples_)
+                    >= sampleRate * kAbruptTimeJumpMs / 1000.0) {
+                crossfadeFromSamples_ = currentDelaySamples_;
+                crossfadeToSamples_ = targetSamples;
+                crossfadeProgress_ = 0.0;
+                crossfadeActive_ = true;
+            }
             currentDelaySamples_ += slewAmount_ * (targetSamples - currentDelaySamples_);
+            lastTimeTargetSamples_ = targetSamples;
         }
         currentDelaySamples_ = std::min(static_cast<double>(kCapacityFrames - 2u),
                                         std::max(1.0, currentDelaySamples_));
-        const auto whole = static_cast<std::size_t>(currentDelaySamples_);
-        const double fraction = currentDelaySamples_ - whole;
 
-        const double delayedL = (1.0 - fraction) * readAge(leftBuffer_, whole)
-                                 + fraction * readAge(leftBuffer_, whole + 1u);
-        const double delayedR = (1.0 - fraction) * readAge(rightBuffer_, whole)
-                                 + fraction * readAge(rightBuffer_, whole + 1u);
+        double delayedL = 0.0;
+        double delayedR = 0.0;
+        if (crossfadeActive_) {
+            // Linear (not equal-power) weights sum to one, so crossfading
+            // cannot add extra loop gain to the <=90%-feedback delay.
+            const double toWeight = std::min(1.0, crossfadeProgress_ + crossfadeStep_);
+            const double fromWeight = 1.0 - toWeight;
+            delayedL = fromWeight * readFractionalDelay(leftBuffer_, crossfadeFromSamples_)
+                     + toWeight * readFractionalDelay(leftBuffer_, crossfadeToSamples_);
+            delayedR = fromWeight * readFractionalDelay(rightBuffer_, crossfadeFromSamples_)
+                     + toWeight * readFractionalDelay(rightBuffer_, crossfadeToSamples_);
+            crossfadeProgress_ = toWeight;
+            if (toWeight >= 1.0) {
+                crossfadeActive_ = false;
+                currentDelaySamples_ = crossfadeToSamples_;
+                lastTimeTargetSamples_ = crossfadeToSamples_;
+            }
+        } else {
+            delayedL = readFractionalDelay(leftBuffer_, currentDelaySamples_);
+            delayedR = readFractionalDelay(rightBuffer_, currentDelaySamples_);
+        }
 
         // This 2x2 crossfeed matrix has row sum 1. Feedback <= 0.90 keeps
         // the linear echo loop contractive, even at full ping-pong mode.
@@ -198,6 +240,14 @@ public:
     }
 
 private:
+    double readFractionalDelay(const std::vector<float>& ring,
+                               double samplesAgo) const noexcept {
+        const auto whole = static_cast<std::size_t>(samplesAgo);
+        const double fraction = samplesAgo - whole;
+        return (1.0 - fraction) * readAge(ring, whole)
+             + fraction * readAge(ring, whole + 1u);
+    }
+
     static float ringVoltage(double value) noexcept {
         const double safe = clampFinite(value, 0.0, -20.0, 20.0);
         return safe > -kFeedbackSilenceFloorVolts && safe < kFeedbackSilenceFloorVolts
@@ -220,6 +270,12 @@ private:
     std::size_t validFrames_ = 0;
     double previousSampleRate_ = 0.0;
     double currentDelaySamples_ = 0.0;
+    double lastTimeTargetSamples_ = 0.0;
+    double crossfadeFromSamples_ = 0.0;
+    double crossfadeToSamples_ = 0.0;
+    double crossfadeProgress_ = 0.0;
+    double crossfadeStep_ = 1.0;
+    bool crossfadeActive_ = false;
     double slewAmount_ = 1.0;
     double controlSlewAmount_ = 1.0;
     double currentFeedback_ = 0.0;
