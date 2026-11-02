@@ -103,7 +103,7 @@ class SavedControlsTests(unittest.TestCase):
         code, stdout, error = self.cli(saved, "--json")
         self.assertEqual((code, error), (0, ""))
         self.assertEqual(json.loads(stdout), report)
-        self.assertIn("source-only", stdout)
+        self.assertIn("NOT live CV measurements", stdout)
         self.assertEqual(
             text_control_report(report).count("source-verified, "), 8)
 
