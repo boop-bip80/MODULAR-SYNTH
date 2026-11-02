@@ -12,6 +12,7 @@
 #include "../plugins/ModularSynth/src/Macro8.cpp"
 #include "../plugins/ModularSynth/src/StereoEcho.cpp"
 #include "../plugins/ModularSynth/src/ClockedLFO.cpp"
+#include "../plugins/ModularSynth/src/FMVoice.cpp"
 
 #include <cmath>
 #include <atomic>
@@ -262,6 +263,30 @@ void smokeEcho(const rack::ProcessArgs& args) {
     outputsFinite(*module, ModularSynthStereoEcho::NUM_OUTPUTS, 2, "Echo reset");
 }
 
+void smokeFM(const rack::ProcessArgs& args) {
+    ModularSynthFMVoice module;
+    require(module.params.size() == ModularSynthFMVoice::NUM_PARAMS, "FM params");
+    require(module.inputs.size() == ModularSynthFMVoice::NUM_INPUTS, "FM inputs");
+    module.inputs[ModularSynthFMVoice::PITCH_INPUT].setChannels(8);
+    module.params[ModularSynthFMVoice::RATIO_PARAM].setValue(2.0f);
+    module.params[ModularSynthFMVoice::INDEX_PARAM].setValue(2.5f);
+    module.params[ModularSynthFMVoice::FEEDBACK_PARAM].setValue(0.2f);
+    for (int c = 0; c < 8; ++c)
+        module.inputs[ModularSynthFMVoice::PITCH_INPUT].setVoltage(0.25f * c, c);
+    const std::size_t before = heapAllocations.load(std::memory_order_relaxed);
+    for (int n = 0; n < 1024; ++n)
+        module.process(args);
+    require(before == heapAllocations.load(std::memory_order_relaxed),
+            "FM audio callback must not allocate");
+    outputsFinite(module, ModularSynthFMVoice::NUM_OUTPUTS, 8, "FMVoice");
+    module.inputs[ModularSynthFMVoice::PITCH_INPUT].setChannels(1);
+    module.process(args);
+    outputsFinite(module, ModularSynthFMVoice::NUM_OUTPUTS, 1, "FM retired lanes");
+    module.onReset();
+    module.process(args);
+    outputsFinite(module, ModularSynthFMVoice::NUM_OUTPUTS, 1, "FM reset");
+}
+
 void smokeClock(const rack::ProcessArgs& args) {
     ModularSynthClockedLFO module;
     require(module.params.size() == ModularSynthClockedLFO::NUM_PARAMS, "LFO params");
@@ -280,7 +305,7 @@ void smokeClock(const rack::ProcessArgs& args) {
 int main() {
     try {
         require(modelMorphVCO && modelStateFilter && modelMacro8 && modelStereoEcho &&
-                    modelClockedLFO, "Five first-party models must instantiate");
+                    modelClockedLFO && modelFMVoice, "Six shim-tested first-party models must instantiate");
         const rack::ProcessArgs args{};
         smokeMorph(args);
         smokeFilter(args);
@@ -288,7 +313,8 @@ int main() {
         regressionMacroResetAndReload(args);
         smokeEcho(args);
         smokeClock(args);
-        std::cout << "PASS: 5 HEADLESS wrapper compile/process/port/reset smokes "
+        smokeFM(args);
+        std::cout << "PASS: 6 HEADLESS wrapper compile/process/port/reset smokes "
                      "and Macro8 lifecycle regressions (test shim)\n";
         return 0;
     } catch (const std::exception& error) {

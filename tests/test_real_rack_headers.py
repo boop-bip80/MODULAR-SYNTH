@@ -50,8 +50,9 @@ class RealRackHeaderCheckTests(unittest.TestCase):
         self.assertIn("/sdk/rack/include", flags)
         self.assertIn("/sdk/dpf/distrho", flags)
         self.assertNotIn(str(real_rack.ROOT / "tests" / "rack_stub"), flags)
-        self.assertEqual(len(real_rack.MODULES), 6)
+        self.assertEqual(len(real_rack.MODULES), 7)
         self.assertIn("FoldDrive", real_rack.MODULES)
+        self.assertIn("FMVoice", real_rack.MODULES)
 
     def test_unavailable_sdk_fails_clearly_without_network_or_auto_install(self) -> None:
         missing = real_rack.ROOT / "__no_rack_sdk_at_this_path__"
@@ -64,7 +65,7 @@ class RealRackHeaderCheckTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("Real Rack header preflight unavailable", result.stderr)
         self.assertIn("git submodule update --init --depth 1", result.stderr)
-        self.assertNotIn("PASS: 6/6", result.stdout)
+        self.assertNotIn("PASS: 7/7", result.stdout)
 
 
 if __name__ == "__main__":

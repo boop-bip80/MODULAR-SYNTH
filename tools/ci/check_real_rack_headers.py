@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = ROOT / "plugins" / "ModularSynth" / "src"
-MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO")
+MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice")
 RACK_SUBMODULE_HEADERS = {
     "dep/glfw": "include/GLFW/glfw3.h",
     "dep/nanosvg": "src/nanosvg.h",

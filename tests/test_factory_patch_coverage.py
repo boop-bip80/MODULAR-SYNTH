@@ -39,7 +39,7 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertEqual(len(report["examples"]), len(coverage.EXAMPLES))
         self.assertTrue(all(patch["ok"] for patch in report["examples"]))
         self.assertTrue({"MorphVCO", "StateFilter", "FoldDrive", "Macro8",
-                         "StereoEcho", "ClockedLFO"}.issubset(
+                         "StereoEcho", "ClockedLFO", "FMVoice"}.issubset(
             report["model_coverage"]))
         self.assertTrue(all(report["model_coverage"].values()))
         self.assertTrue(any("Morphing_State_Pad.vcv" in name
@@ -50,6 +50,8 @@ class FactoryPatchCoverageTests(unittest.TestCase):
                       report["model_coverage"]["ClockedLFO"])
         self.assertIn("MODULAR_-_Fold_Drive_Cinematic_Motion.vcv",
                       report["model_coverage"]["FoldDrive"])
+        self.assertIn("MODULAR_-_FM_Voice_Performance.vcv",
+                      report["model_coverage"]["FMVoice"])
         self.assertEqual(report["sample_rate_status"],
                          "not asserted: no host runtime sample-rate execution")
         self.assertGreater(sum(patch["warning_count"]
@@ -68,7 +70,7 @@ class FactoryPatchCoverageTests(unittest.TestCase):
             if json_mode:
                 report = json.loads(proc.stdout)
                 self.assertTrue(report["ok"])
-                self.assertGreaterEqual(len(report["model_coverage"]), 6)
+                self.assertGreaterEqual(len(report["model_coverage"]), 7)
             else:
                 self.assertIn("PASS factory patch claims", proc.stdout)
                 self.assertIn("host execution not tested", proc.stdout)
@@ -88,6 +90,26 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertFalse(report["ok"])
         self.assertTrue(any("missing advertised route: LFO modulation to Plaits" in err
                             for err in report["errors"]), report["errors"])
+
+    def test_fm_voice_example_requires_enveloped_midi_pitch_route(self) -> None:
+        filename = "MODULAR_-_FM_Voice_Performance.vcv"
+
+        def remove_pitch(patch: dict) -> None:
+            fm = next(m["id"] for m in patch["modules"]
+                      if m.get("plugin") == "ModularSynth"
+                      and m.get("model") == "FMVoice")
+            patch["cables"] = [
+                c for c in patch["cables"]
+                if not (c["inputModuleId"] == fm and c["inputId"] == 0)
+            ]
+
+        self.mutate(filename, remove_pitch)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any(
+            "missing advertised route: MIDI pitch to FM Voice 1V/oct" in err
+            for err in report["errors"]
+        ), report["errors"])
 
     def test_missing_original_model_fails_manifest_coverage(self) -> None:
         def remove_macro(patch: dict) -> None:

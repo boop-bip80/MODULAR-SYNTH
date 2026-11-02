@@ -62,6 +62,15 @@
         "LFO",
         "Polyphonic"
       ]
+    },
+    {
+      "slug": "FMVoice",
+      "name": "FM Voice",
+      "description": "Original 16-voice two-operator phase-modulation oscillator with frequency ratio, modulation-index and feedback CV; no oversampling or bandlimit.",
+      "tags": [
+        "Oscillator",
+        "Polyphonic"
+      ]
     }
   ]
 }

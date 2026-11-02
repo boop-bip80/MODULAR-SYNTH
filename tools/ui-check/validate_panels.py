@@ -19,12 +19,13 @@ import xml.etree.ElementTree as ET
 # Deliberately source-backed rather than manifest-driven: a new module can be
 # checked before its registration/packaging PR lands.
 PANELS = {"MorphVCO": 12, "StateFilter": 14, "FoldDrive": 12,
-          "Macro8": 20, "StereoEcho": 16, "ClockedLFO": 16}
+          "Macro8": 20, "StereoEcho": 16, "ClockedLFO": 16, "FMVoice": 12}
 # This widget uses literal create*Centered() sites, so it can be checked for
 # exact source callsite cardinality as well as in-bounds center coordinates.
 EXPECTED_SITES = {"FoldDrive": {"Param": 3, "Input": 4, "Output": 1},
                   "StereoEcho": {"Param": 4, "Input": 5, "Output": 2},
-                  "ClockedLFO": {"Param": 4, "Input": 5, "Output": 5, "Light": 1}}
+                  "ClockedLFO": {"Param": 4, "Input": 5, "Output": 5, "Light": 1},
+                  "FMVoice": {"Param": 5, "Input": 4, "Output": 2}}
 SVG_NS = "{http://www.w3.org/2000/svg}svg"
 GRID_PX_PER_HP = 15.0
 GRID_HEIGHT_PX = 380.0
