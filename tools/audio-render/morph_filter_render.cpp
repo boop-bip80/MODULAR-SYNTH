@@ -3,11 +3,12 @@
  * Copyright (C) 2026 boop-bip80 contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Exercises real first-party MorphVCO -> StateFilter DSP cores.
- * No Rack, host, audio hardware, third-party dependencies, or audio buffers.
+ * Exercises first-party MorphVCO -> StateFilter DSP, optionally StereoEcho.
+ * No Rack, host, audio hardware or third-party dependencies.
  */
 #include "plugins/ModularSynth/src/MorphVCO.hpp"
 #include "plugins/ModularSynth/src/StateFilter.hpp"
+#include "plugins/ModularSynth/src/StereoEcho.hpp"
 
 #include <algorithm>
 #include <array>
@@ -17,6 +18,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <system_error>
 
@@ -24,12 +26,18 @@ namespace {
 
 using modular_synth::dsp::MorphOscillator;
 using modular_synth::dsp::StateFilter;
+using modular_synth::dsp::StereoEchoDSP;
 
 constexpr int kSeconds = 4;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
 constexpr double kPi = 3.1415926535897932384626433832795;
 constexpr double kHeadroom = 0.75;
+// Fixed, bounded audition settings; the four-second render truncates the tail.
+constexpr double kEchoDelayMs = 187.5;
+constexpr double kEchoFeedback = 0.32;
+constexpr double kEchoWet = 0.35;
+constexpr double kEchoCrossfeed = 0.70;
 constexpr std::uint64_t kFnvOffset = UINT64_C(14695981039346656037);
 constexpr std::uint64_t kFnvPrime = UINT64_C(1099511628211);
 
@@ -96,7 +104,7 @@ void writeWaveHeader(std::ostream& out, int sampleRate, std::uint32_t frames) {
     writeU32(out, bytes);
 }
 
-bool render(const std::string& output, int sampleRate) {
+bool render(const std::string& output, int sampleRate, bool withEcho) {
     const int framesPerNote = sampleRate / 4;
     const auto frames = static_cast<std::uint32_t>(sampleRate * kSeconds);
     std::ofstream stream(output, std::ios::binary | std::ios::trunc);
@@ -110,6 +118,11 @@ bool render(const std::string& output, int sampleRate) {
     MorphOscillator subVoice;
     StateFilter bright;
     StateFilter warm;
+    // The delay allocates its fixed rings only when explicitly requested.
+    // No allocation or reset happens in the audio-sample loop.
+    std::optional<StereoEchoDSP> echo;
+    if (withEcho)
+        echo.emplace();
     Statistics stats;
 
     for (std::uint32_t frame = 0; frame < frames; ++frame) {
@@ -139,7 +152,17 @@ bool render(const std::string& output, int sampleRate) {
         // Stereo variation; both paths pass through the genuine filter.
         const double left = (0.62 * a.low + 0.21 * b.low + 0.09 * a.band) / 5.0;
         const double right = (0.47 * a.low + 0.31 * b.low - 0.07 * a.band) / 5.0;
-        if (!stats.writePcm16(stream, left) || !stats.writePcm16(stream, right)) {
+        double outputL = left;
+        double outputR = right;
+        if (echo) {
+            // The pure echo core uses Rack-style volts, while WAV amplitude
+            // is normalized: convert to/from 5 V full-scale consistently.
+            const auto delayed = echo->process(left * 5.0, right * 5.0,
+                sampleRate, kEchoDelayMs, kEchoFeedback, kEchoWet, kEchoCrossfeed);
+            outputL = delayed.left / 5.0;
+            outputR = delayed.right / 5.0;
+        }
+        if (!stats.writePcm16(stream, outputL) || !stats.writePcm16(stream, outputR)) {
             std::cerr << "Audio render failed: non-finite sample or I/O error\n";
             return false;
         }
@@ -153,7 +176,7 @@ bool render(const std::string& output, int sampleRate) {
     const double rms = std::sqrt(stats.squares / static_cast<double>(stats.samples));
     std::cout << "WAV " << output << " rate=" << sampleRate
               << " frames=" << frames << " channels=" << kChannels
-              << " peak=" << std::fixed << std::setprecision(6) << stats.peak
+              << " echo=" << (withEcho ? "on" : "off") << " peak=" << std::fixed << std::setprecision(6) << stats.peak
               << " rms=" << rms << " pcm_fnv1a64=" << std::hex
               << std::setw(16) << std::setfill('0') << stats.hash << std::dec << '\n';
     return true;
@@ -161,7 +184,7 @@ bool render(const std::string& output, int sampleRate) {
 
 void usage(std::ostream& output) {
     output << "Usage: morph_filter_render --output FILE.wav "
-              "[--sample-rate 44100|48000|96000]\n";
+              "[--sample-rate 44100|48000|96000] [--with-stereo-echo]\n";
 }
 
 } // namespace
@@ -169,11 +192,16 @@ void usage(std::ostream& output) {
 int main(int argc, char** argv) {
     std::string output;
     int sampleRate = 48000;
+    bool withEcho = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--help" || arg == "-h") {
             usage(std::cout);
             return 0;
+        }
+        if (arg == "--with-stereo-echo") {
+            withEcho = true;
+            continue;
         }
         if ((arg == "--output" || arg == "--sample-rate") && i + 1 < argc) {
             const std::string value = argv[++i];
@@ -210,5 +238,5 @@ int main(int argc, char** argv) {
         std::cerr << "Output already exists (will not overwrite): " << output << '\n';
         return 2;
     }
-    return render(output, sampleRate) ? 0 : 1;
+    return render(output, sampleRate, withEcho) ? 0 : 1;
 }
