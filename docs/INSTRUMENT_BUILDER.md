@@ -416,6 +416,51 @@ LIVE bars remain the physical knob values even when snapshot A–D is selected.
 It does **not** alter Rack panels, provide a reskinnable runtime UI, execute
 audio, or export a plugin.
 
+### Opt-in route-aware static panel
+
+When the source bundle was packed with **--format-version 2**, the existing
+performance panel can also display a visual matrix of every controller's saved
+direct Macro8 cable destinations:
+
+~~~bash
+python3 tools/instrument-builder/instrument_builder.py preview \
+  Echo_Motion.msinstrument --show-routes --out Echo_Motion_Routed.svg
+~~~
+
+The route-aware SVG retains the familiar eight controls and A–D snapshot
+concept above an additional **saved routing map**. For each Macro8 control,
+the map shows a source-to-destination connector, the first saved destination
+plugin/model and Rack input, the source-declared port name when verified,
+and total saved cable/unknown-input counts. Every control has a row, including
+unused controls. A fan-out with several destinations shows one destination
+and an explicit **+N more** count; the SVG row's accessible title includes
+up to three source-derived destinations. Use `routes --json` for the complete
+saved routing list. Controllers and rows are deterministic and sorted by
+source module and control number; destination selection also has a stable
+sort order.
+
+For current, **FMVoice-marked** v2 archives, FMVoice's four CV input
+descriptors (pitch, ratio, index and feedback) appear with their exact
+source-backed labels. FoldDrive, ClockedLFO and the older original modules
+use the same verified v2 route contracts. Unknown third-party inputs and
+FMVoice ports in older unmarked/ClockedLFO/FoldDrive-marked v2 archives are
+prominently counted as **UNVERIFIED INPUT**. A valid source bundle can still
+be previewed when routes are unknown: the panel never upgrades their
+historical contract or pretends they work. For v1, `--show-routes` exits with
+error code **2** and creates no SVG, because the v1 manifest contains no
+route metadata; repack the trusted `.vcv` source as v2 first.
+
+This is an opt-in presentation flag only. **Without --show-routes, output
+is byte-for-byte unchanged** (including existing v1/v2 base panels and
+established SVG tests). Source ZIPs, manifest versions, patch bytes, saved
+parameter state and the default `preview` command remain unchanged.
+Every input goes through full ZIP, SHA-256, patch and manifest re-derivation
+before any output file is created; malformed routes or tampered source
+metadata are rejected. The SVG escapes source text and has no scripts,
+external requests, runtime playback or interactive controls. Cable counts
+are saved **graph** facts, not measured CV/audio, working DAW automation,
+plugin loadability, correct musical routing or a published instrument.
+
 ### Source-bundle compatibility preflight
 
 Use `check` to verify a `.msinstrument` **source bundle** and compare only
