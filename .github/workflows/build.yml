@@ -689,6 +689,10 @@ jobs:
         run: |
           make HEADLESS=true tarball
           make HEADLESS=true tarball+deps
+      - name: Verify source release archives
+        shell: bash
+        run: |
+          bash .github/workflows/scripts/verify-source-tarballs.sh "$(make -s version)"
       - name: Set sha8 (non-release)
         if: startsWith(github.ref, 'refs/tags/') != true
         run: echo "SHA8=$(echo ${{ github.sha }} | cut -c1-8)" >> $GITHUB_ENV
@@ -702,6 +706,7 @@ jobs:
             /home/runner/cardinal*.tar.xz
             /home/runner/*/cardinal*.tar.xz
             /home/runner/*/*/cardinal*.tar.xz
+          if-no-files-found: ${{ startsWith(github.ref, 'refs/tags/') && 'error' || 'warn' }}
       - uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
@@ -709,6 +714,7 @@ jobs:
           name: ${{ github.ref_name }}
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
           files: |
             /home/runner/cardinal*.tar.xz
             /home/runner/*/cardinal*.tar.xz
