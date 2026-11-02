@@ -70,6 +70,9 @@ struct ModularSynthMacro8 : Module {
     std::array<dsp::SchmittTrigger, 4> slotTriggers{};
     dsp::SchmittTrigger liveTrigger;
     std::atomic<int> selectedSlot{-1}; // -1 = live performer knobs
+    // Rack reset/patch-restore callbacks may run off the engine thread.
+    // Publish a request; only process() may touch smoother/trigger state.
+    std::atomic<bool> resetAudioStateRequested{false};
     // Names are published as immutable strings. Rack hosts may serialize
     // state on a non-UI thread while the editor draws or edits a label.
     // Shared_ptr atomic load/store is only used OUTSIDE process().
@@ -126,11 +129,26 @@ struct ModularSynthMacro8 : Module {
         Module::onReset(e);
         snapshots.clear();
         selectedSlot.store(-1, std::memory_order_release);
-        // The Rack engine owns smoother/trigger state while processing.
-        // Do not mutate non-atomic audio state from an editor reset callback.
+        resetAudioStateRequested.store(true, std::memory_order_release);
     }
 
     void process(const ProcessArgs& args) override {
+        // The overwhelmingly common path is a read-only atomic load; avoid
+        // a cache-line-writing exchange on every single audio sample.
+        if (resetAudioStateRequested.load(std::memory_order_acquire) &&
+            resetAudioStateRequested.exchange(false, std::memory_order_acq_rel)) {
+            // Discard voltage from the previous patch/reset on the audio
+            // thread. Prime held buttons so reloading while one is down
+            // cannot immediately STORE over a freshly restored snapshot.
+            smoother.reset();
+            for (int slot = 0; slot < 4; ++slot) {
+                auto& trigger = slotTriggers[static_cast<std::size_t>(slot)];
+                trigger = dsp::SchmittTrigger{};
+                trigger.process(params[SLOT_A_PARAM + slot].getValue());
+            }
+            liveTrigger = dsp::SchmittTrigger{};
+            liveTrigger.process(params[LIVE_PARAM].getValue());
+        }
         const bool storing = params[STORE_MODE_PARAM].getValue() >= 0.5f;
 
         // Button edge detection and capture run only on the audio thread.
@@ -152,7 +170,7 @@ struct ModularSynthMacro8 : Module {
             selectedSlot.store(-1, std::memory_order_relaxed);
 
         float target[8];
-        int active = selectedSlot.load(std::memory_order_relaxed);
+        int active = selectedSlot.load(std::memory_order_acquire);
         // A bounded snapshot read returns false rather than spinning if a
         // patch-save/restore on another thread is updating the slot.
         bool usingSnapshot = active >= 0 && snapshots.load(active, target);
@@ -269,6 +287,7 @@ struct ModularSynthMacro8 : Module {
         }
         selectedSlot.store(slot >= 0 && snapshots.has(slot) ? slot : -1,
                            std::memory_order_release);
+        resetAudioStateRequested.store(true, std::memory_order_release);
     }
 };
 

@@ -56,6 +56,11 @@ measured audio or a verified DAW session.
 - Renaming uses the right-click menu (short printable ASCII names, up to
   12 characters). Recalled scenes **do not move the on-panel knobs**;
   the selected LED identifies the active CV source.
+- **Initialize/reset** clears the four scenes and returns to LIVE. Loading
+  saved module state restores a valid selected scene. In either case the
+  next audio tick starts from the current knobs/saved scene voltage,
+  without carrying the previous patch's morph voltage into the new state.
+  Holding a scene button through reload does not silently overwrite it.
 - This is a performer CV controller, **not** a nested patch-to-plugin exporter.
 
 ### Stereo Echo (`StereoEcho`)
