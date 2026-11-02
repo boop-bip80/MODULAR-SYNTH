@@ -54,11 +54,14 @@ requires **both** files to be nonempty and verifies that GNU tar can list their
 contents using the Makefile's existing `--lzma` encoder. It also checks that
 every listed member is inside the expected `cardinal-<version>/` archive
 root, rejects `..` traversal components, and requires the license, README,
-Makefile, original-module manifest and MorphVCO source in **both** archives.
-This catches valid-but-incomplete or mis-versioned archives; it is a narrow
-first-party source inventory, **not** a complete third-party-license audit.
-Tag artifact uploads
-now fail if no files match, and the GitHub Release step uses a **single**
+Makefile, original-module manifest, shared plugin header, and the **seven
+registered original modules' C++ wrappers, DSP headers, and SVG panels**
+(including FMVoice) in **both** archives. The offline test compares the
+required slug list with `plugins/ModularSynth/plugin.json` so a future
+registration change cannot silently bypass the gate. This catches
+valid-but-incomplete or mis-versioned archives; it is a narrow first-party
+source inventory, **not** a complete third-party-license audit.
+Tag artifact uploads now fail if no files match, and the GitHub Release step uses a **single**
 parent-relative file pattern and fails when it matches nothing. The one-pattern
 contract matters because `softprops/action-gh-release` rejects each unmatched
 pattern individually; the old three alternative `/home/runner` path depths
