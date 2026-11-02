@@ -26,6 +26,7 @@ from control_mapping import (
     derive_control_mappings)
 from verified_routes import verified_routes_report
 from route_report import build_route_report, text_route_report
+from control_report import build_control_report, text_control_report
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -566,6 +567,12 @@ def main(argv: list[str] | None = None) -> int:
     routes.add_argument(
         "--json", action="store_true",
         help="machine-readable source-only route report")
+    controls = subs.add_parser(
+        "controls", help="inventory all saved Macro8 knobs, snapshots and routes")
+    controls.add_argument("bundle", type=Path)
+    controls.add_argument(
+        "--json", action="store_true",
+        help="deterministic source-only saved performance inventory")
     extract = subs.add_parser("unpack", help="extract into a NEW directory only")
     extract.add_argument("bundle", type=Path)
     extract.add_argument("--out", required=True, type=Path)
@@ -604,6 +611,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(_canonical_json(report).decode("utf-8"), end="")
             else:
                 print(text_route_report(report), end="")
+        elif args.command == "controls":
+            report = build_control_report(inspect(args.bundle))
+            if args.json:
+                print(_canonical_json(report).decode("utf-8"), end="")
+            else:
+                print(text_control_report(report), end="")
         elif args.command == "check":
             report = check(
                 args.bundle, args.repo_root,
