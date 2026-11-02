@@ -17,9 +17,9 @@ DOC_PATH = ROOT / "docs/MODULE_QUICK_REFERENCE.md"
 PLUGIN_DIR = ROOT / "plugins/ModularSynth"
 PATCH_DIR = ROOT / "patches/examples"
 
-# The quick reference covers exactly the current five first-party modules.
+# The quick reference covers exactly the current six first-party modules.
 # A newly registered model requires an explicit catalog update.
-MODULE_SLUGS = ("MorphVCO", "StateFilter", "Macro8", "StereoEcho", "ClockedLFO")
+MODULE_SLUGS = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO")
 
 
 def enum_ports(source: str, enum_name: str) -> list[str]:
@@ -103,6 +103,15 @@ class ModuleQuickReferenceTests(unittest.TestCase):
                 '"Resonance CV (10 V full span; adds to knob)"',
                 '"Drive CV (10 V full span; adds to knob)"',
             ),
+            "FoldDrive": (
+                'configParam(DRIVE_PARAM, 0.0f, 1.0f, 0.3f,',
+                'configParam(BIAS_PARAM, -1.0f, 1.0f, 0.0f,',
+                'configParam(MIX_PARAM, 0.0f, 1.0f, 0.65f,',
+                '"Drive CV (+10 V adds 100%; 3 ms slew)"',
+                '"Bias CV (+10 V adds +100%; 3 ms slew)"',
+                '"Wet mix CV (+10 V adds 100%; 3 ms slew)"',
+                '"Folded/dry mixed audio (+/-10 V maximum)"',
+            ),
             "Macro8": (
                 'configParam(MORPH_TIME_PARAM, 0.0f, 5.0f, 0.25f,',
                 '"Snapshot transition time (99.9% settling)"',
@@ -150,8 +159,8 @@ class ModuleQuickReferenceTests(unittest.TestCase):
         linked = [path for path, _ in rows]
         self.assertEqual(len(linked), len(set(linked)), "Duplicate factory-patch references")
         self.assertEqual(actual, set(linked), "Update quick reference when factory patches change")
-        self.assertEqual(13, len(actual))
-        self.assertIn("## Thirteen factory patches", self.document)
+        self.assertEqual(14, len(actual))
+        self.assertIn("## Fourteen factory patches", self.document)
         self.assertIn("[Cinematic Pulse Score]", self.document)
         for path, classification in rows:
             with self.subTest(path=path):

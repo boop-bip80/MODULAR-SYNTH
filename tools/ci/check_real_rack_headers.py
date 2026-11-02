@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = ROOT / "plugins" / "ModularSynth" / "src"
-MODULES = ("MorphVCO", "StateFilter", "Macro8", "StereoEcho", "ClockedLFO")
+MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO")
 RACK_SUBMODULE_HEADERS = {
     "dep/glfw": "include/GLFW/glfw3.h",
     "dep/nanosvg": "src/nanosvg.h",
@@ -189,7 +189,7 @@ def main() -> int:
                     print(f"FAIL: {module} (real pinned Rack headers)\n{completed.stdout}", file=sys.stderr)
                     return 1
                 print(f"PASS: {module} (real pinned Rack headers)")
-        print("PASS: 5/5 original HEADLESS translation units; syntax only, no link/host test")
+        print(f"PASS: {len(MODULES)}/{len(MODULES)} original HEADLESS translation units; syntax only, no link/host test")
         return 0
     except (PreflightError, OSError) as exc:
         print(f"Real Rack header preflight unavailable: {exc}\n\n{SETUP}", file=sys.stderr)
