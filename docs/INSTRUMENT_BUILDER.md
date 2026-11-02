@@ -279,6 +279,49 @@ bundle or file read failure. For CI enforcement use the existing
 source-only route gate fails. The opt-in strict check's output and the
 default `inspect`, `check`, and `pack` behavior are unchanged.
 
+### Saved Macro8 controls and snapshot inventory
+
+The offline **controls** command inventories **all eight knobs on every Macro8**
+even if they are unpatched. Use it when preparing a performance, comparing the
+saved LIVE setting with a selected A–D scene, or identifying unused controls:
+
+~~~bash
+python3 tools/instrument-builder/instrument_builder.py controls \
+  Echo_Motion.msinstrument
+
+# Machine-readable report with the same saved values and deterministic ordering:
+python3 tools/instrument-builder/instrument_builder.py controls \
+  Echo_Motion.msinstrument --json
+~~~
+
+Each controller is sorted by saved Rack module ID and includes its STORE/RECALL
+mode, saved LIVE/A/B/C/D target selection, morph time, and populated scene
+names. Its eight controls show the saved name and unipolar/bipolar mode,
+normalized LIVE knob position, **saved target** position, and each A–D snapshot's
+saved value (or null for an empty scene). For convenience the report calculates
+*nominal voltages* from the declared Macro8 source mapping: unipolar
+(10 × normalized) V and bipolar (10 × normalized − 5) V. These values are
+not audio-CV measurements; Macro8 may still be morphing between targets in
+the actual Rack engine.
+
+For a validated **v2** source bundle, each control also shows how many direct
+saved Macro8 cables leave it, broken out by first-party source-verified and
+conservatively unverified destination port contracts. These are **saved
+connections**, not proven functional host routes; third-party inputs and older
+v2 contracts stay unverified. For **v1**, cable counts are explicitly null
+(routes unknown (v1) in text), never zero: the historical v1 manifest has
+no source-verified routing records. Repack trusted .vcv source with
+--format-version 2 if those counts matter.
+
+Both text and --json views validate the full source ZIP, patch SHA-256,
+Macro8 state and derived manifest before displaying anything. Neither command
+changes bundle bytes or upgrades its schema. Exit code **0** means the bundle
+is valid even if saved routes are unknown/unverified; **2** means the source
+bundle or read failed. Use check --require-verified-routes for a strict
+source-only route gate. This inventory cannot tell whether a plugin was linked,
+a patch loaded, a CV actually emitted, a knob was host-automated or any sound
+was produced.
+
 ### Safety and limits
 
 - The source `.vcv` is parsed as strict JSON: duplicate keys, NaN/Inf,
