@@ -129,6 +129,15 @@ class AudioRoutesTests(unittest.TestCase):
             fake_root = Path(temp)
             source = fake_root / "plugins" / "Cardinal" / "src" / "HostAudio.cpp"
             source.parent.mkdir(parents=True)
+            # The manifest remains authoritative even while deliberately
+            # corrupting just the C++ port-contract declaration. Without it,
+            # the inspector rightly rejects Cardinal/HostAudio2 as unknown
+            # first-party model before reaching the intended drift assertion.
+            manifest = fake_root / "plugins" / "Cardinal" / "plugin.json"
+            manifest.write_text(
+                (ROOT / "plugins" / "Cardinal" / "plugin.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
             current = (ROOT / "plugins" / "Cardinal" / "src" / "HostAudio.cpp").read_text()
             source.write_text(current.replace(
                 "struct HostAudio2 : HostAudio<2>", "struct HostAudio2 : HostAudio<4>"),
