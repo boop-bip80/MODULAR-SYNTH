@@ -269,7 +269,7 @@ Possible experiments: a local AI patch assistant, procedural/generative composit
 - [Cardinal build instructions](BUILDING.md)
 - [Cardinal license inventory](LICENSES.md)
 - [First-party module quick reference](MODULE_QUICK_REFERENCE.md)
-- [Fourteen example patch coverage](PATCH_COVERAGE.md)
+- [Fifteen example patch coverage](PATCH_COVERAGE.md)
 - [Instrument Builder source prototype](INSTRUMENT_BUILDER.md)
 - [Source-only license/provenance QA](COMPLIANCE_QA.md)
 
