@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Semantic, order-independent comparison of plain-text Cardinal/VCV patches.
+"""Conservative, order-independent comparison of plain-text Cardinal/VCV patches.
 
 Offline only: this does not load plugins, render audio, or verify a DAW session.
-Rack layout, cable colors/IDs and JSON array ordering are not musical changes.
+Rack layout, cable colors/IDs and top-level module/cable array order are ignored.
+Unclassified persisted data is compared rather than silently assumed cosmetic.
 """
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ from collections import Counter, defaultdict
 import json
 import math
 from pathlib import Path
+import re
 import sys
 from typing import Any
 
@@ -21,6 +23,11 @@ class PatchComparisonError(ValueError):
 
 MISSING = object()
 SLOTS = ("A", "B", "C", "D")
+MACRO8_DOCUMENTED_FIELDS = frozenset(("macro8Version", "selectedSlot", "names", "snapshots"))
+# These view-only fields are explicitly exempted; unknown saved fields are
+# conservatively treated as potential state, because Rack/module formats vary.
+VIEW_ONLY_PATCH_FIELDS = frozenset(("zoom", "offset"))
+VIEW_ONLY_MODULE_FIELDS = frozenset(("pos",))
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -105,7 +112,11 @@ def _parse_patch(patch: dict[str, Any]) -> tuple[dict[int, dict[str, Any]], list
             data = {}
         if (plugin, model) == ("ModularSynth", "Macro8") and not isinstance(data, dict):
             raise PatchComparisonError(f"{context}.data for Macro8 must be an object")
-        modules[mid] = {"plugin": plugin, "model": model, "params": params, "data": data}
+        metadata = {key: value for key, value in raw.items()
+                    if key not in {"id", "plugin", "model", "params", "data"}
+                    and key not in VIEW_ONLY_MODULE_FIELDS}
+        modules[mid] = {"plugin": plugin, "model": model, "params": params,
+                        "data": data, "metadata": metadata}
 
     cables: list[dict[str, int]] = []
     seen: set[int] = set()
@@ -187,7 +198,11 @@ def _match(
 def _field_change(field: str, lhs: Any, rhs: Any) -> dict[str, Any] | None:
     if lhs is MISSING and rhs is MISSING:
         return None
-    if lhs is not MISSING and rhs is not MISSING and lhs == rhs:
+    # JSON booleans and numbers are distinct saved types even though Python
+    # compares True == 1 and False == 0. Numeric 1 and 1.0 remain equivalent.
+    same_type_or_numeric = (type(lhs) is type(rhs) or
+                            (type(lhs) in (int, float) and type(rhs) in (int, float)))
+    if lhs is not MISSING and rhs is not MISSING and same_type_or_numeric and lhs == rhs:
         return None
     change = "added" if lhs is MISSING else "removed" if rhs is MISSING else "changed"
     return {
@@ -195,6 +210,38 @@ def _field_change(field: str, lhs: Any, rhs: Any) -> dict[str, Any] | None:
         "before": None if lhs is MISSING else lhs,
         "after": None if rhs is MISSING else rhs,
     }
+
+
+def _child_path(parent: str, key: str | int) -> str:
+    if isinstance(key, int):
+        return f"{parent}[{key}]"
+    if re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key):
+        return f"{parent}.{key}" if parent else key
+    return f"{parent}[{json.dumps(key, ensure_ascii=False)}]"
+
+
+def _nested_changes(field: str, lhs: Any, rhs: Any) -> list[dict[str, Any]]:
+    """Compare saved state deeply, preserving list order and ignoring dict order.
+
+    This intentionally does not guess which unknown plugin keys are UI-only:
+    treating a saved knob mapping or bypass flag as cosmetic is much worse than
+    reporting an extra conservative state difference.
+    """
+    if isinstance(lhs, dict) and isinstance(rhs, dict):
+        changes: list[dict[str, Any]] = []
+        for key in sorted(lhs.keys() | rhs.keys()):
+            changes.extend(_nested_changes(_child_path(field, key),
+                                           lhs.get(key, MISSING), rhs.get(key, MISSING)))
+        return changes
+    if isinstance(lhs, list) and isinstance(rhs, list):
+        changes = []
+        for index in range(max(len(lhs), len(rhs))):
+            changes.extend(_nested_changes(_child_path(field, index),
+                                           lhs[index] if index < len(lhs) else MISSING,
+                                           rhs[index] if index < len(rhs) else MISSING))
+        return changes
+    entry = _field_change(field, lhs, rhs)
+    return [entry] if entry else []
 
 
 def _macro8_changes(old: dict[str, Any], new: dict[str, Any]) -> list[dict[str, Any]]:
@@ -263,6 +310,7 @@ def compare_patches(
     paired, removed, added, old_refs, new_refs = _match(old, new)
     parameters: list[dict[str, Any]] = []
     macros: list[dict[str, Any]] = []
+    persisted_state: list[dict[str, Any]] = []
     remaps: list[dict[str, Any]] = []
     for pair in paired:
         lhs, rhs = pair["before_id"], pair["after_id"]
@@ -280,6 +328,25 @@ def compare_patches(
                 })
         if _kind(old[lhs]) == ("ModularSynth", "Macro8"):
             macros.extend({**pair, **entry} for entry in _macro8_changes(old[lhs]["data"], new[rhs]["data"]))
+            # Known Macro8 fields retain the existing fine-grained report;
+            # unknown future Macro8 fields must not disappear from the diff.
+            old_data = {k: v for k, v in old[lhs]["data"].items()
+                        if k not in MACRO8_DOCUMENTED_FIELDS}
+            new_data = {k: v for k, v in new[rhs]["data"].items()
+                        if k not in MACRO8_DOCUMENTED_FIELDS}
+        else:
+            old_data, new_data = old[lhs]["data"], new[rhs]["data"]
+        persisted_state.extend({**pair, **entry} for entry in
+                               _nested_changes("data", old_data, new_data))
+        persisted_state.extend({**pair, **entry} for entry in
+                               _nested_changes("module", old[lhs]["metadata"], new[rhs]["metadata"]))
+    patch_state = _nested_changes(
+        "patch",
+        {k: v for k, v in before.items()
+         if k not in {"modules", "cables"} and k not in VIEW_ONLY_PATCH_FIELDS},
+        {k: v for k, v in after.items()
+         if k not in {"modules", "cables"} and k not in VIEW_ONLY_PATCH_FIELDS},
+    )
     before_edges, after_edges = _edges(old_cables, old_refs), _edges(new_cables, new_refs)
     cable_added: list[dict[str, Any]] = []
     cable_removed: list[dict[str, Any]] = []
@@ -296,19 +363,24 @@ def compare_patches(
         "id_remaps_ignored": len(remaps),
         "parameters_changed": len(parameters),
         "macro8_state_changed": len(macros),
+        "persisted_state_changed": len(persisted_state),
+        "patch_state_changed": len(patch_state),
         "cables_added": sum(c["count"] for c in cable_added),
         "cables_removed": sum(c["count"] for c in cable_removed),
     }
     summary["changed"] = any(summary[key] for key in (
         "modules_added", "modules_removed", "parameters_changed",
-        "macro8_state_changed", "cables_added", "cables_removed",
+        "macro8_state_changed", "persisted_state_changed", "patch_state_changed",
+        "cables_added", "cables_removed",
     ))
     return {
         "before": before_label, "after": after_label, "summary": summary,
         "modules": {
             "added": added, "removed": removed, "id_remaps": remaps,
             "parameters": parameters, "macro8_state": macros,
+            "persisted_state": persisted_state,
         },
+        "patch_state": patch_state,
         "cables": {"added": cable_added, "removed": cable_removed},
     }
 
@@ -331,6 +403,8 @@ def format_report(report: dict[str, Any]) -> str:
     lines.append(
         f"  Changes: {stats['parameters_changed']} parameters, "
         f"{stats['macro8_state_changed']} Macro8 state fields, "
+        f"{stats['persisted_state_changed']} other saved module fields, "
+        f"{stats['patch_state_changed']} patch fields, "
         f"{stats['cables_added']} cables added, {stats['cables_removed']} cables removed"
     )
     for heading, items, prefix in (
@@ -343,6 +417,7 @@ def format_report(report: dict[str, Any]) -> str:
     for heading, items in (
         ("Parameter changes", report["modules"]["parameters"]),
         ("Macro8 state changes", report["modules"]["macro8_state"]),
+        ("Other saved module state changes", report["modules"]["persisted_state"]),
     ):
         if items:
             lines.append(f"{heading}:")
@@ -352,6 +427,13 @@ def format_report(report: dict[str, Any]) -> str:
                     f"  {item['ref']} {field}: "
                     f"{_display_value(item, 'before')} -> {_display_value(item, 'after')}"
                 )
+    if report["patch_state"]:
+        lines.append("Saved patch-level state changes:")
+        for item in report["patch_state"]:
+            lines.append(
+                f"  {item['field']}: "
+                f"{_display_value(item, 'before')} -> {_display_value(item, 'after')}"
+            )
     for heading, items, prefix in (
         ("Cables added", report["cables"]["added"], "+"),
         ("Cables removed", report["cables"]["removed"], "-"),

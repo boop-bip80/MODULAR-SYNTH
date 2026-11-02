@@ -77,6 +77,14 @@ Open [`patches/examples/MODULAR_-_Morph_VCO_Performance.vcv`](../patches/example
 
 The validation script should remain **strict about what it knows and honest about what it cannot know**. Do not silence meaningful warnings by inventing module or port schema data.
 
+To review a patch after a save/reload or handoff, compare the two saved `.vcv`
+files with [`patch_compare.py`](PATCH_COMPARISON.md). Its conservative state diff
+now detects changed HostMIDI mappings, arbitrary module `data`, bypass/version
+metadata and unknown top-level patch state as well as parameters and cables;
+only documented view-only layout fields are ignored. This is useful evidence of
+serialized differences, **not** proof that a DAW successfully restored or
+executed the patch, and it cannot detect changes in external referenced assets.
+
 
 ## Second example — Morphing State Pad
 
