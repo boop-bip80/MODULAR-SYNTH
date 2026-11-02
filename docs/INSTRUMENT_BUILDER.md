@@ -130,10 +130,16 @@ mapping annotations. A matching `modulatesParameter` describes a **known CV
 input's effect on a first-party knob**, not a cable to that Rack parameter,
 automation assignment, or a promise that the host applies a particular value.
 
-For the current six first-party modules, source-backed input contracts come
-from the exact `InputIds` enums, `configInput` descriptors and matching
-`configParam` labels in `plugins/ModularSynth/src/*.cpp`; regression tests keep
-the source-backed port contracts synchronized with those sources.
+Seven first-party modules are now registered, but the opt-in v2 Macro8
+route verifier has **source-backed input contracts for six**: MorphVCO,
+StateFilter, Macro8, StereoEcho, ClockedLFO and FoldDrive. The new seventh
+model, **FMVoice**, does not yet have a versioned Instrument Builder route
+contract, so Macro8 → FMVoice destinations remain **UNVERIFIED** under this
+tool even though the Rack module is present in source. The six supported
+contracts derive from `InputIds`, `configInput` and related `configParam`
+declarations in `plugins/ModularSynth/src/*.cpp`; regression tests keep
+those source-backed port contracts synchronized. This is an offline schema
+limit, not a claim about the behavior of a live CV cable.
 
 The `ClockedLFO` source-backed input contract uses its exact zero-based Rack
 `inputId` values:
