@@ -168,6 +168,17 @@ The real-header Actions workflow now runs both syntax-only and this separate
 object/link gate when runners execute; neither should be marked green before
 an actual completed run.
 
+**Observed local evidence (2026-11-02; exact test commit
+[`1360387`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/136038722618e146873164f0abe8a99efe29398a)):**
+with GCC 13.3.0, exact pinned Rack/DPF plus six nested Gitlinks, and extracted
+Ubuntu 24.04 Jansson 2.14 headers, all seven real HEADLESS units passed the
+existing syntax checker, and `--link-smoke` separately **compiled 7/7 objects,
+linked 7/7 into a temporary ELF shared object, and found seven defined
+first-party model symbols**. The focused Python test file passed **10/10**
+cases, including missing-wrapper, registration-drift, duplicate/undefined-model
+negative fixtures. This is local pre-host evidence only; no production
+Cardinal binary or loadable DAW plugin was created.
+
 At the 2026-11-02 inspection, [full-build run 41386608744](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41386608744)
 had **20/20 queued jobs, zero executed steps**, and [real-header run
 41386608694](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41386608694)
