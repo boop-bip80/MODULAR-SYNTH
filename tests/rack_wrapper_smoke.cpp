@@ -13,6 +13,7 @@
 #include "../plugins/ModularSynth/src/StereoEcho.cpp"
 #include "../plugins/ModularSynth/src/ClockedLFO.cpp"
 #include "../plugins/ModularSynth/src/FMVoice.cpp"
+#include "../plugins/ModularSynth/src/ChanceHold.cpp"
 
 #include <cmath>
 #include <atomic>
@@ -301,12 +302,38 @@ void smokeClock(const rack::ProcessArgs& args) {
     outputsFinite(module, ModularSynthClockedLFO::NUM_OUTPUTS, 1, "LFO reset");
 }
 
+
+void smokeChance(const rack::ProcessArgs& args) {
+    ModularSynthChanceHold module;
+    require(module.params.size() == ModularSynthChanceHold::NUM_PARAMS,
+            "ChanceHold params");
+    require(module.inputs.size() == ModularSynthChanceHold::NUM_INPUTS,
+            "ChanceHold inputs");
+    module.inputs[ModularSynthChanceHold::RATE_CV_INPUT].setChannels(16);
+    module.params[ModularSynthChanceHold::CHANCE_PARAM].setValue(1.0f);
+    module.params[ModularSynthChanceHold::GLIDE_PARAM].setValue(0.2f);
+    module.process(args);
+    const auto before = heapAllocations.load(std::memory_order_relaxed);
+    for (int n = 0; n < 1024; ++n)
+        module.process(args);
+    const auto after = heapAllocations.load(std::memory_order_relaxed);
+    require(before == after, "ChanceHold process must never allocate");
+    outputsFinite(module, ModularSynthChanceHold::NUM_OUTPUTS, 16, "ChanceHold");
+    module.inputs[ModularSynthChanceHold::RATE_CV_INPUT].setChannels(1);
+    module.process(args);
+    outputsFinite(module, ModularSynthChanceHold::NUM_OUTPUTS, 1, "Chance retired lanes");
+    module.onReset();
+    module.process(args);
+    outputsFinite(module, ModularSynthChanceHold::NUM_OUTPUTS, 1, "Chance reset");
+}
+
 } // namespace
 
 int main() {
     try {
         require(modelMorphVCO && modelStateFilter && modelMacro8 && modelStereoEcho &&
-                    modelClockedLFO && modelFMVoice, "Six shim-tested first-party models must instantiate");
+                    modelClockedLFO && modelFMVoice && modelChanceHold,
+                "Seven shim-tested first-party models must instantiate");
         const rack::ProcessArgs args{};
         smokeMorph(args);
         smokeFilter(args);
@@ -315,7 +342,8 @@ int main() {
         smokeEcho(args);
         smokeClock(args);
         smokeFM(args);
-        std::cout << "PASS: 6 HEADLESS wrapper compile/process/port/reset smokes "
+        smokeChance(args);
+        std::cout << "PASS: 7 HEADLESS wrapper compile/process/port/reset smokes "
                      "and Macro8 lifecycle regressions (test shim)\n";
         return 0;
     } catch (const std::exception& error) {

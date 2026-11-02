@@ -69,7 +69,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         self.assertIn('tar --lzma -tf "$archive"', checker)
         self.assertIn('root="cardinal-${version}"', checker)
         self.assertIn('required["plugins/ModularSynth/src/plugin.hpp"]', checker)
-        self.assertEqual(len(MODULE_SLUGS), 7)
+        self.assertEqual(len(MODULE_SLUGS), 8)
         slug_list = re.search(
             r'module_count = split\("([^"]+)", slugs, " "\)',
             checker,

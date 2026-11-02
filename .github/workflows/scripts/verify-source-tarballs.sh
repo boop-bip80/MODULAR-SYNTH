@@ -25,10 +25,10 @@ for archive in "../cardinal-${version}.tar.xz" "../cardinal+deps-${version}.tar.
             required["Makefile"] = 1
             required["plugins/ModularSynth/plugin.json"] = 1
             required["plugins/ModularSynth/src/plugin.hpp"] = 1
-            # Keep the seven first-party C++ wrappers, DSP headers and panels
+            # Keep all eight first-party C++ wrappers, DSP headers and panels
             # together; the source-level Python test compares this list with
             # the registered slugs in plugin.json to catch future drift.
-            module_count = split("ClockedLFO FoldDrive FMVoice Macro8 MorphVCO StateFilter StereoEcho", slugs, " ")
+            module_count = split("ChanceHold ClockedLFO FoldDrive FMVoice Macro8 MorphVCO StateFilter StereoEcho", slugs, " ")
             for (i = 1; i <= module_count; ++i) {
                 required["plugins/ModularSynth/src/" slugs[i] ".cpp"] = 1
                 required["plugins/ModularSynth/src/" slugs[i] ".hpp"] = 1

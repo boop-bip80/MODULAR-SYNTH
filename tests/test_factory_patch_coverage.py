@@ -39,7 +39,7 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertEqual(len(report["examples"]), len(coverage.EXAMPLES))
         self.assertTrue(all(patch["ok"] for patch in report["examples"]))
         self.assertTrue({"MorphVCO", "StateFilter", "FoldDrive", "Macro8",
-                         "StereoEcho", "ClockedLFO", "FMVoice"}.issubset(
+                         "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold"}.issubset(
             report["model_coverage"]))
         self.assertTrue(all(report["model_coverage"].values()))
         self.assertTrue(any("Morphing_State_Pad.vcv" in name
@@ -52,6 +52,8 @@ class FactoryPatchCoverageTests(unittest.TestCase):
                       report["model_coverage"]["FoldDrive"])
         self.assertIn("MODULAR_-_FM_Voice_Performance.vcv",
                       report["model_coverage"]["FMVoice"])
+        self.assertIn("MODULAR_-_Chance_Hold_FM_Drift.vcv",
+                      report["model_coverage"]["ChanceHold"])
         self.assertEqual(report["sample_rate_status"],
                          "not asserted: no host runtime sample-rate execution")
         self.assertGreater(sum(patch["warning_count"]
@@ -70,7 +72,7 @@ class FactoryPatchCoverageTests(unittest.TestCase):
             if json_mode:
                 report = json.loads(proc.stdout)
                 self.assertTrue(report["ok"])
-                self.assertGreaterEqual(len(report["model_coverage"]), 7)
+                self.assertGreaterEqual(len(report["model_coverage"]), 8)
             else:
                 self.assertIn("PASS factory patch claims", proc.stdout)
                 self.assertIn("host execution not tested", proc.stdout)

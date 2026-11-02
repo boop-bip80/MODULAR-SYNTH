@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Originals — musician's quick reference
 
-Seven first-party Rack models are **statically registered in source** and expected
+Eight first-party Rack models are **statically registered in source** and expected
 under **MODULAR-SYNTH Originals** in the module browser after a successful build.
 This page is a patching cheat sheet for the models actually
 declared in [the collection manifest](../plugins/ModularSynth/plugin.json)
@@ -19,6 +19,7 @@ measured audio or a verified DAW session.
 | **Stereo Echo** (`StereoEcho`) | Polyphonic stereo delay with wet/dry and ping-pong crossfeed | **5 in / 2 out** | Time 250 ms; feedback 35%; wet 40%; crossfeed 50% |
 | **Clocked LFO** (`ClockedLFO`) | Sixteen-lane free/externally clocked modulation; 5 wave/trigger outputs | **5 in / 5 out** | Free rate 0.5 Hz; clock ratio 1:1; phase 0%; width 50% |
 | **FM Voice** (`FMVoice`) | 16-voice two-operator phase-modulation sine voice with feedback | **4 in / 2 out** | Octave 0; fine 0 cents; ratio 1:1; index 0 rad; feedback 0% |
+| **Chance Hold** (`ChanceHold`) | Seeded 16-lane random S&H with chance, glide and stepped trigger | **5 in / 3 out** | Free clock 1 Hz; chance 75%; glide 0.15 s; quantize off |
 
 ### Morph VCO (`MorphVCO`)
 
@@ -136,6 +137,27 @@ measured audio or a verified DAW session.
   nominally ±5 V. Up to 16 Rack polyphonic lanes.
   FM sidebands are not bandlimited or oversampled; extreme settings alias.
 
+### Chance Hold (`ChanceHold`)
+
+[Source/configuration](../plugins/ModularSynth/src/ChanceHold.cpp) ·
+[Clock, random CV, safety and reset contract](CHANCE_HOLD.md)
+
+- **Random modulation:** STEP is **−5…+5 V** sample-and-hold; SMOOTH
+  is a slewed copy; HIT emits a **+10 V, 1 ms** trigger only when a new
+  random voltage was accepted. All three outputs support **16 lanes**.
+- **Timing:** FREE RATE knob is **1/16…32 Hz** (1 Hz default), with
+  1 V/oct RATE CV. Connecting CLK overrides the free clock. A rising edge
+  ≥2 V after a fall ≤1 V counts as one chance event. RESET restarts the
+  deterministic per-lane pseudorandom streams, phases and outputs.
+- **Musician controls:** CHANCE **0…100%** (75% default) decides whether
+  an event takes a new sample, with ±10 V PROB CV adding ±100 percentage
+  points. GLIDE **0…2 s** (0.15 s default) is approximately 99%
+  settling time; +10 V GLIDE CV adds 2 s before clamping. QUANTIZE
+  rounds *new* STEP values to 1/12 V when enabled.
+- **No host tempo assumption:** connect a beat/trigger to CLK if required;
+  the example uses the internal free clock. The green LED indicates only
+  a connected CLK input, not confirmed host transport.
+
 ## Five suggested wiring recipes (host-unverified)
 
 1. **Keyboard subtractive voice:** `Host MIDI pitch → Morph VCO PITCH`;
@@ -175,11 +197,11 @@ oscillator morph. Those are saved signal/CV routes, not an audio audition.
 HostTime beat/reset routing and Clocked LFO modulation to VCO, filter,
 ADSR retrigger and Echo wet mix; it needs host transport for beat lock. **Cinematic Pulse Score** instead leaves HostTime/CLK disconnected, uses a free-running LFO PULSE to gate a second ADSR/VCA on its low-pass left path, and keeps high-pass right separate. Its four A–D Macro8 scenes are saved CV positions, not auditioned film-score audio.
 
-## Fifteen factory patches
+## Sixteen factory patches
 
-All fifteen links below are actual `.vcv` files under
+All sixteen links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
-existing plugin collection and does not require one of these seven first-party
+existing plugin collection and does not require one of these eight first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
 
 | Patch | Models | Play/try this |
@@ -189,6 +211,7 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Clockwork Pulses](../patches/examples/MODULAR_-_Clockwork_Pulses.vcv) | Bundled-only | Start host transport; sequence → Plaits → Plateau reverb |
 | [Morph VCO Performance](../patches/examples/MODULAR_-_Morph_VCO_Performance.vcv) | Originals | Play MIDI notes; move wave morph and pulse width |
 | [FM Voice Performance](../patches/examples/MODULAR_-_FM_Voice_Performance.vcv) | Originals | Play MIDI notes; change ratio/index/feedback for evolving FM tones (watch aliasing) |
+| [Chance Hold FM Drift](../patches/examples/MODULAR_-_Chance_Hold_FM_Drift.vcv) | Originals | Play MIDI; Chance Hold smoothly randomizes FM index at a probabilistic 1 Hz free clock |
 | [Morphing State Pad](../patches/examples/MODULAR_-_Morphing_State_Pad.vcv) | Originals | Hold notes; recall Macro8 A/B to modulate oscillator/filter |
 | [Cinematic Drift Pad](../patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv) | Originals | Long ADSR pad; alternate Macro8 A/B with slow transitions |
 | [Rhythmic Grit Bass](../patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv) | Originals | Short MIDI rhythms; rapid Macro8 scene transitions |
@@ -210,7 +233,7 @@ and [offline patch checks](PATCH_WORKFLOW.md) provide more context.
 
 ## What is—and is not—verified
 
-The manifest, module C++ metadata and all fifteen saved patch graphs can be
+The manifest, module C++ metadata and all sixteen saved patch graphs can be
 checked offline with:
 
 ```sh

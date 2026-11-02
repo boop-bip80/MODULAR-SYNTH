@@ -11,7 +11,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "validate_panels.py"
-MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice")
+MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold")
 
 
 class PanelGeometryTests(unittest.TestCase):
@@ -41,8 +41,8 @@ class PanelGeometryTests(unittest.TestCase):
     def test_current_repository_panels_pass(self) -> None:
         result = self.run_checker(REPO)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("PASS: 7 SVG panels", result.stdout)
-        self.assertIn("97 conservative candidate widget centers", result.stdout)
+        self.assertIn("PASS: 8 SVG panels", result.stdout)
+        self.assertIn("110 conservative candidate widget centers", result.stdout)
         self.assertIn("visual rendering/overlap not verified", result.stdout)
 
     def test_stereo_echo_bad_16hp_width_rejected(self) -> None:
