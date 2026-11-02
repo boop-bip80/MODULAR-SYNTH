@@ -50,8 +50,14 @@ def syntax_commands(compiler: str, flags: list[str], sources: list[Path]) -> lis
         raise sdk.PreflightError("Pinned Rack compiler flags must use syntax-only mode")
     if any("rack_stub" in flag for flag in flags):
         raise sdk.PreflightError("Test-only Rack shim is forbidden in real-header gate")
+    # The generated source lives in a temp directory. Unlike an installed
+    # plugin source, it cannot find our adjacent collection plugin.hpp first.
+    # Rack also has include/plugin.hpp; -iquote takes precedence over all
+    # ordinary SDK -I directories for quoted includes, mirroring the
+    # production source-local header resolution without a test shim.
     return [
-        [compiler, *flags, "-I", str(COLLECTION), "-I", str(source.parent), str(source)]
+        [compiler, "-iquote", str(COLLECTION), *flags,
+         "-I", str(source.parent), str(source)]
         for source in sources
     ]
 
