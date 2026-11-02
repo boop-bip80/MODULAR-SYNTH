@@ -20,23 +20,33 @@ import check_real_generated_headers as gate
 
 
 class GeneratedRealHeaderGateTests(unittest.TestCase):
-    def test_both_generated_sources_are_valid_and_have_distinct_kinds(self) -> None:
+    def test_three_generated_sources_are_valid_and_waveforms_distinct(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             sources = gate.generate_starters(Path(temp))
             self.assertEqual([path.name for path in sources],
-                             ["ForgeRealOsc.cpp", "ForgeRealLP.cpp"])
+                             ["ForgeRealOsc.cpp", "ForgeRealSaw.cpp", "ForgeRealLP.cpp"])
             for source in sources:
                 self.assertTrue(source.is_file())
                 self.assertIn("#include \"plugin.hpp\"", source.read_text())
+            self.assertIn("std::sin(", sources[0].read_text())
+            saw = sources[1].read_text()
+            self.assertIn("static float polyBlep(float t, float dt)", saw)
+            self.assertIn("rawSaw - correction", saw)
+            self.assertNotIn("std::sin(", saw)
+            self.assertIn("SAW OUT", (Path(temp) / "ForgeRealSaw" /
+                                      "ForgeRealSaw.svg").read_text())
             self.assertFalse((Path(temp) / "ForgeRealOsc" / "ForgeRealOsc.dsp.hpp").exists())
+            self.assertFalse((Path(temp) / "ForgeRealSaw" / "ForgeRealSaw.dsp.hpp").exists())
             self.assertTrue((Path(temp) / "ForgeRealLP" / "ForgeRealLP.dsp.hpp").exists())
 
     def test_gate_uses_headless_real_header_flags_not_test_shim(self) -> None:
-        paths = [Path("/tmp/a/ForgeRealOsc.cpp"), Path("/tmp/b/ForgeRealLP.cpp")]
+        paths = [Path("/tmp/a/ForgeRealOsc.cpp"),
+                 Path("/tmp/b/ForgeRealSaw.cpp"),
+                 Path("/tmp/c/ForgeRealLP.cpp")]
         sdk_rack_headers = str(gate.ROOT / "src" / "Rack" / "include")
         flags = ["-DHEADLESS", "-fsyntax-only", "-I", sdk_rack_headers]
         commands = gate.syntax_commands("c++", flags, paths)
-        self.assertEqual(len(commands), 2)
+        self.assertEqual(len(commands), 3)
         for command, source in zip(commands, paths):
             self.assertEqual(command[0], "c++")
             self.assertEqual(command[1:3], ["-iquote", str(gate.COLLECTION)])
@@ -89,7 +99,7 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
             self.assertEqual(result, 2)
             self.assertIn("wrong pinned gitlink", output.getvalue())
 
-    def test_compiler_invokes_both_real_header_translation_units(self) -> None:
+    def test_compiler_invokes_all_three_real_header_translation_units(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             rack = Path(temp) / "rack"
             template = rack / "dep/speexdsp/include/speex/speexdsp_config_types.h.in"
@@ -115,10 +125,53 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                     result = gate.main(["--rack-root", str(rack),
                                         "--dpf-root", str(Path(temp) / "dpf")])
             self.assertEqual(result, 0)
-            self.assertEqual(len(calls), 2)
+            self.assertEqual(len(calls), 3)
             self.assertTrue(calls[0][-1].endswith("/ForgeRealOsc/ForgeRealOsc.cpp"))
-            self.assertTrue(calls[1][-1].endswith("/ForgeRealLP/ForgeRealLP.cpp"))
+            self.assertTrue(calls[1][-1].endswith("/ForgeRealSaw/ForgeRealSaw.cpp"))
+            self.assertTrue(calls[2][-1].endswith("/ForgeRealLP/ForgeRealLP.cpp"))
             self.assertTrue(all("rack_stub" not in " ".join(c) for c in calls))
+
+
+    def test_invalid_generated_saw_fails_closed_before_compile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            def check(folder: Path) -> list[str]:
+                return ["tampered saw"] if folder.name == "ForgeRealSaw" else []
+
+            with mock.patch.object(gate, "check_module", side_effect=check):
+                with self.assertRaisesRegex(gate.sdk.PreflightError, "tampered saw"):
+                    gate.generate_starters(Path(temp))
+
+    def test_saw_compiler_failure_is_reported_not_a_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            rack = Path(temp) / "rack"
+            template = rack / "dep/speexdsp/include/speex/speexdsp_config_types.h.in"
+            template.parent.mkdir(parents=True)
+            template.write_text("template", encoding="utf-8")
+            calls = []
+
+            def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+                calls.append(command)
+                if command[-1].endswith("/ForgeRealSaw/ForgeRealSaw.cpp"):
+                    return SimpleNamespace(returncode=1, stdout="saw compiler error")
+                return SimpleNamespace(returncode=0, stdout="")
+
+            with (mock.patch.object(gate.sdk, "check_dependencies"),
+                  mock.patch.object(gate.sdk, "render_linux_speex_types",
+                                    return_value="#pragma once\\n"),
+                  mock.patch.object(gate.sdk, "compiler_flags",
+                                    return_value=["-DHEADLESS", "-fsyntax-only",
+                                                  "-I", "/pinned/rack/include"]),
+                  mock.patch.object(gate.shutil, "which", return_value="c++"),
+                  mock.patch.object(gate.subprocess, "run", side_effect=fake_run)):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(output):
+                    result = gate.main(["--rack-root", str(rack),
+                                        "--dpf-root", str(Path(temp) / "dpf")])
+
+            self.assertEqual(result, 1)
+            self.assertEqual(len(calls), 2)
+            self.assertIn("FAIL: generated ForgeRealSaw", output.getvalue())
+            self.assertIn("saw compiler error", output.getvalue())
 
 
 if __name__ == "__main__":

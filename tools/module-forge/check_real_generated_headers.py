@@ -25,16 +25,19 @@ import check_real_rack_headers as sdk  # noqa: E402 -- shared pinned SDK preflig
 
 
 STARTERS = (
-    ("ForgeRealOsc", "Forge Real Osc", "oscillator"),
-    ("ForgeRealLP", "Forge Real LP", "effect"),
+    # Keep the default sine and effect starters; add the opt-in polyBLEP
+    # saw so its real Rack/DPF compile cannot regress unnoticed.
+    ("ForgeRealOsc", "Forge Real Osc", "oscillator", "sine"),
+    ("ForgeRealSaw", "Forge Real Saw", "oscillator", "saw"),
+    ("ForgeRealLP", "Forge Real LP", "effect", "sine"),
 )
 
 
 def generate_starters(directory: Path) -> list[Path]:
     """Generate fresh modules; reject any missing or tampered output."""
     paths = []
-    for slug, name, kind in STARTERS:
-        folder = generate(slug, name, directory, kind=kind)
+    for slug, name, kind, waveform in STARTERS:
+        folder = generate(slug, name, directory, kind=kind, waveform=waveform)
         problems = check_module(folder)
         if problems:
             raise sdk.PreflightError(f"Generated {slug} invalid: {'; '.join(problems)}")
