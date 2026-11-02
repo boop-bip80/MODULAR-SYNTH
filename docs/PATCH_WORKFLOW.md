@@ -179,29 +179,29 @@ For **actual** acceptance, build this fork with the three original modules **req
 
 ## Host output wiring audit (optional)
 
-The separate, read-only \`patch_audio_routes.py\` command follows saved cable
+The separate, read-only `patch_audio_routes.py` command follows saved cable
 connections **backwards from Cardinal/HostAudio2's input ports**. It lists which
 module is wired directly into Left/M or Right, and which other modules have
 some upstream cable path to that input. This is useful for diagnosing a silent
 patch after accidentally removing the last host-output cable.
 
-\`\`\`sh
+```sh
 python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv
 python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv --json
 python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv --require-host-input
 python3 -m unittest discover -s tests -p 'test_patch_audio_routes.py' -v
-\`\`\`
+```
 
 Default output provides advisory diagnostics but does not fail a structurally
 valid experimental patch merely for lacking a HostAudio2 output. The opt-in
-\`--require-host-input\` switch exits **1** if *any* checked patch has no
+`--require-host-input` switch exits **1** if *any* checked patch has no
 wired, source-verified HostAudio2 input. Invalid patch JSON or unsafe cable
 structure exits **2**; otherwise the command exits **0**. JSON reports
-include \`host_contract_verified\`, \`has_wired_host_input\`, per-input direct
+include `host_contract_verified`, `has_wired_host_input`, per-input direct
 sources and deterministic upstream module lists.
 
 Port indices **0 = Left/M** and **1 = Right** are accepted only when the
-checked-in \`HostAudio.cpp\` still matches the conservative, source-derived
+checked-in `HostAudio.cpp` still matches the conservative, source-derived
 HostAudio2 two-port declaration. A single Left/M cable is an intentional mono
 configuration in the inherited implementation, so the auditor does not flag
 it as missing stereo. A Right-only connection is reported as an advisory.
