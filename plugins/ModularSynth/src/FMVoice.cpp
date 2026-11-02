@@ -46,7 +46,10 @@ struct ModularSynthFMVoice : Module {
                     "Modulator/carrier frequency ratio", " x");
         configParam(INDEX_PARAM, 0.0f, 8.0f, 0.0f,
                     "Phase modulation index", " rad");
-        configParam(FEEDBACK_PARAM, 0.0f, 0.95f, 0.0f,
+        // Preserve the original parameter ID, positive saved values, knob
+        // descriptor and CV jack contract. Negative positions now select
+        // one-sample carrier feedback; positive remains modulator feedback.
+        configParam(FEEDBACK_PARAM, -0.95f, 0.95f, 0.0f,
                     "Modulator self-feedback", " %", 0.0f, 100.0f);
         configInput(PITCH_INPUT, "Pitch CV (1 V/oct; C4 at 0 V)");
         configInput(RATIO_CV_INPUT, "Ratio CV (1 V doubles ratio)");

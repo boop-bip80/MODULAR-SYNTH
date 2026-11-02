@@ -4,7 +4,7 @@ Status: original first-party C++ DSP and a statically registered Rack model. Thi
 
 ## What it does
 
-**FM Voice** provides a 16-lane polyphonic two-operator, sine-based **phase-modulation** voice: a sine modulator bends the instantaneous phase of a sine carrier. A one-sample modulator feedback path adds harmonic complexity. Here "FM" is the common synthesizer shorthand; mathematically this is phase modulation, and there are no envelopes, presets, or DX7 algorithms in the module itself.
+**FM Voice** provides a 16-lane polyphonic two-operator, sine-based **phase-modulation** voice: a sine modulator bends the instantaneous phase of a sine carrier. A signed one-sample feedback control switches between the original modulator loop and a new carrier loop without changing saved port/parameter IDs. Here "FM" is the common synthesizer shorthand; mathematically this is phase modulation, and there are no envelopes, presets, or DX7 algorithms in the module itself.
 
 | Control/jack | Behavior |
 | --- | --- |
@@ -12,13 +12,15 @@ Status: original first-party C++ DSP and a statically registered Rack model. Thi
 | FINE | −100 to +100 cents |
 | RATIO | Modulator/carrier frequency ratio 0.125…16, initial 1 |
 | INDEX | Modulation depth, 0…8 radians, initial 0 |
-| FEEDBACK | Modulator one-sample self-feedback, 0…95%, initial 0 |
+| FEEDBACK | Signed feedback, −95…+95%, initial 0; negative = carrier loop, positive = original modulator loop |
 | 1V/OCT input | Standard C4 at 0 V, +1 V doubles pitch |
 | RATIO CV | +1 V doubles the modulator ratio, −1 V halves it |
 | INDEX CV | +1 V adds 0.8 radians to index |
-| FDBK CV | +1 V adds 9.5 percentage points of feedback |
+| FDBK CV | +1 V adds +9.5 percentage points; −1 V adds −9.5 points, within ±95% |
 | FM OUT | Phase-modulated carrier, nominal ±5 V |
-| MOD OUT | Self-feedback modulator sine, nominal ±5 V |
+| MOD OUT | Modulator sine, with self-feedback only for positive FEEDBACK; nominal ±5 V |
+
+Signed FEEDBACK values select *different one-sample loops*, not subtraction of modulator feedback. Example: −50% places 0.5× the previous carrier sample into the carrier phase; +50% places 0.5× the previous modulator sample into the modulator phase; 0% disables both paths. At INDEX=0, negative carrier feedback adds harmonics, whereas positive modulator feedback leaves the carrier a pure sine. Positive saved feedback values (0…95%) and the original +0.095 per volt CV scale retain their original numerical meaning. The Rack knob descriptor and FDBK CV input tooltip are deliberately unchanged to preserve instrument-builder v2 contract metadata, although the knob now supports negative values.
 
 Values after CV addition are clamped to their documented ranges. At high pitches/ratios, the effective carrier phase-modulation index is also reduced by the bandwidth guard described below; the knob and saved value do not change. Index, ratio and feedback changes are smoothed for about 2 ms; patch startup adopts saved values immediately. All four CV inputs can carry 16 independent Rack polyphony lanes; mono CV is shared across connected polyphonic voices. Retired lanes reset phase and control histories before re-expansion.
 
@@ -29,9 +31,14 @@ Try `Host MIDI pitch → FM Voice 1V/OCT`, `FM OUT → envelope-controlled VCA �
 The actual signal equations are:
 
 ```text
-m[n] = sin(2*pi*p_mod[n] + feedback*m[n-1])
-y[n] = sin(2*pi*p_carrier[n] + index*m[n])
+positive_feedback = max(0, smoothed_feedback)
+negative_feedback = max(0, -smoothed_feedback)
+m[n] = sin(2*pi*p_mod[n] + positive_feedback*m[n-1])
+y[n] = sin(2*pi*p_carrier[n] + effective_index*m[n]
+           + negative_feedback*y[n-1])
 ```
+
+Feedback is bounded to ±0.95 before a 2 ms smoothing stage (including sign changes). Each feedback recurrence uses the preceding output sample for its own oscillator, never a separate delay or per-block allocation. Both feedback histories clear on reset or when a polyphonic lane is retired. Abrupt carrier pitch changes or a strong feedback CV step may still sound transient; the sign routing itself is continuous at zero, but no click-free guarantee is made.
 
 The carrier and modulator phase accumulators wrap in [0,1). The individual frequency steps clamp at 45% of sample rate, and both sine outputs are bounded to unit amplitude before the Rack ±5 V scaling. Non-finite controls are sanitized using IEEE-754 bit checks that also work under aggressive `-ffast-math`; invalid sample rates produce silence. The DSP processing loop allocates no memory, takes no locks and does not touch GUI/disk/network resources.
 
@@ -64,4 +71,4 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 tools/ui-check/validate_panels.py
 ```
 
-The standalone regression `tests/fm_voice_dsp_test.cpp` covers C4 and ±1 V/oct pitch, index-zero sine identity, nonzero FM timbre, 2 ms control convergence, invalid/non-finite parameters, sample-rate phase continuity, poly-lane independence, bounded output, exact reset replay, the high-frequency index ceiling and its selected-bin 21 kHz alias-power reduction. The HEADLESS Rack shim smoke and pinned real-Rack-header syntax check cover wrapper compatibility **only if actually executed**. Neither is a substitute for successful plugin linking, visual/browser inspection, a DAW save/reload, audio audition or CPU measurement.
+The standalone regression `tests/fm_voice_dsp_test.cpp` covers C4 and ±1 V/oct pitch, index-zero sine identity, nonzero FM timbre, 2 ms control convergence, invalid/non-finite parameters, sample-rate phase continuity, poly-lane independence, bounded output, exact reset replay, the high-frequency index ceiling and its selected-bin 21 kHz alias-power reduction, legacy positive-feedback recurrence, signed topologies, measured second harmonic, sign-crossing slew/continuity and independent 16-lane reset replay. The HEADLESS Rack shim smoke and pinned real-Rack-header syntax check cover wrapper compatibility **only if actually executed**. Neither is a substitute for successful plugin linking, visual/browser inspection, a DAW save/reload, audio audition or CPU measurement.

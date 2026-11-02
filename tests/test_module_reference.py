@@ -93,7 +93,7 @@ class ModuleQuickReferenceTests(unittest.TestCase):
                 'configParam(FINE_PARAM, -100.0f, 100.0f, 0.0f,',
                 'configParam(RATIO_PARAM, 0.125f, 16.0f, 1.0f,',
                 'configParam(INDEX_PARAM, 0.0f, 8.0f, 0.0f,',
-                'configParam(FEEDBACK_PARAM, 0.0f, 0.95f, 0.0f,',
+                'configParam(FEEDBACK_PARAM, -0.95f, 0.95f, 0.0f,',
                 '"Pitch CV (1 V/oct; C4 at 0 V)"',
                 '"Ratio CV (1 V doubles ratio)"',
                 '"Index CV (1 V adds 0.8 rad)"',

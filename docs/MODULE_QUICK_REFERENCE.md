@@ -127,9 +127,11 @@ measured audio or a verified DAW session.
 
 - **Pitch:** 1 V/oct at C4 zero volts, octave −4…+4 (snapped), fine
   −100…+100 cents.
-- **Timbre:** RATIO 0.125…16, INDEX 0…8 radians, FEEDBACK 0…95%.
-  RATIO CV doubles the ratio per +1 V; INDEX CV adds 0.8 radians/V;
-  FDBK CV adds 9.5 percentage points/V. Sums clamp and slew over ~2 ms.
+- **Timbre:** RATIO 0.125…16, INDEX 0…8 radians, FEEDBACK −95…+95%
+  (negative = one-sample carrier feedback, positive = original modulator
+  self-feedback). RATIO CV doubles ratio per +1 V; INDEX CV adds 0.8
+  radians/V; FDBK CV adds 9.5 signed percentage points/V. Sums clamp
+  and slew over ~2 ms; prior saved positive feedback remains unchanged.
 - **Audio:** FM OUT (phase-modulated carrier) and MOD OUT (modulator),
   nominally ±5 V. Up to 16 Rack polyphonic lanes.
   FM sidebands are not bandlimited or oversampled; extreme settings alias.
