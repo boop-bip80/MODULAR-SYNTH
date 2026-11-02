@@ -27,6 +27,11 @@ For these tests, Git submodules do **not** need to be initialized. In a normal G
   finite outputs, reset paths and Macro8's JSON method calls. It uses an
   **explicit test double**, `tests/rack_stub/rack.hpp`, in place of Rack.
   This test double is never part of the plugin build or distribution.
+- **Real Rack preflight's offline contract:** `test_real_rack_headers.py` checks
+  exact Gitlink parsing, SpeexDSP template substitution, compile flags and
+  clear failure on absent SDK headers. This test requires **no fetched SDK**;
+  the separate `tools/ci/check_real_rack_headers.py` tool performs five real
+  pinned-Rack translation-unit syntax checks when dependencies are available.
 
 Run that check by itself with:
 
@@ -44,6 +49,12 @@ or links inside Cardinal, that GUI code compiles, that patches load in a real
 host, that audio is glitch-free, or that plugins work on any platform. Continue
 using the upstream-derived `plugin-validation` job and cross-platform builds
 in `.github/workflows/build.yml` to establish those separate claims.
+
+The **optional real Rack header check** does prove that five HEADLESS wrapper
+translation units can be parsed by a Linux C++ compiler using exact pinned
+Rack/DPF API headers. It still **does not link a host binary**, verify the
+plugin ABI/GUI, load a patch or perform DAW/audio tests. See
+[`docs/CI.md`](../docs/CI.md#real-rack-header-compatibility-preflight).
 
 Before claiming production audio reliability, add headless deterministic audio-render tests, reference-waveform comparisons with tolerances, real-time allocation/lock checks, CPU load and host project save/restore tests. Baseline results must be recorded before setting performance targets.
 
