@@ -223,6 +223,25 @@ def _verify_existing_registration(makefile: str, loader: str, header: str,
             "existing ModularSynth header/loader model drift: "
             f"declared={sorted(declarations)!r}; loaded={sorted(registrations)!r}")
 
+    # Both registry pairs can agree internally yet describe different models.
+    # Original first-party modules use model<Slug>; Module Forge exports
+    # modelMS<Slug>. Refuse ambiguous or unmatched identities before writing.
+    available = set(declarations)
+    matched: list[str] = []
+    for slug in manifest_slugs:
+        candidates = {f"model{slug}", f"modelMS{slug}"}
+        hits = candidates.intersection(available)
+        if len(hits) != 1:
+            raise IntegrationError(
+                "existing ModularSynth source/model identity drift: "
+                f"slug={slug!r}, candidate declarations={sorted(hits)!r}")
+        matched.extend(hits)
+    if len(set(matched)) != len(matched) or set(matched) != available:
+        raise IntegrationError(
+            "existing ModularSynth source/model identity drift: "
+            f"manifest={sorted(manifest_slugs)!r}; "
+            f"declared={sorted(declarations)!r}")
+
 
 def integration_plan(module_dir: Path, repo_root: Path) -> list[FileEdit]:
     root = repo_root.resolve(strict=True)

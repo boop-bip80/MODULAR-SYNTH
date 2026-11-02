@@ -185,11 +185,16 @@ layouts. It never edits the upstream `plugins/Cardinal` collection.
 Before planning edits, the integrator also checks **existing static collection
 consistency**: the current `PLUGIN_FILES` source slugs must match the
 `plugin.json` module slugs, and `plugin.hpp` model declarations must match
-`initStatic__ModularSynth()` registrations, with no duplicates. If an earlier
-manual integration left these out of sync, fix that source/manifest mismatch
-first; Module Forge refuses to layer another module over it. This is a
-source-level integrity check, **not** proof of a successful linked build,
-GUI compilation, plugin load, or DAW audio.
+`initStatic__ModularSynth()` registrations, with no duplicates. It also
+cross-checks those **two registry pairs against each other**: a saved slug
+must have exactly one declaration with either the original `model<Slug>`
+or Module Forge `modelMS<Slug>` naming convention. An unrelated or
+ambiguous declaration is rejected even when header and loader match each
+other. If an earlier manual integration left these out of sync, fix that
+source/manifest mismatch first; Module Forge refuses to layer another module
+over it. This is a source-level identity check, **not** proof of source
+symbol definitions, successful linking, GUI compilation, plugin load, or DAW
+audio.
 
 On `--apply`, all replacement content is staged first, then published one
 file at a time. Original registry files are backed up during the transaction.
