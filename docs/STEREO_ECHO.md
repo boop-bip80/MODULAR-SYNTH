@@ -24,6 +24,8 @@ Up to **16 independent polyphonic stereo lanes** are supported. A polyphonic CV 
 
 The delay read tap uses **linear interpolation** for fractional samples. Delay-time automation slews with a one-pole response that reaches about **99.9% of the new sample position in 25 ms**. This reduces abrupt zipper clicks but deliberate time sweeps can still pitch-bend and smear transients; there is no dual-head time-stretching or high-quality interpolation filter.
 
+**Wet mix, feedback and stereo crossfeed** now use independent bounded one-pole automation slews, each reaching about **99.9% of the new setting within 10 ms** at the host sample rate. This limits abrupt changes in the audible dry/wet balance and the stereo feedback matrix. The first process call after construction, a reset or a host sample-rate switch adopts its requested control settings immediately; unchanged saved patches therefore begin at their set values, not a previous value. The feedback state always remains between 0 and 90% while slewing. This is *parameter smoothing*, not a click-free guarantee for arbitrary audio transients or a pitch-preserving delay algorithm. Rapid MIDI/CV modulation of those controls is intentionally filtered by the 10 ms time constant.
+
 Changing the host sample rate discards old delay history and recalculates milliseconds at the new rate. DSP reset performs an **O(1) logical history invalidation** rather than clearing megabytes in the audio callback. Invalid, NaN or extreme sample rates cause silence and a safe reset. Rates from 1 kHz through 384 kHz are accepted; the full 1000 ms delay range is available **through 192 kHz**, while at 384 kHz the maximum *effective* delay is **500 ms** due to the fixed buffer capacity. The panel knob still displays its nominal millisecond setting, so consider this limitation if your host runs above 192 kHz.
 
 ## Feedback and signal safety
@@ -90,6 +92,7 @@ The standalone tests cover:
 - 48.5-sample fractional-delay interpolation over precisely two adjacent samples.
 - Dry, 50% mix and fully wet behavior; 50% ping-pong feedback decay across four echoes.
 - 25 ms delay-time smoothing, history invalidation across host sample-rate changes, and 16 independent lane states.
+- 10 ms feedback/wet/crossfeed control smoothing, reset/sample-rate initialization and a bounded first-sample wet automation transient.
 - Fixed ring-memory bounds and an impulse arriving at exactly 192,000 history samples at both 192/384 kHz, 384 kHz reduced maximum time, extreme CV/audio values, NaN/Inf sanitation under strict fast-math and recovery after invalid rates.
 - Deterministic 16-lane stress for **210,000 frames at each of 44.1/48/96/192/384 kHz** (16.8 million lane updates), including repeated ring wraps, rapid delay-time sweeps, non-finite controls, output ±10 V bounds and bitwise independent replay of lane 0.
 - Quantitative 25 ms time-slew settling at 48/192/384 kHz, sample-rate history invalidation including 44.1 kHz fractional taps, 384 kHz 500 ms maximum, invalid-rate recovery and no C++ allocations in process/reset.
