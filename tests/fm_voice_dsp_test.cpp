@@ -38,6 +38,31 @@ int main() {
                       std::numeric_limits<double>::quiet_NaN()) == c4,
                   "invalid pitch falls back to C4");
 
+    // Tiny positive frequencies are valid but unusable as audio.  They
+    // must neither accidentally disable the FM bandwidth guard through
+    // floating-point division overflow nor accumulate subnormal phases.
+    okay &= check(FMVoice::bandwidthIndexCeiling(
+                      440.0, std::numeric_limits<double>::denorm_min(),
+                      48000.0) == FMVoice::kMaxIndexRadians,
+                  "near-zero modulator preserves the full FM guard ceiling");
+    FMVoice subaudio;
+    FMVoice::Input tiny;
+    tiny.frequencyHz = std::numeric_limits<double>::denorm_min();
+    tiny.ratio = 16.0;
+    tiny.indexRadians = 8.0;
+    tiny.feedback = -0.95;
+    for (int n = 0; n < 512; ++n) {
+        const auto output = subaudio.process(tiny);
+        okay &= check(output.carrier == 0.0f && output.modulator == 0.0f,
+                      "sub-audio direct DSP does not leak denormal samples");
+    }
+    okay &= check(subaudio.carrierPhase == 0.0 && subaudio.modulatorPhase == 0.0,
+                  "sub-audio direct DSP avoids subnormal phase accumulation");
+    tiny.frequencyHz = FMVoice::frequencyForPitch(-20.0);
+    subaudio.process(tiny);
+    okay &= check(subaudio.carrierPhase > 0.0 && subaudio.modulatorPhase > 0.0,
+                  "Rack's lowest supported 1V/oct frequency still advances phase");
+
     FMVoice dry;
     FMVoice::Input plain;
     plain.frequencyHz = 440.0;
@@ -440,6 +465,51 @@ int main() {
     okay &= check(resetSample.carrier == firstSample.carrier
                   && resetSample.modulator == firstSample.modulator,
                   "reset reproduces a fresh voice and discards feedback history");
+
+    // Event-heavy two-instance determinism regression: sample-rate changes,
+    // abrupt frequency/rate/ratio CV, signed feedback, valid extremes and
+    // occasional non-finite controls must remain bounded and replay exactly.
+    FMVoice stress[16], reference[16];
+    std::uint32_t randomState = UINT32_C(0x51a7e099);
+    bool stressValid = true;
+    for (int n = 0; n < 4096; ++n) {
+        for (int c = 0; c < 16; ++c) {
+            randomState = randomState * UINT32_C(1664525)
+                          + UINT32_C(1013904223);
+            FMVoice::Input varied;
+            varied.sampleRateHz = (n / 256) % 4 == 0 ? 44100.0
+                                  : (n / 256) % 4 == 1 ? 48000.0
+                                  : (n / 256) % 4 == 2 ? 96000.0 : 192000.0;
+            varied.frequencyHz = (randomState & 31u) == 0u
+                                  ? std::numeric_limits<double>::denorm_min()
+                                  : 20.0 + static_cast<double>(randomState % 24000u);
+            varied.ratio = 0.125 + (randomState % 20000u) / 1000.0;
+            varied.indexRadians = (randomState % 10000u) / 1000.0;
+            varied.feedback = (randomState & 1u ? 1.0 : -1.0)
+                              * (randomState % 1400u) / 1000.0;
+            if ((n + c) % 179 == 0)
+                varied.indexRadians = std::numeric_limits<double>::infinity();
+            if ((n + c) % 227 == 0)
+                varied.ratio = std::numeric_limits<double>::quiet_NaN();
+            if (n % 997 == 0 && c == 3)
+                varied.sampleRateHz = std::numeric_limits<double>::infinity();
+            const auto a = stress[c].process(varied);
+            const auto b = reference[c].process(varied);
+            stressValid &= a.carrier == b.carrier && a.modulator == b.modulator;
+            stressValid &= FMVoice::finite(a.carrier) && FMVoice::finite(a.modulator);
+            stressValid &= std::abs(a.carrier) <= 1.0f
+                           && std::abs(a.modulator) <= 1.0f;
+            stressValid &= stress[c].carrierPhase >= 0.0
+                           && stress[c].carrierPhase < 1.0;
+            stressValid &= stress[c].modulatorPhase >= 0.0
+                           && stress[c].modulatorPhase < 1.0;
+            stressValid &= FMVoice::finite(stress[c].smoothedGuardCeiling)
+                           && stress[c].smoothedGuardCeiling >= 0.0
+                           && stress[c].smoothedGuardCeiling <= FMVoice::kMaxIndexRadians;
+        }
+    }
+    okay &= check(stressValid,
+                  "sample-rate and signed-CV stress stays bounded and deterministically replayable");
 
     if (okay)
         std::puts("PASS: FM Voice standalone DSP pitch, signed topology, modulation, controls, reset and finite safeguards");
