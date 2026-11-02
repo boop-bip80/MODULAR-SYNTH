@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = ROOT / "plugins" / "ModularSynth" / "src"
-MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold")
+MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA")
 RACK_SUBMODULE_HEADERS = {
     "dep/glfw": "include/GLFW/glfw3.h",
     "dep/nanosvg": "src/nanosvg.h",
@@ -305,7 +305,7 @@ def run_link_smoke(compiler: str, flags: list[str], output_dir: Path) -> None:
     validate_linked_model_symbols(*results)
     print(
         f"PASS: {len(objects)} pinned-Rack HEADLESS objects linked into one "
-        "temporary ELF, with eight defined first-party models; "
+        "temporary ELF, with nine defined first-party models; "
         "Rack/host imports intentionally unresolved. NOT a Cardinal plugin."
     )
 
@@ -320,7 +320,7 @@ def main() -> int:
     mode.add_argument("--preflight-only", action="store_true", help="verify pinned SDK headers; skip C++ parsing")
     mode.add_argument(
         "--link-smoke", action="store_true",
-        help="compile eight real-Rack HEADLESS objects and link a temporary ELF (NOT a host plugin)",
+        help="compile nine real-Rack HEADLESS objects and link a temporary ELF (NOT a host plugin)",
     )
     args = parser.parse_args()
 

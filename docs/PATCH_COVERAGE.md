@@ -1,6 +1,6 @@
 # Factory patch coverage: source-only evidence matrix
 
-This report tracks the **fifteen checked-in `MODULAR_-_*.vcv` examples** and asks two separate questions:
+This report tracks the **sixteen checked-in `MODULAR_-_*.vcv` examples** and asks two separate questions:
 
 1. Does **every model declared by the first-party `ModularSynth` manifest** appear in at least one original example?
 2. Are the **module instances, saved cables and settings** needed for each example's advertised patching workflow actually present?
@@ -18,6 +18,7 @@ The executable checker is `tools/patches/factory_patch_coverage.py`. It imports 
 | `StereoEcho` | `MODULAR_-_Stereo_Echo_Showcase.vcv`, `MODULAR_-_Echo_Motion_Performance.vcv`, `MODULAR_-_Clocked_Modulation_Studio.vcv`, `MODULAR_-_Cinematic_Pulse_Score.vcv`, `MODULAR_-_Noir_Expressive_Lead.vcv` | Independent saved L/R input routes and modulation; no host playback claim |
 | `ClockedLFO` | `MODULAR_-_Clocked_Modulation_Studio.vcv`, `MODULAR_-_Cinematic_Pulse_Score.vcv` | One beat/reset-clocked eight-lane example; one MIDI mono **free-running** rhythmic envelope example |
 | `FMVoice` | `MODULAR_-_FM_Voice_Performance.vcv` | Saved MIDI pitch and gate route through the original two-operator voice and an ADSR/VCA to HostAudio2; no linked host/audio test | 
+| `DualVCA` | `MODULAR_-_Morph_VCO_Performance.vcv` | Both independent A/B audio and CV routes, two bounded outputs into host left/right; no host runtime guarantee |
 
 The analyzer obtains the model list from the manifest **at runtime**. If a new model is added without a first-party example instantiating it, the test fails until coverage is provided and reviewed.
 
@@ -28,7 +29,7 @@ The analyzer obtains the model list from the manifest **at runtime**. If a new m
 | Pulse Bass | Host MIDI to oscillator and ADSR; oscillator to filter; filter and envelope to VCA; VCA to host; both saved HostAudio2 input jack indices used | Bogaudio VCF and Fundamental module port semantics are not independently validated here |
 | Granular Veil | Two **distinct** Bogaudio oscillator instances both receive MIDI and feed one mixer; ADSR→VCA→Clouds; Clouds→two host input jacks | Clouds' grain quality/stereo behavior and third-party port ranges remain unverified |
 | Clockwork Pulses | HostTime→GridSeq and Plaits; GridSeq and LFO→Plaits; Plaits→Plateau→both host input jacks | No DAW transport or GridSeq/Plaits/Plateau DSP execution |
-| Morph VCO Performance | MIDI pitch→`MorphVCO` input 0, `MorphVCO` output 0→VCA, MIDI gate→ADSR→VCA and VCA→host | The third-party ADSR/VCA behavior is not rendered |
+| Morph VCO Performance | MIDI pitch→`MorphVCO` input 0, oscillator output 0 fans into `DualVCA` audio A/B ports 0/2, MIDI gate→Fundamental ADSR→Dual VCA CV ports 1/3, separate A/B outputs→HostAudio2 left/right | Fundamental ADSR and new first-party DualVCA audio are source-wired, not tested in a host |
 | FM Voice Performance | HostMIDI pitch output 0→FMVoice PITCH input 0, gate output 1→Fundamental ADSR gate input 4; FMVoice carrier output 0→Fundamental VCA audio input 1, ADSR output 0→VCA CV input 0, VCA output 0→HostAudio2 Left/M input 0 | FMVoice endpoints and saved graph are source-checked; ADSR/VCA audio, bandlimiting, host MIDI and actual sound are not verified |
 | Morphing State Pad | MIDI pitch/gate; `Macro8` outputs 0/1/2 to MorphVCO shape and StateFilter resonance/drive inputs; oscillator output 0→filter input 0; filter LP output 0→VCA→host; two saved Macro8 snapshots with 8 finite 0–1 values each | Visual UI, real-time morph interpolation, note/audio playback, and actual patch save/reopen remain unverified |
 | Cinematic Drift Pad | The MorphVCO/StateFilter/Macro8 trio used by this patch, MIDI/ADSR/VCA path, Macro8 outputs 0–3 for Texture/Resonance/Warmth/Cutoff including cutoff CV into filter input 1; two saved snapshots; output 3 bipolar mode (param 18); 4.0-second morph time (param 8) | No autonomous LFO or audio-rendered cinematic quality is inferred from graph |
@@ -47,7 +48,7 @@ The State Pad, Cinematic Drift Pad, Rhythmic Grit Bass, Polyphonic Motion Pad, E
 
 ## Sample rates and runtime assumptions
 
-Each of the fifteen factory example JSON objects has `cables`, `modules`, `version` and `zoom` at the root; **none stores a top-level host audio sample rate**. This checker therefore cannot reject or certify a patch on a fabricated 44.1/48/96 kHz assumption. MIDI timing, DAW transport, plugin load, patch migration, output loudness, clipping and DSP sample-rate behavior require a real host/build or a dedicated audio test. The original [factory-patch manual acceptance checklist](FACTORY_PATCHES.md) remains necessary.
+Each of the sixteen factory example JSON objects has `cables`, `modules`, `version` and `zoom` at the root; **none stores a top-level host audio sample rate**. This checker therefore cannot reject or certify a patch on a fabricated 44.1/48/96 kHz assumption. MIDI timing, DAW transport, plugin load, patch migration, output loudness, clipping and DSP sample-rate behavior require a real host/build or a dedicated audio test. The original [factory-patch manual acceptance checklist](FACTORY_PATCHES.md) remains necessary.
 
 ## Run the source checks
 

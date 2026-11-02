@@ -17,9 +17,9 @@ DOC_PATH = ROOT / "docs/MODULE_QUICK_REFERENCE.md"
 PLUGIN_DIR = ROOT / "plugins/ModularSynth"
 PATCH_DIR = ROOT / "patches/examples"
 
-# The quick reference covers exactly the current eight first-party modules.
+# The quick reference covers exactly the current nine first-party modules.
 # A newly registered model requires an explicit catalog update.
-MODULE_SLUGS = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold")
+MODULE_SLUGS = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA")
 
 
 def enum_ports(source: str, enum_name: str) -> list[str]:

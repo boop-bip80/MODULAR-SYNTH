@@ -43,8 +43,9 @@ class PatchInspectorTests(unittest.TestCase):
         self.assertTrue(self.example.is_file())
         report = inspector.inspect_patch(self.example, ROOT)
         self.assertTrue(report["ok"], report["errors"])
-        self.assertEqual(report["cables"], 5)
+        self.assertEqual(report["cables"], 8)
         self.assertEqual(report["module_inventory"]["ModularSynth/MorphVCO"], 1)
+        self.assertEqual(report["module_inventory"]["ModularSynth/DualVCA"], 1)
         self.assertTrue(any("HostMIDI" in edge and "MorphVCO" in edge for edge in report["graph"]))
         self.assertEqual(len(report["components"]), 2)  # TextEditor is intentionally unconnected.
 
