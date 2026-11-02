@@ -86,6 +86,32 @@ migration needs its own compatibility review. These safeguards are source
 and offline-test evidence only: no latest-main full build, published tarball,
 download validation or fork-owned Release is established by them.
 
+## Linked Linux first-party inventory gate
+
+After the `plugin-validation` job links the actual `bin/Cardinal` ELF, it now runs
+`python3 -B tools/ci/verify_compiled_collection.py --binary bin/Cardinal`
+before the existing host self-test. This rejects missing/truncated or
+object-only files and scans the linked ELF for the `ModularSynth` collection
+identifier **and every module slug declared in the checked-in manifest**
+(including future modules). The original eight remain a minimum source
+contract, while later additions are discovered dynamically. The synthetic
+negative fixtures in `tests/test_ci_compiled_collection.py` validate this
+gate and the workflow's compile → inventory → host-selftest ordering.
+
+This is stronger than scanning C++ source alone but still only verifies
+presence of compiled identifiers: embedded strings do **not** guarantee
+successful module instantiation, patch audio, GUI rendering, MIDI, state
+restoration, DAW compatibility, or full plugin release. The actual hosted
+`plugin-validation` job must execute and pass before this can be counted as
+a successful compiled integration check.
+
+The source-release archive gate also derives required first-party wrapper,
+header and panel paths from the current `plugins/ModularSynth/plugin.json`.
+It rejects duplicate/invalid slugs, missing declared module source, and an
+archive whose bundled manifest differs from the checkout. This closes the
+hardcoded eight-module list as new first-party modules are added; it is still
+not proof of runtime host loading.
+
 ## Offline submodule and dependency preflight
 
 Before a costly recursive checkout or full build, run:
