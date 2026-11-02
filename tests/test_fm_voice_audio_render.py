@@ -106,17 +106,20 @@ class FMVoiceWavTests(unittest.TestCase):
         cls.temp.cleanup()
 
     def render(self, name: str, rate: int, filename: str,
-               *, reference: bool = False) -> tuple[Path, dict]:
+               *, reference: bool = False, unison: int = 1) -> tuple[Path, dict]:
         path = self.directory / filename
         cmd = [str(self.binaries[name]), "--sample-rate", str(rate),
                "--output", str(path)]
         if reference:
             cmd.append("--sine-reference")
+        if unison != 1:
+            cmd.extend(("--unison", str(unison)))
         finished = subprocess.run(cmd, capture_output=True, text=True,
                                   check=False, timeout=60)
         self.assertEqual(finished.returncode, 0,
                          finished.stdout + finished.stderr)
         self.assertIn(f"mode={'sine' if reference else 'fm'}", finished.stdout)
+        self.assertIn(f"unison={unison}", finished.stdout)
         self.assertIn(f"rate={rate}", finished.stdout)
         self.assertIn(f"frames={rate * SECONDS}", finished.stdout)
         match = re.search(r"pcm_fnv1a64=([0-9a-f]{16})", finished.stdout)
@@ -165,6 +168,53 @@ class FMVoiceWavTests(unittest.TestCase):
         self.assertTrue(0.03 < metrics["rms"] < 0.3)
         self.assertGreater(min(metrics["note_rms"]), 0.03)
 
+    def test_unison_layers_are_deterministic_distinct_and_bounded(self) -> None:
+        for rate in RATES:
+            with self.subTest(rate=rate):
+                _, single = self.render("normal", rate,
+                                        f"unison-single-{rate}.wav")
+                layer_hashes = [single["hash"]]
+                for voices in (2, 4):
+                    first, a = self.render(
+                        "normal", rate, f"unison-{voices}-{rate}.wav",
+                        unison=voices)
+                    second, b = self.render(
+                        "normal", rate, f"unison-{voices}-{rate}-repeat.wav",
+                        unison=voices)
+                    self.assertEqual(first.read_bytes(), second.read_bytes())
+                    self.assertEqual(a["hash"], b["hash"])
+                    self.assertGreater(a["stereo_diff"], rate // 4)
+                    self.assertTrue(0.02 < a["peak"] < 0.75)
+                    self.assertTrue(0.008 < a["rms"] < 0.3)
+                    self.assertGreater(min(a["note_rms"]), 0.006)
+                    self.assertLess(max(a["boundary_jumps"]), 0.04)
+                    layer_hashes.append(a["hash"])
+                self.assertEqual(len(set(layer_hashes)), 3)
+
+    def test_sine_reference_unison_and_explicit_one_layer(self) -> None:
+        rate = 48000
+        single, _ = self.render("normal", rate, "unison-default.wav")
+        explicit = self.directory / "unison-explicit-one.wav"
+        result = subprocess.run([
+            str(self.binaries["normal"]), "--sample-rate", str(rate),
+            "--output", str(explicit), "--unison", "1"
+        ], capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(single.read_bytes(), explicit.read_bytes())
+        _, sine_one = self.render("normal", rate, "unison-sine-one.wav",
+                                  reference=True)
+        _, sine_four = self.render("normal", rate, "unison-sine-four.wav",
+                                   reference=True, unison=4)
+        self.assertNotEqual(sine_one["hash"], sine_four["hash"])
+        self.assertGreater(sine_four["stereo_diff"], rate // 4)
+        self.assertTrue(0.008 < sine_four["rms"] < 0.3)
+
+    def test_unison_fastmath_is_finite(self) -> None:
+        _, metrics = self.render("fastmath", 48000, "unison-fastmath.wav",
+                                 unison=4)
+        self.assertTrue(0.02 < metrics["peak"] < 0.75)
+        self.assertTrue(0.008 < metrics["rms"] < 0.3)
+
     def test_cli_validation_existing_file_and_dangling_symlink(self) -> None:
         binary = str(self.binaries["normal"])
         help_result = subprocess.run([binary, "--help"], capture_output=True,
@@ -174,6 +224,8 @@ class FMVoiceWavTests(unittest.TestCase):
         for args in (
             [], ["--output"], ["--unknown"],
             ["--sample-rate", "12345", "--output", "invalid.wav"],
+            ["--unison"], ["--unison", "0"],
+            ["--unison", "3"], ["--unison", "-1"],
         ):
             with self.subTest(args=args):
                 finished = subprocess.run([binary, *args], capture_output=True,

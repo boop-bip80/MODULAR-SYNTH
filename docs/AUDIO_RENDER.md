@@ -101,6 +101,10 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -I . \
   --output /tmp/modular-fm-48000.wav
 /tmp/fm_voice_render --sample-rate 48000 --sine-reference \
   --output /tmp/modular-sine-reference-48000.wav
+
+# Add four independently detuned FM layers per stereo channel:
+/tmp/fm_voice_render --sample-rate 48000 --unison 4 \
+  --output /tmp/modular-fm-unison4-48000.wav
 ~~~
 
 The supported rates are **44.1, 48 and 96 kHz**. Both modes write stereo,
@@ -110,6 +114,20 @@ ratio, modulation index and feedback, while the reference uses the same
 FMVoice implementation with its phase modulation disabled; neither mode
 changes FMVoice source or loads a saved `.vcv` patch.
 
+The optional `--unison 1|2|4` mode selects one (default), two or four
+**independent FMVoice DSP instances per stereo channel**. Two layers spread
+±5 cents around the nominal note; four spread ±8 cents, with slight
+per-layer FM-ratio and modulation-index differences. The right channel
+retains the existing four-cent offset from the left. All active layers are
+averaged before envelope shaping so adding voices does not multiply output
+gain; the standard ±0.75 full-scale limiter still applies. `--unison 1`
+is byte-identical to omitting the flag when built with the same compiler.
+The option works with `--sine-reference` too, where detuning produces an
+original multi-oscillator sine comparison rather than additional FM
+sidebands. The number of DSP oscillators, and thus approximate CPU work,
+increases linearly with the selected unison count. This is a *source-only*
+audition feature; it is not a Rack module control or polyphonic MIDI chord.
+
 The status line reports `mode=fm` or `mode=sine`, rate, frame count,
 normalized peak, RMS and an FNV-1a hash of the PCM bytes. Independent tests
 check the hash against the decoded WAV, two identical renders at each rate,
@@ -118,6 +136,11 @@ note-edge sample discontinuities, finite amplitude/headroom, a measurable PCM
 difference between FM and sine-reference modes, and a strict
 `-O3 -ffast-math` render. Avoid treating a changed digest as a subjective
 sound-quality verdict; it identifies a changed output.
+The tests additionally exercise all three sample rates with deterministic
+two-/four-layer unison, distinguish each voice-count PCM result, check
+note-window energy/stereo separation/transition bounds and headroom,
+compare explicit `--unison 1` to the default, and run four-layer FM with
+`-O3 -ffast-math`. Invalid unison counts are rejected before writing.
 
 ~~~sh
 python3 -m unittest discover -s tests -p test_fm_voice_audio_render.py -v
