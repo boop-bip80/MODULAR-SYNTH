@@ -273,6 +273,7 @@ void smokeFM(const rack::ProcessArgs& args) {
     module.params[ModularSynthFMVoice::FEEDBACK_PARAM].setValue(0.2f);
     for (int c = 0; c < 8; ++c)
         module.inputs[ModularSynthFMVoice::PITCH_INPUT].setVoltage(0.25f * c, c);
+    module.process(args);  // Initialize stub-port channel storage before allocation check.
     const std::size_t before = heapAllocations.load(std::memory_order_relaxed);
     for (int n = 0; n < 1024; ++n)
         module.process(args);

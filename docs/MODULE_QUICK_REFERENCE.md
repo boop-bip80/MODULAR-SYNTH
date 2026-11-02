@@ -201,7 +201,7 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 If the examples folder is included in the build, open a patch through
 **File → Open demo / example project**; otherwise load its `.vcv` directly.
 **Clockwork Pulses** is transport-driven; **Clocked Modulation Studio** uses
-host transport beats *and* MIDI notes; the remaining eleven accept MIDI notes.
+host transport beats *and* MIDI notes; the other examples accept MIDI notes.
 Begin at a conservative
 monitor level. [Factory-patch details and structural validation](FACTORY_PATCHES.md)
 and [offline patch checks](PATCH_WORKFLOW.md) provide more context.

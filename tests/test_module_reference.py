@@ -171,7 +171,7 @@ class ModuleQuickReferenceTests(unittest.TestCase):
         self.assertEqual(len(linked), len(set(linked)), "Duplicate factory-patch references")
         self.assertEqual(actual, set(linked), "Update quick reference when factory patches change")
         self.assertEqual(15, len(actual))
-        self.assertIn("## Fourteen factory patches", self.document)
+        self.assertIn("## Fifteen factory patches", self.document)
         self.assertIn("[Cinematic Pulse Score]", self.document)
         for path, classification in rows:
             with self.subTest(path=path):
