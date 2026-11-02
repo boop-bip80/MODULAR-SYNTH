@@ -70,8 +70,20 @@ public:
         return std::min(maxValue, std::max(minValue, value));
     }
 
+    // Reject microscopic input energy before arithmetic in both the dry path
+    // and feedback path. The same -400 dB floor already protects the rings.
+    static double inputVoltage(double value) noexcept {
+        const double safe = clampFinite(value, 0.0, -20.0, 20.0);
+        return safe > -kFeedbackSilenceFloorVolts && safe < kFeedbackSilenceFloorVolts
+            ? 0.0 : safe;
+    }
+
     static float outputVoltage(double value) noexcept {
-        return static_cast<float>(clampFinite(value, 0.0, -10.0, 10.0));
+        const double safe = clampFinite(value, 0.0, -10.0, 10.0);
+        // A wet/dry combination can itself become subnormal even if both
+        // inputs were normal. Never hand denormal floats to the host.
+        return safe > -kFeedbackSilenceFloorVolts && safe < kFeedbackSilenceFloorVolts
+            ? 0.0f : static_cast<float>(safe);
     }
 
     void reset() noexcept {
@@ -123,8 +135,8 @@ public:
                 -6.907755278982137 / (kControlSlewSecondsTo99Point9Percent * sampleRate));
         }
 
-        const double safeL = clampFinite(inputL, 0.0, -20.0, 20.0);
-        const double safeR = clampFinite(inputR, 0.0, -20.0, 20.0);
+        const double safeL = inputVoltage(inputL);
+        const double safeR = inputVoltage(inputR);
         const double maxMs = effectiveMaxMs(sampleRate);
         const double ms = clampFinite(delayMs, 250.0, kMinDelayMs, maxMs);
         const double targetSamples = ms * sampleRate / 1000.0;
