@@ -64,7 +64,7 @@ def verify_elf_inventory(binary: Path, slugs: tuple[str, ...]) -> None:
                 # createModel<T>("Slug") and StaticPluginLoader("ModularSynth")
                 # require these NUL-terminated identifiers in the linked host.
                 markers = ("ModularSynth", *slugs)
-                absent = [marker for marker in markers if marker.encode("ascii") + b"\0" not in image]
+                absent = [marker for marker in markers if image.find(marker.encode("ascii") + b"\0") < 0]
                 if absent:
                     raise InventoryError(
                         f"compiled host {binary} lacks first-party model identifiers: "
