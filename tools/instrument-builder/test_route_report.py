@@ -103,8 +103,9 @@ class ReadableRouteReportTests(unittest.TestCase):
         self.assertEqual((code, errors), (0, ""))
         parsed = json.loads(output)
         self.assertEqual(parsed, build_route_report(inspect(saved)))
+        # Route order follows Macro8 controls, not saved cable IDs.
         self.assertEqual([r["cableId"] for r in parsed["routes"]],
-                         [72, 102, 103, 104, 105, 106])
+                         [72, 102, 103, 104, 106, 105])
         # Patch cable array order is not a report-order dependency.
         reversed_patch = routed_patch()
         reversed_patch["cables"].reverse()
