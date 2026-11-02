@@ -267,12 +267,17 @@ signal chains, the audit now distinguishes:
   This is a *review-needed* classification, not proof the patch is silent.
 - `unrouted_first_party_generators`: no directed cable route at all, as before.
 
-Use the stricter, optional CI gate when your patch contains a wholly
-first-party signal chain:
+To see the strict gate identify an opaque third-party processing hop in a
+committed example (expected exit **1**), run:
 
 ```sh
 python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_FM_Voice_Performance.vcv --require-source-verified-signal-route --json
 ```
+
+This FMVoice factory patch routes through a Fundamental/VCA-1 module whose
+input/output semantics are not source-verified by this checker; it can still be
+musically valid. Use the strict flag as a passing CI gate only on patches built
+entirely from the checked first-party audio-chain modules above.
 
 The exit status is **1** if any source-verified first-party generator lacks
 the conservative signal-port chain or the HostAudio2 source contract cannot
