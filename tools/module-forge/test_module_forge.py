@@ -121,6 +121,18 @@ class ModuleForgeTests(unittest.TestCase):
         self.assertNotIn("OrbitSine.dsp.hpp", original)
         self.assertIn("phase[voice]", original["OrbitSine.cpp"])
 
+    def test_starters_retire_inactive_polyphonic_state(self):
+        oscillator = render_files("OrbitSine", "Orbit Sine")["OrbitSine.cpp"]
+        effect = render_files("StereoTPT", "Stereo TPT", kind="effect")[
+            "StereoTPT.cpp"]
+        for source in (oscillator, effect):
+            self.assertIn("int activeChannels = 0;", source)
+            self.assertIn("for (int voice = voices; voice < activeChannels; ++voice)", source)
+            self.assertIn("activeChannels = voices;", source)
+        self.assertIn("phase[voice] = 0.f;", oscillator)
+        self.assertIn("leftFilter[voice].reset();", effect)
+        self.assertIn("rightFilter[voice].reset();", effect)
+
     def test_effect_generation_validation_and_port_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             destination = generate("StereoTPT", "Stereo TPT", Path(tmp),
