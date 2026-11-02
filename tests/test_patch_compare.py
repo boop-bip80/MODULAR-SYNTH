@@ -133,6 +133,85 @@ class PatchCompareTests(unittest.TestCase):
         fields = [x["field"] for x in compare_patches(before, after)["modules"]["macro8_state"]]
         self.assertEqual(fields, ["macro8Version", "selectedSlot", "names", "snapshots"])
 
+    def test_host_midi_saved_configuration_must_not_be_silently_ignored(self) -> None:
+        before = fixture()
+        before["modules"][0]["data"] = {"channels": 1, "mapping": {"note": 0, "cc": [1, 74]}}
+        after = copy.deepcopy(before)
+        after["modules"][0]["data"]["channels"] = 8
+        after["modules"][0]["data"]["mapping"]["cc"][1] = 71
+        report = compare_patches(before, after)
+        self.assertTrue(report["summary"]["changed"])
+        self.assertEqual(report["summary"]["persisted_state_changed"], 2)
+        self.assertEqual([entry["field"] for entry in report["modules"]["persisted_state"]],
+                         ["data.channels", "data.mapping.cc[1]"])
+        self.assertIn("data.channels: 1 -> 8", format_report(report))
+
+    def test_module_bypass_and_version_are_conservatively_reported(self) -> None:
+        before = fixture()
+        after = copy.deepcopy(before)
+        after["modules"][1]["bypass"] = True
+        after["modules"][1]["version"] = "2.5.0"
+        report = compare_patches(before, after)
+        self.assertEqual(report["summary"]["persisted_state_changed"], 2)
+        self.assertEqual([entry["field"] for entry in report["modules"]["persisted_state"]],
+                         ["module.bypass", "module.version"])
+        self.assertTrue(report["summary"]["changed"])
+
+    def test_unknown_macro8_state_fields_are_reported_without_double_count(self) -> None:
+        before = fixture()
+        after = copy.deepcopy(before)
+        data = next(m["data"] for m in after["modules"] if m["model"] == "Macro8")
+        data["futureControls"] = {"learnedCC": 3}
+        data["selectedSlot"] = 1
+        report = compare_patches(before, after)
+        self.assertEqual(report["summary"]["macro8_state_changed"], 1)
+        self.assertEqual(report["summary"]["persisted_state_changed"], 1)
+        self.assertEqual(report["modules"]["persisted_state"][0]["field"],
+                         "data.futureControls")
+
+    def test_global_saved_state_is_reported_but_view_only_fields_are_ignored(self) -> None:
+        before = fixture()
+        before["midiMappings"] = {"preset": {"cc": 11}}
+        after = copy.deepcopy(before)
+        after["midiMappings"]["preset"]["cc"] = 74
+        after["zoom"] = 0.4
+        after["offset"] = [99, 88]
+        report = compare_patches(before, after)
+        self.assertEqual(report["summary"]["patch_state_changed"], 1)
+        self.assertEqual(report["patch_state"][0]["field"], "patch.midiMappings.preset.cc")
+        self.assertIn("patch.midiMappings.preset.cc: 11 -> 74", format_report(report))
+
+    def test_saved_state_dict_order_and_json_roundtrip_are_stable(self) -> None:
+        before = fixture()
+        before["modules"][0]["data"] = {"b": [{"y": 2, "x": 1}], "a": True}
+        before["custom"] = {"two": [4, 5], "one": 1}
+        after = json.loads(json.dumps(before, sort_keys=True))
+        self.assertFalse(compare_patches(before, after)["summary"]["changed"])
+
+    def test_saved_state_nested_list_order_is_musically_relevant(self) -> None:
+        before = fixture()
+        before["modules"][0]["data"] = {"steps": [0, 7, 12]}
+        after = copy.deepcopy(before)
+        after["modules"][0]["data"]["steps"] = [7, 0, 12]
+        report = compare_patches(before, after)
+        self.assertEqual([entry["field"] for entry in report["modules"]["persisted_state"]],
+                         ["data.steps[0]", "data.steps[1]"])
+
+    def test_json_boolean_is_not_interchangeable_with_numeric_zero_or_one(self) -> None:
+        before = fixture()
+        before["modules"][0]["data"] = {"enabled": True, "muted": False, "depth": 1}
+        after = copy.deepcopy(before)
+        after["modules"][0]["data"].update({"enabled": 1, "muted": 0, "depth": 1.0})
+        report = compare_patches(before, after)
+        self.assertEqual([entry["field"] for entry in report["modules"]["persisted_state"]],
+                         ["data.enabled", "data.muted"])
+
+    def test_missing_and_empty_module_data_have_same_default(self) -> None:
+        before = fixture()
+        after = copy.deepcopy(before)
+        after["modules"][0]["data"] = {}
+        self.assertFalse(compare_patches(before, after)["summary"]["changed"])
+
     def test_multiple_identical_type_instances_without_stable_ids_are_conservative(self) -> None:
         before = patch([
             module(1, "Fundamental", "VCA-1"),
@@ -236,6 +315,12 @@ class PatchCompareTests(unittest.TestCase):
             self.assertEqual(changed.returncode, 1, changed.stderr)
             self.assertTrue(json.loads(changed.stdout)["summary"]["changed"])
             self.assertEqual(changed.stdout, call("--json").stdout)
+            saved = fixture()
+            saved["modules"][0]["data"] = {"channels": 8}
+            new_path.write_text(json.dumps(saved), encoding="utf-8")
+            saved_changed = call("--json")
+            self.assertEqual(saved_changed.returncode, 1, saved_changed.stderr)
+            self.assertEqual(json.loads(saved_changed.stdout)["summary"]["persisted_state_changed"], 1)
             new_path.write_text('{"modules": [], "modules": [], "cables": []}', encoding="utf-8")
             malformed = call()
             self.assertEqual(malformed.returncode, 2)
