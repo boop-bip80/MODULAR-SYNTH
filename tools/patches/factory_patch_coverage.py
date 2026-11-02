@@ -112,7 +112,7 @@ EXAMPLES: dict[str, Example] = {
                   "Cardinal/HostAudio2", output=0, input=0),
         ),
     ),
-    "MODULAR_-_FM_Voice_Performance.vcv": Example("
+    "MODULAR_-_FM_Voice_Performance.vcv": Example(
         "Two-operator FM Voice with MIDI pitch/gate and enveloped output",
         ("Cardinal/HostMIDI", "ModularSynth/FMVoice",
          "Fundamental/ADSR", "Fundamental/VCA-1", "Cardinal/HostAudio2"),
