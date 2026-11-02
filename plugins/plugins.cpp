@@ -1233,6 +1233,7 @@ static void initStatic__ModularSynth()
         p->addModel(modelMacro8);
         p->addModel(modelStereoEcho);
         p->addModel(modelClockedLFO);
+        p->addModel(modelFMVoice);
     }
 }
 

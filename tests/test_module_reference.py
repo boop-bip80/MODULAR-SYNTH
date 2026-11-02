@@ -17,9 +17,9 @@ DOC_PATH = ROOT / "docs/MODULE_QUICK_REFERENCE.md"
 PLUGIN_DIR = ROOT / "plugins/ModularSynth"
 PATCH_DIR = ROOT / "patches/examples"
 
-# The quick reference covers exactly the current six first-party modules.
+# The quick reference covers exactly the current seven first-party modules.
 # A newly registered model requires an explicit catalog update.
-MODULE_SLUGS = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO")
+MODULE_SLUGS = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice")
 
 
 def enum_ports(source: str, enum_name: str) -> list[str]:
@@ -88,6 +88,17 @@ class ModuleQuickReferenceTests(unittest.TestCase):
     def test_rack_metadata_tooltip_units_and_defaults(self) -> None:
         # Exact configParam/configInput descriptors are the source of truth.
         expected_sources = {
+            "FMVoice": (
+                'configParam(OCTAVE_PARAM, -4.0f, 4.0f, 0.0f,',
+                'configParam(FINE_PARAM, -100.0f, 100.0f, 0.0f,',
+                'configParam(RATIO_PARAM, 0.125f, 16.0f, 1.0f,',
+                'configParam(INDEX_PARAM, 0.0f, 8.0f, 0.0f,',
+                'configParam(FEEDBACK_PARAM, 0.0f, 0.95f, 0.0f,',
+                '"Pitch CV (1 V/oct; C4 at 0 V)"',
+                '"Ratio CV (1 V doubles ratio)"',
+                '"Index CV (1 V adds 0.8 rad)"',
+                '"Feedback CV (10 V adds 95%)"',
+            ),
             "MorphVCO": (
                 'configParam(OCTAVE_PARAM, -4.0f, 4.0f, 0.0f,',
                 'configParam(FINE_PARAM, -100.0f, 100.0f, 0.0f,',
@@ -159,8 +170,8 @@ class ModuleQuickReferenceTests(unittest.TestCase):
         linked = [path for path, _ in rows]
         self.assertEqual(len(linked), len(set(linked)), "Duplicate factory-patch references")
         self.assertEqual(actual, set(linked), "Update quick reference when factory patches change")
-        self.assertEqual(14, len(actual))
-        self.assertIn("## Fourteen factory patches", self.document)
+        self.assertEqual(15, len(actual))
+        self.assertIn("## Fifteen factory patches", self.document)
         self.assertIn("[Cinematic Pulse Score]", self.document)
         for path, classification in rows:
             with self.subTest(path=path):
@@ -233,7 +244,7 @@ class ModuleQuickReferenceTests(unittest.TestCase):
             "MODULAR_-_Echo_Motion_Performance.vcv)", self.document
         )
         self.assertIn("Macro8 A–D", self.document)
-        self.assertIn("remaining eleven", self.document)
+        self.assertIn("the other examples accept MIDI notes", self.document)
 
     def test_documented_factory_menu_matches_actual_source_label(self) -> None:
         menu = (ROOT / "src/override/MenuBar.cpp").read_text(encoding="utf-8")

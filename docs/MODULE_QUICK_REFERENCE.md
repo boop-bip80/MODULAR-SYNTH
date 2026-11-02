@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Originals — musician's quick reference
 
-Six first-party Rack models are **statically registered in source** and expected
+Seven first-party Rack models are **statically registered in source** and expected
 under **MODULAR-SYNTH Originals** in the module browser after a successful build.
 This page is a patching cheat sheet for the models actually
 declared in [the collection manifest](../plugins/ModularSynth/plugin.json)
@@ -18,6 +18,7 @@ measured audio or a verified DAW session.
 | **Macro8 Performance Macros** (`Macro8`) | Eight named performer CVs and four A–D scenes | **0 in / 8 out** | All eight macros 0%; unipolar 0 to +10 V; transition 0.25 s; RECALL |
 | **Stereo Echo** (`StereoEcho`) | Polyphonic stereo delay with wet/dry and ping-pong crossfeed | **5 in / 2 out** | Time 250 ms; feedback 35%; wet 40%; crossfeed 50% |
 | **Clocked LFO** (`ClockedLFO`) | Sixteen-lane free/externally clocked modulation; 5 wave/trigger outputs | **5 in / 5 out** | Free rate 0.5 Hz; clock ratio 1:1; phase 0%; width 50% |
+| **FM Voice** (`FMVoice`) | 16-voice two-operator phase-modulation sine voice with feedback | **4 in / 2 out** | Octave 0; fine 0 cents; ratio 1:1; index 0 rad; feedback 0% |
 
 ### Morph VCO (`MorphVCO`)
 
@@ -119,6 +120,20 @@ measured audio or a verified DAW session.
   Clock acquisition, beat-time drift and audible modulation quality still
   require real-host validation.
 
+### FM Voice (`FMVoice`)
+
+[Source/configuration](../plugins/ModularSynth/src/FMVoice.cpp) ·
+[DSP contract and aliasing limits](FM_VOICE.md)
+
+- **Pitch:** 1 V/oct at C4 zero volts, octave −4…+4 (snapped), fine
+  −100…+100 cents.
+- **Timbre:** RATIO 0.125…16, INDEX 0…8 radians, FEEDBACK 0…95%.
+  RATIO CV doubles the ratio per +1 V; INDEX CV adds 0.8 radians/V;
+  FDBK CV adds 9.5 percentage points/V. Sums clamp and slew over ~2 ms.
+- **Audio:** FM OUT (phase-modulated carrier) and MOD OUT (modulator),
+  nominally ±5 V. Up to 16 Rack polyphonic lanes.
+  FM sidebands are not bandlimited or oversampled; extreme settings alias.
+
 ## Five suggested wiring recipes (host-unverified)
 
 1. **Keyboard subtractive voice:** `Host MIDI pitch → Morph VCO PITCH`;
@@ -158,11 +173,11 @@ oscillator morph. Those are saved signal/CV routes, not an audio audition.
 HostTime beat/reset routing and Clocked LFO modulation to VCO, filter,
 ADSR retrigger and Echo wet mix; it needs host transport for beat lock. **Cinematic Pulse Score** instead leaves HostTime/CLK disconnected, uses a free-running LFO PULSE to gate a second ADSR/VCA on its low-pass left path, and keeps high-pass right separate. Its four A–D Macro8 scenes are saved CV positions, not auditioned film-score audio.
 
-## Fourteen factory patches
+## Fifteen factory patches
 
-All fourteen links below are actual `.vcv` files under
+All fifteen links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
-existing plugin collection and does not require one of these six first-party
+existing plugin collection and does not require one of these seven first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
 
 | Patch | Models | Play/try this |
@@ -171,6 +186,7 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Granular Veil](../patches/examples/MODULAR_-_Granular_Veil.vcv) | Bundled-only | Hold MIDI notes; dual oscillators into Clouds texture |
 | [Clockwork Pulses](../patches/examples/MODULAR_-_Clockwork_Pulses.vcv) | Bundled-only | Start host transport; sequence → Plaits → Plateau reverb |
 | [Morph VCO Performance](../patches/examples/MODULAR_-_Morph_VCO_Performance.vcv) | Originals | Play MIDI notes; move wave morph and pulse width |
+| [FM Voice Performance](../patches/examples/MODULAR_-_FM_Voice_Performance.vcv) | Originals | Play MIDI notes; change ratio/index/feedback for evolving FM tones (watch aliasing) |
 | [Morphing State Pad](../patches/examples/MODULAR_-_Morphing_State_Pad.vcv) | Originals | Hold notes; recall Macro8 A/B to modulate oscillator/filter |
 | [Cinematic Drift Pad](../patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv) | Originals | Long ADSR pad; alternate Macro8 A/B with slow transitions |
 | [Rhythmic Grit Bass](../patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv) | Originals | Short MIDI rhythms; rapid Macro8 scene transitions |
@@ -185,14 +201,14 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 If the examples folder is included in the build, open a patch through
 **File → Open demo / example project**; otherwise load its `.vcv` directly.
 **Clockwork Pulses** is transport-driven; **Clocked Modulation Studio** uses
-host transport beats *and* MIDI notes; the remaining eleven accept MIDI notes.
+host transport beats *and* MIDI notes; the other examples accept MIDI notes.
 Begin at a conservative
 monitor level. [Factory-patch details and structural validation](FACTORY_PATCHES.md)
 and [offline patch checks](PATCH_WORKFLOW.md) provide more context.
 
 ## What is—and is not—verified
 
-The manifest, module C++ metadata and all fourteen saved patch graphs can be
+The manifest, module C++ metadata and all fifteen saved patch graphs can be
 checked offline with:
 
 ```sh

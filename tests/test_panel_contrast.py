@@ -13,7 +13,7 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "contrast_audit.py"
 MODULES = {"MorphVCO": 12, "StateFilter": 14, "FoldDrive": 12,
-           "Macro8": 20, "StereoEcho": 16, "ClockedLFO": 16}
+           "Macro8": 20, "StereoEcho": 16, "ClockedLFO": 16, "FMVoice": 12}
 
 
 class PanelContrastTests(unittest.TestCase):
@@ -90,7 +90,7 @@ class PanelContrastTests(unittest.TestCase):
     def test_original_gradients_have_base_only_bounds_but_no_local_pass(self) -> None:
         result = self.run_cli(REPO, "--fail-on-low-contrast")
         self.assertEqual(result.returncode, 0, result.stderr)
-        for panel in ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho"):
+        for panel in ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "FMVoice"):
             with self.subTest(panel=panel):
                 section = result.stdout.split(f"[{panel}] label underlay:", 1)[1]
                 section = section.split("\n[", 1)[0]
@@ -144,7 +144,7 @@ class PanelContrastTests(unittest.TestCase):
     def test_real_panels_are_explicitly_unknown_under_gradients(self) -> None:
         result = self.run_cli(REPO)
         self.assertEqual(result.returncode, 0, result.stderr)
-        for panel in ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho"):
+        for panel in ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "FMVoice"):
             self.assertIn(f"[{panel}] label underlay: gradient", result.stdout)
         self.assertIn("[ClockedLFO] label underlay: layered SVG artwork over solid base",
                       result.stdout)
@@ -154,8 +154,9 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("UNKNOWN TEXT MACRO 8 #F6F2FF", result.stdout)
         self.assertIn("UNKNOWN TEXT STEREO ECHO #ECF4FF", result.stdout)
         self.assertIn("UNKNOWN TEXT CLOCKED LFO #E8FFF8", result.stdout)
-        self.assertIn("71 nvgText sites", result.stdout)
-        self.assertIn("42 measured SVG outline shapes", result.stdout)
+        self.assertIn("UNKNOWN TEXT FM VOICE #F4F3FE", result.stdout)
+        self.assertIn("84 nvgText sites", result.stdout)
+        self.assertIn("47 measured SVG outline shapes", result.stdout)
         self.assertIn("10 UNKNOWN SVG outline shapes", result.stdout)
         self.assertIn("UNKNOWN SVG OUTLINE #63b7cc vs fill url(#dial)", result.stdout)
         self.assertIn("gradient-stop swatches", result.stdout)
@@ -175,6 +176,7 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("MEASURED TEXT MACRO 8", result.stdout)
         self.assertIn("MEASURED TEXT STEREO ECHO", result.stdout)
         self.assertIn("MEASURED TEXT CLOCKED LFO", result.stdout)
+        self.assertIn("MEASURED TEXT FM VOICE", result.stdout)
         self.assertIn("dynamic label coordinates", result.stdout)
         self.assertNotIn("WARN TEXT", result.stdout)
 

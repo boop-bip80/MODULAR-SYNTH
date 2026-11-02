@@ -93,6 +93,23 @@ EXAMPLES: dict[str, Example] = {
         ),
         stereo=True,
     ),
+    "MODULAR_-_FM_Voice_Performance.vcv": Example(
+        "Two-operator FM Voice with MIDI pitch/gate and enveloped output",
+        ("Cardinal/HostMIDI", "ModularSynth/FMVoice",
+         "Fundamental/ADSR", "Fundamental/VCA-1", "Cardinal/HostAudio2"),
+        (
+            Route("MIDI pitch to FM Voice 1V/oct", "Cardinal/HostMIDI",
+                  "ModularSynth/FMVoice", output=0, input=0),
+            Route("MIDI gate to FM envelope", "Cardinal/HostMIDI",
+                  "Fundamental/ADSR", output=1, input=4),
+            Route("FM carrier audio to VCA", "ModularSynth/FMVoice",
+                  "Fundamental/VCA-1", output=0, input=1),
+            Route("FM envelope to VCA CV", "Fundamental/ADSR",
+                  "Fundamental/VCA-1", output=0, input=0),
+            Route("FM VCA to host", "Fundamental/VCA-1",
+                  "Cardinal/HostAudio2", output=0, input=0),
+        ),
+    ),
     "MODULAR_-_Morph_VCO_Performance.vcv": Example(
         "First-party Morph VCO, MIDI pitch/gate and enveloped output",
         ("Cardinal/HostMIDI", "ModularSynth/MorphVCO",

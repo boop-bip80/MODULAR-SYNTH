@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Factory Patches — original examples
 
-These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `Macro8`, `StereoEcho` and `ClockedLFO` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
+These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `Macro8`, `StereoEcho` `ClockedLFO` and `FMVoice` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
 
 | Patch | Purpose | Interaction |
 | --- | --- | --- |
@@ -8,6 +8,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_Granular_Veil.vcv` | Detuned dual oscillators → slow envelope → Clouds stereo texture | Hold notes via host MIDI; experiment with Clouds' grain and texture controls |
 | `MODULAR_-_Clockwork_Pulses.vcv` | Host-clocked 16-step sequence → Plaits → Plateau reverb, with LFO timbral variation | Start the host/DAW transport; alter sequence steps and Plaits controls |
 | `MODULAR_-_Morph_VCO_Performance.vcv` | MIDI-controlled first-party Morph VCO with ADSR/VCA | Play notes; adjust wave morph and pulse width |
+| `MODULAR_-_FM_Voice_Performance.vcv` | MIDI-controlled two-operator FM Voice with ADSR/VCA | Play notes; move ratio, index and feedback; avoid extreme high-frequency aliasing |
 | `MODULAR_-_Morphing_State_Pad.vcv` | First-party Morph VCO → StateFilter, with three Macro8 CV routes | Recall A/B macro snapshots while holding a note |
 | `MODULAR_-_Cinematic_Drift_Pad.vcv` | Long ADSR performance pad and four macros including bipolar cutoff CV | Alternate 4-second Macro8 A/B transitions |
 | `MODULAR_-_Rhythmic_Grit_Bass.vcv` | Tightly gated bass with Macro8 cutoff modulation | Play short external MIDI rhythms; recall 0.20-second transitions |
@@ -30,7 +31,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 ## Scope and compatibility
 
 - These are **patch examples**, not new DSP modules or a finished preset management system.
-- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, FoldDrive, Macro8, StereoEcho and ClockedLFO).
+- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, FoldDrive, Macro8, StereoEcho, ClockedLFO and FMVoice).
 - MIDI/transport mapping and sample-rate behavior are inherited from the built-in modules and host.
 - The examples target `Cardinal/HostAudio2`. Some use two saved input routes; others feed a single host input. Polyphonic Motion Pad sends the same summed voice signal to both channels, **not** an independently panned stereo image. They are not standalone VST3 exports.
 - They use plain-text VCV Rack 2.x patch JSON for reproducibility.
