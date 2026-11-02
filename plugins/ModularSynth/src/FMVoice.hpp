@@ -66,6 +66,24 @@ public:
         return kC4Hz * std::exp2(bounded(octaveVolts, 0.0, -20.0, 20.0));
     }
 
+    // Carson-style sideband guard for a *sine* phase modulator. This is
+    // a conservative timbral roll-off near Nyquist, NOT alias elimination:
+    // higher Bessel sidebands and feedback harmonics can still alias.
+    static double bandwidthIndexCeiling(double carrierHz, double modulatorHz,
+                                        double sampleRateHz) noexcept {
+        if (!finite(sampleRateHz) || sampleRateHz < 1000.0
+            || sampleRateHz > 384000.0
+            || !finite(carrierHz) || carrierHz < 0.0
+            || !finite(modulatorHz) || modulatorHz < 0.0)
+            return 0.0;
+        if (modulatorHz == 0.0)
+            return kMaxIndexRadians;
+        const double guardHz = 0.45 * sampleRateHz;
+        const double roomHz = std::max(0.0, guardHz - std::min(carrierHz, guardHz));
+        return bounded(roomHz / modulatorHz - 1.0, 0.0, 0.0,
+                       kMaxIndexRadians);
+    }
+
     void reset() noexcept {
         carrierPhase = 0.0;
         modulatorPhase = 0.0;
@@ -73,7 +91,9 @@ public:
         smoothedRatio = 1.0;
         smoothedIndex = 0.0;
         smoothedFeedback = 0.0;
+        smoothedGuardCeiling = kMaxIndexRadians;
         initialized = false;
+        guardInitialized = false;
     }
 
     Output process(const Input& input) noexcept {
@@ -104,18 +124,33 @@ public:
 
         // Individual oscillator frequency caps avoid invalid phase steps;
         // FM/feedback sidebands themselves are NOT bandlimited.
-        const double carrierStep = std::min(input.frequencyHz,
-                                             0.45 * input.sampleRateHz)
-                                   / input.sampleRateHz;
-        const double modulatorStep = std::min(
-            input.frequencyHz * smoothedRatio, 0.45 * input.sampleRateHz)
-            / input.sampleRateHz;
+        const double maxHz = 0.45 * input.sampleRateHz;
+        const double carrierHz = std::min(input.frequencyHz, maxHz);
+        // Divide before multiplication: extreme finite input frequencies
+        // must not overflow when multiplied by the modulator ratio.
+        const double modulatorHz = input.frequencyHz >= maxHz / smoothedRatio
+            ? maxHz : input.frequencyHz * smoothedRatio;
+        const double carrierStep = carrierHz / input.sampleRateHz;
+        const double modulatorStep = modulatorHz / input.sampleRateHz;
+        const double ceiling = bandwidthIndexCeiling(
+            carrierHz, modulatorHz, input.sampleRateHz);
+        if (!guardInitialized) {
+            // Saved high-note timbre starts correctly; no fake reset glide.
+            smoothedGuardCeiling = ceiling;
+            guardInitialized = true;
+        } else {
+            // Pitch/ratio CV may jump while the module is sounding. Smooth
+            // changes to the ceiling so the PM index cannot jump instantly.
+            const double alpha = std::min(1.0, 1.0 / (0.002 * input.sampleRateHz));
+            smoothedGuardCeiling += alpha * (ceiling - smoothedGuardCeiling);
+        }
+        const double effectiveIndex = std::min(smoothedIndex, smoothedGuardCeiling);
 
         const double modulator = std::sin(kTwoPi * modulatorPhase
                                           + smoothedFeedback * previousModulator);
         previousModulator = modulator;
         const double carrier = std::sin(kTwoPi * carrierPhase
-                                        + smoothedIndex * modulator);
+                                        + effectiveIndex * modulator);
 
         carrierPhase += carrierStep;
         modulatorPhase += modulatorStep;
@@ -133,10 +168,12 @@ public:
     double smoothedRatio = 1.0;
     double smoothedIndex = 0.0;
     double smoothedFeedback = 0.0;
+    double smoothedGuardCeiling = kMaxIndexRadians;
 
 private:
     double previousModulator = 0.0;
     bool initialized = false;
+    bool guardInitialized = false;
 };
 
 } // namespace dsp

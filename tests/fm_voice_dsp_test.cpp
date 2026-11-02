@@ -138,6 +138,133 @@ int main() {
                       "Nyquist step cap preserves normalized phase");
     }
 
+    // A Carson-style sideband ceiling deliberately rolls off FM index near
+    // Nyquist. The coherent 21 kHz alias here comes from 3 kHz carrier
+    // plus the second 12 kHz modulator sideband (27 kHz folded to 21 kHz).
+    // Measure that alias bin against the previous unrestricted PM equation;
+    // this is a *selected-bin* regression, not proof of alias-free FM.
+    okay &= check(std::abs(FMVoice::bandwidthIndexCeiling(
+                     3000.0, 12000.0, 48000.0) - 0.55) < 1.0e-12,
+                  "high-frequency FM index ceiling matches bandwidth guard");
+    okay &= check(FMVoice::bandwidthIndexCeiling(
+                     440.0, 880.0, 48000.0) == 8.0,
+                  "low-note musical FM indices remain unaltered");
+    FMVoice guarded;
+    FMVoice::Input bright = plain;
+    bright.frequencyHz = 3000.0;
+    bright.ratio = 4.0;
+    bright.indexRadians = 3.0;
+    constexpr int kSamples = 4800;
+    double oldRe = 0.0, oldIm = 0.0;
+    double guardedRe = 0.0, guardedIm = 0.0;
+    for (int n = 0; n < kSamples; ++n) {
+        const double carPhase = FMVoice::kTwoPi * n * 3000.0 / 48000.0;
+        const double modPhase = FMVoice::kTwoPi * n * 12000.0 / 48000.0;
+        const double oldCarrier = std::sin(carPhase + 3.0 * std::sin(modPhase));
+        const double newCarrier = guarded.process(bright).carrier;
+        const double analysisPhase = FMVoice::kTwoPi * n * 21000.0 / 48000.0;
+        const double cosine = std::cos(analysisPhase);
+        const double sine = std::sin(analysisPhase);
+        oldRe += oldCarrier * cosine;
+        oldIm -= oldCarrier * sine;
+        guardedRe += newCarrier * cosine;
+        guardedIm -= newCarrier * sine;
+    }
+    const double oldAlias = 2.0 * std::hypot(oldRe, oldIm) / kSamples;
+    const double guardedAlias = 2.0 * std::hypot(guardedRe, guardedIm) / kSamples;
+    const double reductionDb = 20.0 * std::log10(oldAlias / guardedAlias);
+    okay &= check(oldAlias > 0.9 && guardedAlias < 0.1 && reductionDb > 20.0,
+                  "coherent 21 kHz folded sideband reduced at least 20 dB");
+    std::printf("FM coherent 21k alias: old=%.6f, guarded=%.6f, %.2f dB lower\n",
+                oldAlias, guardedAlias, reductionDb);
+
+    // Second high-note case: 6 kHz carrier, 12 kHz modulator and a
+    // 30 kHz upper sideband folding to 18 kHz at 48 kHz. The guard reduces
+    // this selected alias bin as well, not only one handpicked frequency.
+    FMVoice highBright;
+    FMVoice::Input highNote = plain;
+    highNote.frequencyHz = 6000.0;
+    highNote.ratio = 2.0;
+    highNote.indexRadians = 3.0;
+    double highOldRe = 0.0, highOldIm = 0.0;
+    double highNewRe = 0.0, highNewIm = 0.0;
+    for (int n = 0; n < kSamples; ++n) {
+        const double carrierP = FMVoice::kTwoPi * n * 6000.0 / 48000.0;
+        const double modP = FMVoice::kTwoPi * n * 12000.0 / 48000.0;
+        const double oldSample = std::sin(carrierP + 3.0 * std::sin(modP));
+        const double newSample = highBright.process(highNote).carrier;
+        const double targetP = FMVoice::kTwoPi * n * 18000.0 / 48000.0;
+        highOldRe += oldSample * std::cos(targetP);
+        highOldIm -= oldSample * std::sin(targetP);
+        highNewRe += newSample * std::cos(targetP);
+        highNewIm -= newSample * std::sin(targetP);
+    }
+    const double highOldAlias = 2.0 * std::hypot(highOldRe, highOldIm) / kSamples;
+    const double highNewAlias = 2.0 * std::hypot(highNewRe, highNewIm) / kSamples;
+    okay &= check(20.0 * std::log10(highOldAlias / highNewAlias) > 15.0,
+                  "second coherent high-note alias bin reduced at least 15 dB");
+    std::printf("FM coherent 18k alias: old=%.6f, guarded=%.6f, %.2f dB lower\n",
+                highOldAlias, highNewAlias,
+                20.0 * std::log10(highOldAlias / highNewAlias));
+
+    // Abrupt pitch+ratio CV changes cannot cause an instantaneous guard
+    // index step: the ceiling itself slews ~2 ms. The oscillator phase
+    // remains continuous. This is a control continuity check; a pitch
+    // jump can still cause wideband transient energy or an audible click.
+    FMVoice swept;
+    FMVoice::Input sweep = plain;
+    sweep.ratio = 2.0;
+    sweep.indexRadians = 6.0;
+    for (int n = 0; n < 256; ++n)
+        swept.process(sweep);
+    double previousIndex = std::min(swept.smoothedIndex,
+                                    swept.smoothedGuardCeiling);
+    const double phaseBeforeJump = swept.carrierPhase;
+    sweep.frequencyHz = 6000.0;
+    sweep.ratio = 4.0;
+    for (int n = 0; n < 2048; ++n) {
+        const auto output = swept.process(sweep);
+        const double effective = std::min(swept.smoothedIndex,
+                                          swept.smoothedGuardCeiling);
+        okay &= check(std::abs(effective - previousIndex) <= 0.085,
+                      "guard threshold crossing cannot step index abruptly");
+        okay &= check(FMVoice::finite(output.carrier) &&
+                      FMVoice::finite(output.modulator),
+                      "steep pitch CV must preserve bounded finite output");
+        if (n == 0)
+            okay &= check(std::abs(swept.carrierPhase -
+                std::fmod(phaseBeforeJump + 6000.0 / 48000.0, 1.0)) < 1.0e-9,
+                "pitch CV jump must preserve carrier phase accumulator");
+        previousIndex = effective;
+    }
+    okay &= check(previousIndex < 0.001,
+                  "slewed high-frequency ceiling converges to index zero");
+
+    FMVoice lowVoice;
+    FMVoice::Input low = plain;
+    low.ratio = 2.0;
+    low.indexRadians = 8.0;
+    for (int n = 0; n < 256; ++n) {
+        const double expected = std::sin(
+            FMVoice::kTwoPi * n * 440.0 / 48000.0
+            + 8.0 * std::sin(FMVoice::kTwoPi * n * 880.0 / 48000.0));
+        const auto output = lowVoice.process(low);
+        okay &= check(std::abs(output.carrier - expected) < 2.0e-5,
+                      "low-frequency FM must keep the full saved index");
+    }
+
+    FMVoice huge;
+    FMVoice::Input maximum = plain;
+    maximum.frequencyHz = std::numeric_limits<double>::max();
+    maximum.ratio = 16.0;
+    maximum.indexRadians = 8.0;
+    for (int n = 0; n < 256; ++n) {
+        const auto output = huge.process(maximum);
+        okay &= check(FMVoice::finite(output.carrier) &&
+                      FMVoice::finite(output.modulator),
+                      "DBL_MAX carrier with ratio must remain finite");
+    }
+
     FMVoice lanes[16];
     for (int n = 0; n < 777; ++n)
         for (int c = 0; c < 16; ++c) {
