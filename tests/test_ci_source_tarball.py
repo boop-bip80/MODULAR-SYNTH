@@ -5,6 +5,7 @@ evidence of any completed hosted build or downloadable release.
 """
 
 from pathlib import Path
+import json
 import re
 import shutil
 import subprocess
@@ -18,6 +19,21 @@ WORKFLOW = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
 MAKEFILE = (ROOT / "Makefile").read_text(encoding="utf-8")
 VERSION = re.search(r"(?m)^VERSION = (\S+)$", MAKEFILE).group(1)
 ARCHIVES = (f"cardinal-{VERSION}.tar.xz", f"cardinal+deps-{VERSION}.tar.xz")
+MANIFEST = json.loads(
+    (ROOT / "plugins/ModularSynth/plugin.json").read_text(encoding="utf-8")
+)
+MODULE_SLUGS = tuple(module["slug"] for module in MANIFEST["modules"])
+REQUIRED_FILES = (
+    "LICENSE",
+    "README.md",
+    "Makefile",
+    "plugins/ModularSynth/plugin.json",
+    "plugins/ModularSynth/src/plugin.hpp",
+) + tuple(
+    f"plugins/ModularSynth/{directory}/{slug}.{extension}"
+    for slug in MODULE_SLUGS
+    for directory, extension in (("src", "cpp"), ("src", "hpp"), ("res", "svg"))
+)
 
 
 def source_job() -> str:
@@ -51,6 +67,23 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             self.assertIn(suffix, checker)
         self.assertIn('[[ ! -s "$archive" ]]', checker)
         self.assertIn('tar --lzma -tf "$archive"', checker)
+        self.assertIn('root="cardinal-${version}"', checker)
+        self.assertIn('required["plugins/ModularSynth/src/plugin.hpp"]', checker)
+        self.assertEqual(len(MODULE_SLUGS), 7)
+        slug_list = re.search(
+            r'module_count = split\("([^"]+)", slugs, " "\)',
+            checker,
+        )
+        self.assertIsNotNone(slug_list)
+        self.assertEqual(set(slug_list.group(1).split()), set(MODULE_SLUGS))
+        self.assertEqual(len(slug_list.group(1).split()), len(MODULE_SLUGS))
+        for directory, extension in (("src", "cpp"), ("src", "hpp"), ("res", "svg")):
+            with self.subTest(extension=extension):
+                self.assertIn(
+                    f'required["plugins/ModularSynth/{directory}/" slugs[i] ".{extension}"]',
+                    checker,
+                )
+        self.assertIn("Archive member escapes versioned root", checker)
 
     def test_tagged_upload_and_release_fail_on_unmatched_files(self) -> None:
         job = source_job()
@@ -78,7 +111,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "checkout"
             project.mkdir()
-            (project / "payload.txt").write_text("A sample source entry", encoding="utf-8")
+            self._stage_source_members(project)
             self._create_archives(project)
             result = self._run(project, VERSION)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -91,7 +124,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "checkout"
             project.mkdir()
-            (project / "payload.txt").write_text("A sample source entry", encoding="utf-8")
+            self._stage_source_members(project)
             self._create_archives(project)
             with_deps = project.parent / ARCHIVES[1]
             with_deps.unlink()
@@ -102,6 +135,43 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
 
             with_deps.write_bytes(b"not a compressed tar archive")
             self.assertNotEqual(self._run(project, VERSION).returncode, 0)
+
+    @unittest.skipUnless(
+        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
+        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+    )
+    def test_validator_rejects_missing_first_party_source(self) -> None:
+        missing_cases = (
+            "plugins/ModularSynth/src/FMVoice.cpp",
+            "plugins/ModularSynth/src/StateFilter.hpp",
+            "plugins/ModularSynth/res/FMVoice.svg",
+        )
+        for missing in missing_cases:
+            with self.subTest(missing=missing):
+                with tempfile.TemporaryDirectory() as temp:
+                    project = Path(temp) / "checkout"
+                    project.mkdir()
+                    self._stage_source_members(project)
+                    (project / missing).unlink()
+                    self._create_archives(project)
+                    result = self._run(project, VERSION)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("missing required member", result.stderr)
+                    self.assertIn(missing, result.stderr)
+
+    @unittest.skipUnless(
+        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
+        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+    )
+    def test_validator_rejects_wrong_archive_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "checkout"
+            project.mkdir()
+            self._stage_source_members(project)
+            self._create_archives(project, archive_root="cardinal-old")
+            result = self._run(project, VERSION)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("escapes versioned root", result.stderr)
 
     def test_validator_rejects_path_like_versions(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -120,12 +190,21 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _create_archives(project: Path) -> None:
+    def _stage_source_members(project: Path) -> None:
+        for name in REQUIRED_FILES:
+            destination = project / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(f"source placeholder: {name}", encoding="utf-8")
+
+    @staticmethod
+    def _create_archives(project: Path, archive_root: str | None = None) -> None:
+        prefix = archive_root or f"cardinal-{VERSION}"
         for archive in ARCHIVES:
             subprocess.run(
                 [
-                    "tar", "--lzma", "-cf", str(project.parent / archive),
-                    "-C", str(project), "payload.txt",
+                    "tar", "--lzma", f"--transform=s,^\\.,{prefix},",
+                    "-cf", str(project.parent / archive),
+                    "-C", str(project), ".",
                 ],
                 check=True,
                 capture_output=True,
