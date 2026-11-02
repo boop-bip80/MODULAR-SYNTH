@@ -31,7 +31,8 @@ automation edges but is **not a guarantee of click-free sound**, especially
 for discontinuous audio sources or host-level gain changes.
 
 For normalized audio `x = clamp(IN, −10, +10) / 5`, with effective drive `d`,
-bias `b`, and wet `m`, the instantaneous transfer is:
+bias `b`, and wet `m`, the **steady-input** transfer (when the current and
+previous samples are identical) is:
 
 ```text
 gain       = 1 + 8*d*d
@@ -40,8 +41,23 @@ shaped     = x + d * (folded - x)
 out        = clamp(IN + m * (5*shaped - IN), -10, +10)
 ```
 
-The input in this expression is already clamped to ±10 V. `d`, `b` and
-`m` are the smoothed settings, not instantaneous CV values. At DRIVE=0 the
+For changing audio, FoldDrive now applies **first-order antiderivative
+antialiasing (ADAA)** to the sine-folding term. With `p` the previous
+normalized input, `a = (π/2) × gain` and `θ = (π/2) × b`, the fold term is:
+
+```text
+midpoint    = (x + p) / 2
+halfDelta   = a * (x - p) / 2
+folded      = sin(a * midpoint + theta) * sinc(halfDelta) - sin(theta)
+sinc(z)     = sin(z)/z, with sinc(0) = 1
+```
+
+The implementation uses a small-argument polynomial for `sinc` to avoid
+division by tiny values. First process/reset samples use `p = x`, so they
+retain the original stationary transfer. Every sample updates `p` even while
+dry, keeping history current for later wet automation. The input is clamped
+to ±10 V. `d`, `b` and `m` are the smoothed settings, not instantaneous CV
+values. At DRIVE=0 the
 transfer is dry, and at MIX=0 the output is dry regardless of drive/bias.
 At BIAS=0 positive/negative folding is odd-symmetric. A nonzero BIAS can
 make odd and even partials without emitting DC merely because the input is
@@ -83,18 +99,34 @@ elsewhere but are not independently certified by the generic inspector.
   consumes the request at the next process tick, avoiding UI/audio races.
 - **Real-time characteristics:** The DSP path allocates no heap memory,
   takes no locks, reads no files, and does not instantiate external code.
-  Two `sin` evaluations per voice/frame are required when folding.
-- **Aliasing:** This is sine transfer shaping, **not a bandlimited,
-  oversampled, or antialiased wavefolder**. Higher DRIVE, brighter inputs,
-  and high-pitched notes produce stronger above-Nyquist partials that can
-  fold into the audible band. Filter after FoldDrive or use less drive
-  for cleaner upper registers. No alias-power reduction is claimed.
+  ADAA adds an independent previous-input state per lane and computes a
+  midpoint/sinc integral each wet driven sample (up to three `sin` calls
+  instead of the previous two); fully dry/bypassed lanes skip those calls.
+  **Host CPU has not been benchmarked**, and 16-channel performance remains
+  an explicit acceptance gate.
+- **Aliasing:** First-order ADAA reduces *some* folding aliases without
+  oversampling, but **does not bandlimit the output**. It trades a small
+  frequency- and signal-dependent phase/timbre change in the folded signal
+  for less foldback. In a deterministic 3 V sine benchmark, DRIVE=50%, MIX=100%,
+  BIAS=0, odd-harmonic alias bins 3/5/7/9 are evaluated using coherent
+  4096-frame DFT measurements. At **8.1 kHz/44.1 kHz** and **8.8 kHz/48 kHz**
+  the selected summed alias-bin power decreases **8.18 dB**, with an
+  **8.54 dB** improvement relative to the fundamental; at **10.4 kHz/48 kHz**
+  the decreases are **13.86 dB absolute** and **14.19 dB relative**.
+  The measured inputs have every selected odd harmonic above Nyquist, so
+  those bins are actual aliases. These are *synthetic source-DSP* measures,
+  not an audible/host quality score. Bright sources and extreme
+  high-register drive can still alias; filter after FoldDrive or lower
+  drive for a cleaner sound. Reproduce with
+  `python3 tests/run_dsp_tests.py` or compile
+  `tests/folddrive_alias_dsp_test.cpp` directly.
 - **Headroom:** Hard ±10 V bounds are per lane, not a bound on an 8/16-note
   summed host output. VCA and host gain remain important; saved settings
   are not a measured unclipped master level.
-- **Validation:** A standalone C++ DSP regression exercises transparency,
-  asymmetry, fold polarity, CV smoothing, reset, hostile inputs and 280k
-  bounded samples. A separate HEADLESS wrapper exercises concurrent
+- **Validation:** Standalone C++ DSP regressions exercise transparency,
+  asymmetry, fold polarity, CV smoothing, reset, hostile inputs, 280k
+  bounded samples, constant-input equivalence and multi-pitch alias reduction
+  relative to the original instantaneous transfer. A separate HEADLESS wrapper exercises concurrent
   reset requests, 1/8/16 channels and **8,192 allocation-free process ticks**.
   Source/headless checks do not certify DAW load, audio,
   plugin CPU, or live automation. Before production, compile a real host,
