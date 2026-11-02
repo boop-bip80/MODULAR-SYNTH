@@ -14,6 +14,9 @@ WIDTH = 960
 HEADER_HEIGHT = 128
 SECTION_HEIGHT = 444
 FOOTER_HEIGHT = 68
+ROUTE_HEADER_HEIGHT = 96
+ROUTE_SECTION_HEIGHT = 480
+ROUTE_ROW_STEP = 49
 CARD_WIDTH = 210
 CARD_HEIGHT = 124
 CARD_STEP = 222
@@ -151,10 +154,180 @@ def _text(x: int, y: int, value: str, *, fill: str, size: int = 14,
     )
 
 
-def render_svg(manifest: dict) -> bytes:
+def _route_text(value: object, field: str, maximum: int = 256) -> str:
+    """Accept only bounded XML-safe source labels, never untrusted markup."""
+    if not isinstance(value, str) or not 1 <= len(value) <= maximum:
+        raise PreviewError(f"invalid route {field}")
+    for character in value:
+        code = ord(character)
+        if (code < 32 or 0xD800 <= code <= 0xDFFF
+                or code in (0xFFFE, 0xFFFF)):
+            raise PreviewError(f"invalid XML character in route {field}")
+    return value
+
+
+def _group_routes(route_map: dict, controllers: list[dict]) -> dict[tuple[int, int], list[dict]]:
+    """Validate an *already source-verified* v2 route report for SVG display."""
+    if (not isinstance(route_map, dict)
+            or type(route_map.get("bundleFormatVersion")) is not int
+            or route_map["bundleFormatVersion"] != 2
+            or not isinstance(route_map.get("routes"), list)):
+        raise PreviewError("route-aware preview requires verified v2 route metadata")
+    by_id = {c["moduleId"]: c for c in controllers}
+    grouped: dict[tuple[int, int], list[dict]] = {}
+    for route in route_map["routes"]:
+        if not isinstance(route, dict):
+            raise PreviewError("invalid route report entry")
+        macro = route.get("macro")
+        destination = route.get("destination")
+        if not isinstance(macro, dict) or not isinstance(destination, dict):
+            raise PreviewError("invalid route source or destination")
+        module_id, number = macro.get("moduleId"), macro.get("number")
+        if (type(module_id) is not int or module_id not in by_id
+                or type(number) is not int or not 1 <= number <= 8):
+            raise PreviewError("route references missing Macro8 controller/number")
+        controller = by_id[module_id]
+        if (macro.get("name") != controller["names"][number - 1]
+                or macro.get("range") != controller["ranges"][number - 1]):
+            raise PreviewError("route source differs from saved Macro8 controls")
+        kind, status = destination.get("kind"), route.get("status")
+        if (kind not in ("cv", "audio", "unverified")
+                or status != ("UNVERIFIED" if kind == "unverified"
+                              else "SOURCE_VERIFIED")):
+            raise PreviewError("route verification status disagrees with port kind")
+        if (type(destination.get("inputId")) is not int
+                or not 0 <= destination["inputId"] <= 4096
+                or type(destination.get("moduleId")) is not int):
+            raise PreviewError("invalid route destination port")
+        _route_text(destination.get("plugin"), "plugin", 128)
+        _route_text(destination.get("model"), "model", 128)
+        label = destination.get("label")
+        if kind == "unverified":
+            if label is not None or destination.get("relatedKnob") is not None:
+                raise PreviewError("unverified route cannot claim port metadata")
+        else:
+            _route_text(label, "input label")
+        cable_id = route.get("cableId")
+        if type(cable_id) is not int or cable_id < 0:
+            raise PreviewError("invalid route cable ID")
+        grouped.setdefault((module_id, number), []).append(route)
+    for rows in grouped.values():
+        rows.sort(key=lambda row: (
+            row["destination"]["plugin"], row["destination"]["model"],
+            row["destination"]["moduleId"], row["destination"]["inputId"],
+            row["cableId"],
+        ))
+    return grouped
+
+
+def _clip_route(value: str, limit: int = 53) -> str:
+    return value if len(value) <= limit else value[:limit - 1] + "…"
+
+
+def _route_destination(route: dict) -> str:
+    target = route["destination"]
+    summary = (
+        f"{target['plugin']}/{target['model']} input {target['inputId']}"
+    )
+    return (summary + " · " + target["label"]
+            if route["status"] == "SOURCE_VERIFIED"
+            else summary + " · UNVERIFIED INPUT")
+
+
+def _append_route_panel(parts: list[str], grouped: dict, controllers: list[dict],
+                        starting_y: int) -> None:
+    """Draw an additive, non-interactive routing matrix below the old panel."""
+    c = COLORS
+    parts.append(
+        f'<g class="saved-route-map" role="group" '
+        f'aria-labelledby="route-map-title route-map-desc">\n'
+        f'<title id="route-map-title">Saved direct Macro8 route map</title>\n'
+        f'<desc id="route-map-desc">Source-only wiring summary. At most one '
+        f'destination is displayed per row; route counts include all saved '
+        f'cables. Unverified inputs are not certified. No live CV, automation, '
+        f'or audio behavior has been tested.</desc>\n'
+    )
+    parts.append(_text(
+        36, starting_y + 34, "SAVED DIRECT MACRO8 ROUTES  /  SOURCE-ONLY MAP",
+        fill=c["accent"], size=18, weight="700"))
+    parts.append(_text(
+        36, starting_y + 64,
+        "One destination shown per control; counts include every saved cable.",
+        fill=c["muted"], size=13))
+    for section_index, controller in enumerate(controllers):
+        base = (starting_y + ROUTE_HEADER_HEIGHT
+                + section_index * ROUTE_SECTION_HEIGHT)
+        module_id = controller["moduleId"]
+        parts.append(
+            f'<g class="saved-route-controller" data-module-id="{module_id}" '
+            f'role="group">\n'
+            f'<title>Routing for Macro controller {section_index + 1}, '
+            f'Rack module ID {module_id}</title>\n'
+            f'<rect x="20" y="{base + 3}" width="920" height="466" '
+            f'rx="16" fill="{c["surface"]}"/>\n'
+        )
+        parts.append(_text(
+            42, base + 36,
+            f"ROUTES / MACRO CONTROLLER {section_index + 1}",
+            fill=c["text"], size=16, weight="700"))
+        for index, name in enumerate(controller["names"]):
+            routes = grouped.get((module_id, index + 1), [])
+            unverified = sum(
+                route["status"] == "UNVERIFIED" for route in routes)
+            y = base + 53 + index * ROUTE_ROW_STEP
+            source = f"{index + 1}. {name}"
+            if routes:
+                chosen = _route_destination(routes[0])
+                extra = (f" (+{len(routes) - 1} more)"
+                         if len(routes) > 1 else "")
+                destination = _clip_route(chosen, 46) + extra
+                counts = f"{len(routes)} saved / {unverified} unverified"
+                status_color = c["active"] if unverified else c["accent"]
+            else:
+                destination = "UNPATCHED"
+                counts = "0 saved routes"
+                status_color = c["muted"]
+            details = "; ".join(
+                _route_destination(route) for route in routes[:3])
+            if len(routes) > 3:
+                details += f"; plus {len(routes) - 3} more saved routes"
+            title = (
+                f"Control {index + 1} {name}: {len(routes)} direct saved "
+                f"routes. {details or 'No saved direct output cables.'}"
+            )
+            parts.append(
+                f'<g class="saved-route-row" data-control-number="{index + 1}" '
+                f'data-route-count="{len(routes)}" '
+                f'data-unverified-count="{unverified}">\n'
+                f'<title>{escape(title)}</title>\n'
+                f'<rect x="36" y="{y}" width="888" height="44" rx="8" '
+                f'fill="{c["card"]}"/>\n'
+                f'<path d="M 238 {y + 22} L 274 {y + 22}" fill="none" '
+                f'stroke="{status_color}" stroke-width="2"/>\n'
+            )
+            parts.append(_text(
+                48, y + 29, source, fill=c["text"], size=14,
+                css_class="routing-control"))
+            parts.append(_text(
+                286, y + 29, destination, fill=c["muted"], size=12,
+                css_class="routing-destination"))
+            parts.append(_text(
+                737, y + 29, counts, fill=status_color, size=12,
+                css_class="routing-status"))
+            parts.append("</g>\n")
+        parts.append("</g>\n")
+    parts.append("</g>\n")
+
+
+def render_svg(manifest: dict, *, route_map: dict | None = None) -> bytes:
     """Return fully self-contained UTF-8 SVG bytes from checked manifest data."""
     name, controllers = _preview_modules(manifest)
-    height = HEADER_HEIGHT + SECTION_HEIGHT * len(controllers) + FOOTER_HEIGHT
+    grouped = (_group_routes(route_map, controllers)
+               if route_map is not None else None)
+    route_height = (ROUTE_HEADER_HEIGHT + ROUTE_SECTION_HEIGHT * len(controllers)
+                    if grouped is not None else 0)
+    height = (HEADER_HEIGHT + SECTION_HEIGHT * len(controllers)
+              + route_height + FOOTER_HEIGHT)
     c = COLORS
     parts = [
         '<?xml version="1.0" encoding="UTF-8"?>\n',
@@ -271,6 +444,9 @@ def render_svg(manifest: dict) -> bytes:
         parts.append("</g>\n")
 
     footer = HEADER_HEIGHT + SECTION_HEIGHT * len(controllers)
+    if grouped is not None:
+        _append_route_panel(parts, grouped, controllers, footer)
+        footer += route_height
     parts.append(_text(
         36, footer + 37,
         "SOURCE PREVIEW ONLY  /  NOT AN AUDIO OR HOST UI RENDERER",

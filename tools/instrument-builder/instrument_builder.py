@@ -510,20 +510,26 @@ def inspect(bundle_path: Path) -> dict:
     return read_bundle(blob)[0]
 
 
-def preview(bundle_path: Path, svg_path: Path) -> dict:
-    """Create a static, self-contained SVG from a verified source bundle."""
+def preview(bundle_path: Path, svg_path: Path, *,
+            show_routes: bool = False) -> dict:
+    """Create a static SVG; optionally display verified saved v2 cable metadata."""
     if svg_path.suffix.lower() != ".svg":
         raise InstrumentError("preview output must end with .svg")
     manifest = inspect(bundle_path)  # Validate ZIP and source-derived state first.
-    # The concept renderer deliberately remains v1 and displays only real
-    # Macro8 controls/snapshots. A verified v2 manifest has the same fields;
-    # project only its display subset, never its cable mapping metadata.
+    if show_routes and manifest["formatVersion"] != MAPPING_FORMAT_VERSION:
+        raise InstrumentError(
+            "route-aware SVG preview requires v2 source mapping metadata; "
+            "repack the trusted .vcv with --format-version 2")
+    # Keep the original panel pixels and v1 display schema unchanged. The
+    # optional route appendix is derived only after full bundle validation;
+    # archived v2 port contracts retain their historical interpretation.
     view = (manifest if manifest["formatVersion"] == FORMAT_VERSION else {
         **manifest, "formatVersion": FORMAT_VERSION,
         "performance": {"macro8": manifest["performance"]["macro8"]},
     })
     try:
-        image = render_svg(view)
+        image = render_svg(
+            view, route_map=build_route_report(manifest) if show_routes else None)
     except PreviewError as exc:
         raise InstrumentError(f"cannot preview instrument: {exc}") from exc
     with _safe_directory_fd(svg_path.parent) as fd:
@@ -597,6 +603,9 @@ def main(argv: list[str] | None = None) -> int:
     panel = subs.add_parser("preview", help="create an offline SVG concept panel")
     panel.add_argument("bundle", type=Path)
     panel.add_argument("--out", required=True, type=Path)
+    panel.add_argument(
+        "--show-routes", action="store_true",
+        help="append source-only direct Macro8 routing map (requires v2)")
     compatibility = subs.add_parser(
         "check", help="preflight source model references against ModularSynth")
     compatibility.add_argument("bundle", type=Path)
@@ -621,8 +630,11 @@ def main(argv: list[str] | None = None) -> int:
             unpack(args.bundle, args.out)
             print(f"Unpacked to {args.out} (manifest.json, patch/main.vcv)")
         elif args.command == "preview":
-            preview(args.bundle, args.out)
-            print(f"Generated static SVG preview {args.out}")
+            preview(args.bundle, args.out, show_routes=args.show_routes)
+            if args.show_routes:
+                print(f"Generated static route-aware SVG preview {args.out}")
+            else:
+                print(f"Generated static SVG preview {args.out}")
         elif args.command == "routes":
             report = build_route_report(inspect(args.bundle))
             if args.json:
