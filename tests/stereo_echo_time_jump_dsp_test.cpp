@@ -72,11 +72,41 @@ void testAbruptTimeJumps(int rate, double jumpedDelayMs, double maxStepVolts) {
            "left and right delays must share a coherent crossfade envelope");
 }
 
+void testDeferredJumpAndReset() {
+    constexpr int rate = 48000;
+    constexpr int fadeFrames = rate / 40;
+    StereoEchoDSP echo;
+    echo.process(0.0, 0.0, rate, 7.0, 0.5, 1.0, 0.0);
+    // Start a 7 -> 200 ms fade, then revise the target to 300 ms while
+    // the first fade is still active. The second target must be honored.
+    echo.process(0.0, 0.0, rate, 200.0, 0.5, 1.0, 0.0);
+    for (int i = 0; i < 2 * fadeFrames + 4; ++i) {
+        const auto out = echo.process(
+            0.0, 0.0, rate, 300.0, 0.5, 1.0, 0.0);
+        expect(out.left == 0.0f && out.right == 0.0f,
+               "deferred time changes may not create phantom audio");
+    }
+    expect(std::abs(echo.currentDelaySamples() - 14400.0) < 0.0001,
+           "a changed target during a crossfade must be applied after the fade");
+
+    // A reset must discard both read heads, any in-progress transition,
+    // and the old ring history without clearing megabytes.
+    echo.process(1.0, 0.0, rate, 500.0, 0.5, 1.0, 0.0);
+    echo.reset();
+    const auto postReset = echo.process(
+        0.0, 0.0, rate, 25.0, 0.5, 1.0, 0.0);
+    expect(postReset.left == 0.0f && postReset.right == 0.0f,
+           "reset during a time crossfade must invalidate both read heads");
+    expect(std::abs(echo.currentDelaySamples() - 1200.0) < 0.0001,
+           "reset must initialize the next time target without a stale fade");
+}
+
 } // namespace
 
 int main() {
     testAbruptTimeJumps(48000, 200.0, 0.42);
     testAbruptTimeJumps(384000, 450.0, 0.09);
+    testDeferredJumpAndReset();
     if (failures) {
         std::fprintf(stderr, "StereoEcho time jump: %d failure(s)\n", failures);
         return 1;
