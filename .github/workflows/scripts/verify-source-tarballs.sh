@@ -15,16 +15,25 @@ for archive in "../cardinal-${version}.tar.xz" "../cardinal+deps-${version}.tar.
         exit 1
     fi
 
-    # A readable tar stream alone can be stale, mis-rooted or missing this
-    # fork's own module. Reject these cases before upload. The parent-root
-    # prefix follows Makefile's existing tar --transform rules.
+    # A readable tar stream can still be stale, mis-rooted or missing modules.
+    # Reject incomplete first-party source and panels before upload.
+    # The versioned root follows Makefile's existing tar --transform rules.
     if ! tar --lzma -tf "$archive" | awk -v root="cardinal-${version}" '
         BEGIN {
             required["LICENSE"] = 1
             required["README.md"] = 1
             required["Makefile"] = 1
             required["plugins/ModularSynth/plugin.json"] = 1
-            required["plugins/ModularSynth/src/MorphVCO.cpp"] = 1
+            required["plugins/ModularSynth/src/plugin.hpp"] = 1
+            # Keep the seven first-party C++ wrappers, DSP headers and panels
+            # together; the source-level Python test compares this list with
+            # the registered slugs in plugin.json to catch future drift.
+            module_count = split("ClockedLFO FoldDrive FMVoice Macro8 MorphVCO StateFilter StereoEcho", slugs, " ")
+            for (i = 1; i <= module_count; ++i) {
+                required["plugins/ModularSynth/src/" slugs[i] ".cpp"] = 1
+                required["plugins/ModularSynth/src/" slugs[i] ".hpp"] = 1
+                required["plugins/ModularSynth/res/" slugs[i] ".svg"] = 1
+            }
         }
         {
             entry = $0
