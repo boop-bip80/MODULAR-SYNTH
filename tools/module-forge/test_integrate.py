@@ -175,6 +175,34 @@ class IntegrationTests(unittest.TestCase):
                 integration_plan(module, root)
             self.assertEqual(registered_files(root), before)
 
+    def test_matched_registry_pairs_with_wrong_models_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary), LOADER_BRACED)
+            header = root / "plugins/ModularSynth/src/plugin.hpp"
+            loader = root / "plugins/plugins.cpp"
+            header.write_text(header.read_text().replace(
+                "modelMorphVCO", "modelUnrelated"))
+            loader.write_text(loader.read_text().replace(
+                "modelMorphVCO", "modelUnrelated"))
+            before = registered_files(root)
+            with self.assertRaisesRegex(
+                    IntegrationError, "source/model identity drift"):
+                integration_plan(module, root)
+            self.assertEqual(registered_files(root), before)
+
+    def test_generated_name_registration_is_accepted_on_later_integration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary), LOADER_BRACED)
+            apply_plan(integration_plan(module, root), root)
+            follow_up = generate("SecondOsc", "Second Osc",
+                                 root / "generated")
+            plan = integration_plan(follow_up, root)
+            self.assertEqual(len(plan), 6)
+            header = next(edit.after.decode() for edit in plan
+                          if edit.path.name == "plugin.hpp")
+            self.assertIn("modelMSSecondOsc", header)
+            self.assertIn("modelMSOrbitSine", header)
+
     def test_duplicate_existing_loader_registration_blocks_integration(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, module = fixture_root(Path(temporary), LOADER_BRACED)
