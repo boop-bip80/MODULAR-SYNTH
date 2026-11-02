@@ -13,10 +13,12 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <system_error>
 
 namespace {
 
@@ -194,9 +196,17 @@ int main(int argc, char** argv) {
         usage(std::cerr);
         return 2;
     }
-    // Never overwrite an existing recording/demo without user consent.
-    std::ifstream existing(output, std::ios::binary);
-    if (existing.good()) {
+    // Check *file entries* rather than opening an ifstream: a dangling
+    // symlink also counts as an existing output and must not be followed.
+    // This preflight is not an atomic O_EXCL guarantee against a concurrent
+    // writer replacing the path between this check and the later open.
+    std::error_code statusError;
+    const auto status = std::filesystem::symlink_status(output, statusError);
+    if (statusError && statusError != std::errc::no_such_file_or_directory) {
+        std::cerr << "Cannot inspect output: " << statusError.message() << '\n';
+        return 2;
+    }
+    if (status.type() != std::filesystem::file_type::not_found) {
         std::cerr << "Output already exists (will not overwrite): " << output << '\n';
         return 2;
     }
