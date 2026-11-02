@@ -277,8 +277,8 @@ void smokeFM(const rack::ProcessArgs& args) {
     const std::size_t before = heapAllocations.load(std::memory_order_relaxed);
     for (int n = 0; n < 1024; ++n)
         module.process(args);
-    require(before == heapAllocations.load(std::memory_order_relaxed),
-            "FM audio callback must not allocate");
+    const std::size_t after = heapAllocations.load(std::memory_order_relaxed);
+    require(before == after, "FM audio callback must not allocate");
     outputsFinite(module, ModularSynthFMVoice::NUM_OUTPUTS, 8, "FMVoice");
     module.inputs[ModularSynthFMVoice::PITCH_INPUT].setChannels(1);
     module.process(args);
