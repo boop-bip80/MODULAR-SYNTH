@@ -786,6 +786,8 @@ jobs:
           make CIBUILD=false NOOPT=true SKIP_STRIPPING=true -j 1 -C src jack
           make CIBUILD=false NOOPT=true -j 1
           ./dpf/utils/generate-ttl.sh
+      - name: Verify linked first-party collection
+        run: python3 -B tools/ci/verify_compiled_collection.py --binary bin/Cardinal
       - name: Run Cardinal self-tests
         run: |
           # --exit-on-first-error=yes
