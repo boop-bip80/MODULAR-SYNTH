@@ -16,7 +16,7 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -I . \
   --output /tmp/modular-synth-morph-filter-48000.wav
 ~~~
 
-The CLI supports --sample-rate 44100, 48000 (default), or 96000. It requires --output PATH.wav; --help shows usage. To protect existing recordings, it refuses to overwrite an existing output file. Give each render a fresh filename.
+The CLI supports --sample-rate 44100, 48000 (default), or 96000. It requires --output PATH.wav; --help shows usage. To protect existing recordings, it checks for an existing output file **or symlink (including a dangling symlink)** and refuses the write. This is a preflight check, **not an atomic guarantee** against a concurrent writer replacing the path between inspection and opening. Give each render a fresh filename in a private output directory.
 
 The result is standard **stereo PCM16 little-endian WAV**, exactly four seconds long:
 
@@ -47,7 +47,7 @@ The test uses only Python's standard library, a local C++17 compiler and the two
 
 1. **44.1, 48 and 96 kHz**: exact RIFF/PCM16 layout, 2 channels, four-second length, finite/active audio, evolving stereo, peak below 75% FS and healthy non-silent RMS.
 2. Repeat each rate with the same executable: **byte-identical SHA-256** of the whole WAV, FNV-1a of PCM bytes equal to the renderer's own report, and different checksums across rates.
-3. Strict fast-math 48 kHz render and basic CLI validation, including refusing to overwrite an existing file.
+3. Every quarter-second note remains audibly active in the PCM data, the sixteen-note phrase varies dynamically, and note boundaries have no large discontinuities.\n4. Existing files and dangling symlink outputs are rejected; the symlink test skips only where creating test symlinks is unsupported.\n5. Strict fast-math 48 kHz render and basic CLI validation, including refusing to overwrite an existing file.
 
 All generated files live inside Python's temporary directory and are discarded after the tests. They should **not be committed to the repository**; a CI workflow may attach an example WAV as an ephemeral artifact in the future.
 
