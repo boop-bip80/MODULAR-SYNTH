@@ -88,6 +88,7 @@ public:
         carrierPhase = 0.0;
         modulatorPhase = 0.0;
         previousModulator = 0.0;
+        previousCarrier = 0.0;
         smoothedRatio = 1.0;
         smoothedIndex = 0.0;
         smoothedFeedback = 0.0;
@@ -105,7 +106,7 @@ public:
         const double ratio = bounded(input.ratio, 1.0, 0.125, kMaxRatio);
         const double index = bounded(input.indexRadians, 0.0, 0.0,
                                      kMaxIndexRadians);
-        const double feedback = bounded(input.feedback, 0.0, 0.0,
+        const double feedback = bounded(input.feedback, 0.0, -kMaxFeedback,
                                         kMaxFeedback);
 
         // 2 ms smoothing, including ratio modulation. The first sample
@@ -146,11 +147,19 @@ public:
         }
         const double effectiveIndex = std::min(smoothedIndex, smoothedGuardCeiling);
 
+        // Positive values keep the original one-sample modulator loop.
+        // Negative values route the same bounded amount to the carrier
+        // loop instead. Both contributions approach zero at the sign
+        // boundary; this is a topology choice, not negative modulator FM.
+        const double modulatorFeedback = std::max(0.0, smoothedFeedback);
+        const double carrierFeedback = std::max(0.0, -smoothedFeedback);
         const double modulator = std::sin(kTwoPi * modulatorPhase
-                                          + smoothedFeedback * previousModulator);
+                                          + modulatorFeedback * previousModulator);
         previousModulator = modulator;
         const double carrier = std::sin(kTwoPi * carrierPhase
-                                        + effectiveIndex * modulator);
+                                        + effectiveIndex * modulator
+                                        + carrierFeedback * previousCarrier);
+        previousCarrier = carrier;
 
         carrierPhase += carrierStep;
         modulatorPhase += modulatorStep;
@@ -172,6 +181,7 @@ public:
 
 private:
     double previousModulator = 0.0;
+    double previousCarrier = 0.0;
     bool initialized = false;
     bool guardInitialized = false;
 };

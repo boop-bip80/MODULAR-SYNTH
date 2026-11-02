@@ -265,6 +265,165 @@ int main() {
                       "DBL_MAX carrier with ratio must remain finite");
     }
 
+
+    // The original nonnegative feedback equation is an archived patch
+    // contract. Compare its direct recurrence against every new sample,
+    // including self-feedback, using independent reference accumulators.
+    FMVoice legacyCompatible;
+    FMVoice::Input legacyInput = plain;
+    legacyInput.ratio = 2.0;
+    legacyInput.indexRadians = 3.0;
+    legacyInput.feedback = 0.7;
+    double referenceCarrierPhase = 0.0;
+    double referenceModulatorPhase = 0.0;
+    double referencePreviousModulator = 0.0;
+    double largestLegacyDelta = 0.0;
+    for (int n = 0; n < 4096; ++n) {
+        const double oldMod = std::sin(
+            FMVoice::kTwoPi * referenceModulatorPhase
+            + 0.7 * referencePreviousModulator);
+        referencePreviousModulator = oldMod;
+        const double oldCarrier = std::sin(
+            FMVoice::kTwoPi * referenceCarrierPhase + 3.0 * oldMod);
+        const auto now = legacyCompatible.process(legacyInput);
+        largestLegacyDelta = std::max<double>(largestLegacyDelta,
+            std::max(std::abs(now.carrier - static_cast<float>(oldCarrier)),
+                     std::abs(now.modulator - static_cast<float>(oldMod))));
+        referenceCarrierPhase += 440.0 / 48000.0;
+        referenceModulatorPhase += 880.0 / 48000.0;
+        if (referenceCarrierPhase >= 1.0)
+            referenceCarrierPhase -= 1.0;
+        if (referenceModulatorPhase >= 1.0)
+            referenceModulatorPhase -= 1.0;
+    }
+    okay &= check(largestLegacyDelta < 1.0e-5,
+                  "positive feedback reproduces original carrier/modulator recurrence");
+    std::printf("FM original positive-feedback maximum delta: %.9g\n",
+                largestLegacyDelta);
+
+    // Carrier feedback, unlike modulator feedback, enriches an otherwise
+    // pure carrier at INDEX=0. Measure coherent 1500 Hz harmonic at 750 Hz
+    // fundamental, at 48 kHz: 4096 samples = exactly 64 cycles.
+    FMVoice carrierLoop, modulatorLoop;
+    FMVoice::Input signedInput = plain;
+    signedInput.frequencyHz = 750.0;
+    signedInput.indexRadians = 0.0;
+    signedInput.feedback = -0.95;
+    FMVoice::Input oldPositive = signedInput;
+    oldPositive.feedback = 0.95;
+    for (int n = 0; n < 4800; ++n) {
+        carrierLoop.process(signedInput);
+        modulatorLoop.process(oldPositive);
+    }
+    double carrierRe = 0.0, carrierIm = 0.0;
+    double modRe = 0.0, modIm = 0.0;
+    double waveDifference = 0.0;
+    for (int n = 0; n < 4096; ++n) {
+        const auto negative = carrierLoop.process(signedInput);
+        const auto positive = modulatorLoop.process(oldPositive);
+        const double angle = FMVoice::kTwoPi * n * 1500.0 / 48000.0;
+        carrierRe += negative.carrier * std::cos(angle);
+        carrierIm -= negative.carrier * std::sin(angle);
+        modRe += positive.carrier * std::cos(angle);
+        modIm -= positive.carrier * std::sin(angle);
+        waveDifference += std::abs(negative.carrier - positive.carrier);
+        okay &= check(FMVoice::finite(negative.carrier)
+                      && FMVoice::finite(negative.modulator),
+                      "carrier topology outputs remain finite");
+    }
+    const double carrierSecond = 2.0 * std::hypot(carrierRe, carrierIm) / 4096.0;
+    const double modSecond = 2.0 * std::hypot(modRe, modIm) / 4096.0;
+    okay &= check(carrierSecond > 0.10 && modSecond < 1.0e-4
+                  && waveDifference > 200.0,
+                  "negative carrier loop adds a measurable harmonic at index zero");
+    std::printf("FM signed feedback 2nd harmonic: carrier=%.6f, "
+                "positive-modulator=%.6f; waveform L1=%.2f\n",
+                carrierSecond, modSecond, waveDifference);
+
+    // Crossing zero changes topology continuously: near-zero signed
+    // feedback perturbations must tend toward the unmodified waveform.
+    FMVoice signedLeft, signedZero, signedRight;
+    FMVoice::Input zeroCross = plain;
+    zeroCross.indexRadians = 2.0;
+    double maximumZeroDelta = 0.0;
+    for (int n = 0; n < 1024; ++n) {
+        zeroCross.feedback = -1.0e-7;
+        const auto left = signedLeft.process(zeroCross);
+        zeroCross.feedback = 0.0;
+        const auto center = signedZero.process(zeroCross);
+        zeroCross.feedback = 1.0e-7;
+        const auto right = signedRight.process(zeroCross);
+        maximumZeroDelta = std::max<double>(maximumZeroDelta,
+            std::max(std::abs(left.carrier - center.carrier),
+                     std::abs(right.carrier - center.carrier)));
+    }
+    okay &= check(maximumZeroDelta < 1.0e-5,
+                  "feedback topology approaches same waveform from both signs");
+
+    // A full negative-to-positive control jump is slewed by the existing
+    // 2 ms state; the ±0.95 topology routes never coexist at full gain.
+    FMVoice crossing;
+    FMVoice::Input changingSign = plain;
+    changingSign.feedback = -0.95;
+    for (int n = 0; n < 1024; ++n)
+        crossing.process(changingSign);
+    double previousFeedback = crossing.smoothedFeedback;
+    changingSign.feedback = 0.95;
+    bool reachedPositive = false;
+    for (int n = 0; n < 4096; ++n) {
+        const auto out = crossing.process(changingSign);
+        okay &= check(std::abs(crossing.smoothedFeedback - previousFeedback) <= 0.020,
+                      "feedback topology sign transition is slew-limited");
+        okay &= check(FMVoice::finite(out.carrier) && FMVoice::finite(out.modulator)
+                      && std::abs(out.carrier) <= 1.0f
+                      && std::abs(out.modulator) <= 1.0f,
+                      "feedback sign transition remains finite and bounded");
+        reachedPositive |= crossing.smoothedFeedback > 0.0;
+        previousFeedback = crossing.smoothedFeedback;
+    }
+    okay &= check(reachedPositive
+                  && std::abs(crossing.smoothedFeedback - 0.95) < 1.0e-10,
+                  "signed feedback slew crosses zero and converges");
+
+    // Verify 16 independent lanes with different signed controls, and
+    // exact replay after reset even when carrier feedback was active.
+    FMVoice signedLanes[16], comparisonLanes[16];
+    for (int n = 0; n < 1024; ++n) {
+        for (int c = 0; c < 16; ++c) {
+            FMVoice::Input input = plain;
+            input.frequencyHz = 110.0 + 35.0 * c;
+            input.ratio = 1.0 + c / 8.0;
+            input.indexRadians = 1.0 + (c % 5);
+            input.feedback = (c % 2 == 0 ? -0.95 : 0.95)
+                             * (c + 1) / 16.0;
+            const auto multi = signedLanes[c].process(input);
+            const auto single = comparisonLanes[c].process(input);
+            okay &= check(multi.carrier == single.carrier
+                          && multi.modulator == single.modulator,
+                          "signed 16-voice processing equals isolated voices");
+            okay &= check(FMVoice::finite(multi.carrier)
+                          && FMVoice::finite(multi.modulator),
+                          "signed 16-lane outputs stay finite");
+        }
+    }
+    for (int c = 0; c < 16; ++c) {
+        signedLanes[c].reset();
+        FMVoice pristine;
+        FMVoice::Input input = plain;
+        input.frequencyHz = 110.0 + 35.0 * c;
+        input.ratio = 1.0 + c / 8.0;
+        input.indexRadians = 1.0 + (c % 5);
+        input.feedback = (c % 2 == 0 ? -0.95 : 0.95)
+                         * (c + 1) / 16.0;
+        for (int n = 0; n < 256; ++n) {
+            const auto replayed = signedLanes[c].process(input);
+            const auto first = pristine.process(input);
+            okay &= check(replayed.carrier == first.carrier
+                          && replayed.modulator == first.modulator,
+                          "reset clears both feedback histories for all lanes");
+        }
+    }
+
     FMVoice lanes[16];
     for (int n = 0; n < 777; ++n)
         for (int c = 0; c < 16; ++c) {
@@ -283,6 +442,6 @@ int main() {
                   "reset reproduces a fresh voice and discards feedback history");
 
     if (okay)
-        std::puts("PASS: FM Voice standalone DSP pitch, modulation, controls, reset and finite safeguards");
+        std::puts("PASS: FM Voice standalone DSP pitch, signed topology, modulation, controls, reset and finite safeguards");
     return okay ? 0 : 1;
 }
