@@ -173,5 +173,92 @@ class AudioRoutesTests(unittest.TestCase):
         self.assertEqual(call().returncode, 2)
 
 
+    def test_direct_control_source_to_host_is_advisory_only(self) -> None:
+        self.patch["modules"][0]["model"] = "Macro8"
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertTrue(result["has_wired_host_input"])
+        self.assertEqual(result["control_source_hints"], [{
+            "host_module_id": 2, "input_port": 0,
+            "module_id": 1, "model": "ModularSynth/Macro8", "output_port": 0,
+        }])
+        self.assertFalse(result["unrouted_first_party_generators"])
+        self.assertTrue(any("control-oriented" in a for a in result["advisories"]))
+
+    def test_disconnected_morph_voice_is_reported_without_failing_patch(self) -> None:
+        # The host has a valid direct cable but from an unrelated Macro8 CV
+        # bank. A MorphVCO without any cable path must not be counted as routed.
+        self.patch["modules"][0]["model"] = "Macro8"
+        self.patch["modules"].append(module(6, "ModularSynth", "MorphVCO"))
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertTrue(result["has_wired_host_input"])
+        self.assertEqual(result["unrouted_first_party_generators"], [
+            {"module_id": 6, "model": "ModularSynth/MorphVCO"},
+        ])
+        self.assertIn("First-party voices without a host cable-graph route: 1",
+                      format_output_routes(result))
+
+    def test_cable_directionality_avoids_false_output_routes(self) -> None:
+        # Two upstream modules share a downstream CV target; only the second
+        # has a direct route to the host. Undirected connected-components
+        # analysis would incorrectly report the VCO as routed.
+        self.patch["modules"].append(module(3, "ThirdParty", "CVTarget"))
+        self.patch["modules"].append(module(4, "ThirdParty", "Source"))
+        self.patch["cables"] = [
+            wire(10, 1, 3, 0, 0),
+            wire(11, 4, 3, 0, 1),
+            wire(12, 4, 2, 0, 0),
+        ]
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["unrouted_first_party_generators"], [
+            {"module_id": 1, "model": "ModularSynth/MorphVCO"},
+        ])
+
+    def test_unknown_processing_hop_does_not_claim_audio_verified(self) -> None:
+        self.patch["modules"].append(module(3, "ThirdParty", "UnknownProcessor"))
+        self.patch["cables"] = [wire(10, 1, 3), wire(11, 3, 2)]
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["unrouted_first_party_generators"], [])
+        self.assertEqual(result["control_source_hints"], [])
+        self.assertTrue(any("unverified" in warning
+                            for warning in result["warnings"]))
+
+    def test_fmvoice_source_output_routing_matches_new_module(self) -> None:
+        self.patch["modules"][0]["model"] = "FMVoice"
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["unrouted_first_party_generators"], [])
+        self.patch["cables"] = []
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(result["unrouted_first_party_generators"], [
+            {"module_id": 1, "model": "ModularSynth/FMVoice"},
+        ])
+
+    def test_cli_generator_route_gate_is_opt_in(self) -> None:
+        script = ROOT / "tools" / "patches" / "patch_audio_routes.py"
+        self.patch["modules"][0]["model"] = "Macro8"
+        self.patch["modules"].append(module(7, "ModularSynth", "MorphVCO"))
+        self.path.write_text(json.dumps(self.patch), encoding="utf-8")
+
+        def call(*flags: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(script), str(self.path), *flags],
+                cwd=ROOT, capture_output=True, text=True, check=False,
+            )
+
+        self.assertEqual(call().returncode, 0)
+        self.assertEqual(call("--require-host-input").returncode, 0)
+        gated = call("--require-generator-route", "--json")
+        self.assertEqual(gated.returncode, 1, gated.stderr)
+        self.assertEqual(
+            json.loads(gated.stdout)[0]["unrouted_first_party_generators"],
+            [{"module_id": 7, "model": "ModularSynth/MorphVCO"}],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

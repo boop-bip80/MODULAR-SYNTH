@@ -213,3 +213,35 @@ signal-processing behavior is unknown to this static tool. HostAudio8,
 alternative Cardinal plugin variants, external connections, runtime audio,
 actual DAW speaker output, and save/reopen are outside its scope. A green
 audit does not replace listening, metering or host project roundtrip tests.
+
+
+### Disconnected voice and control-output advisories
+
+The same output-route audit now provides two additional **non-fatal**, source-backed
+signals:
+
+- `control_source_hints`: a Cardinal/HostAudio2 input is driven directly by a
+  checked-in control-oriented source (Macro8, ClockedLFO, HostMIDI or HostTime)
+  whose output bounds can still be derived from its C++ declarations. These
+  signals can be intentionally patched as audio; the advisory simply invites a
+  wiring check.
+- `unrouted_first_party_generators`: a checked-in MorphVCO or FMVoice has
+  **no directed chain of saved cables** to any wired HostAudio2 input. Unlike
+  undirected module grouping, this catches isolated voices even if an unrelated
+  voice is connected to the host. The tool ignores unverified generator
+  contracts and does not guess third-party source types.
+
+For patches intended to route every first-party voice to a host output, opt in
+to an additional command-line exit gate:
+
+```sh
+python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv --require-generator-route
+```
+
+`--require-generator-route` exits 1 when at least one source-verified
+MorphVCO/FMVoice has no directed cable path to a wired HostAudio2 input; it is
+independent of `--require-host-input`. These are **graph-reachability**
+criteria only: a route through a third-party VCA, through CV/gate inputs, or
+into a muted processor still qualifies, and there is **no claim of audio
+continuity, audibility, waveform validity or DAW behavior**. A disconnected
+voice can also be an intentional patching choice.
