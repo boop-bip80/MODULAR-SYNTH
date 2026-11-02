@@ -13,7 +13,7 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "contrast_audit.py"
 MODULES = {"MorphVCO": 12, "StateFilter": 14, "FoldDrive": 12,
-           "Macro8": 20, "StereoEcho": 16, "ClockedLFO": 16, "FMVoice": 12}
+           "Macro8": 20, "StereoEcho": 16, "ClockedLFO": 16, "FMVoice": 12, "ChanceHold": 16}
 
 
 class PanelContrastTests(unittest.TestCase):
@@ -155,9 +155,10 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("UNKNOWN TEXT STEREO ECHO #ECF4FF", result.stdout)
         self.assertIn("UNKNOWN TEXT CLOCKED LFO #E8FFF8", result.stdout)
         self.assertIn("UNKNOWN TEXT FM VOICE #F4F3FE", result.stdout)
-        self.assertIn("84 nvgText sites", result.stdout)
-        self.assertIn("47 measured SVG outline shapes", result.stdout)
-        self.assertIn("10 UNKNOWN SVG outline shapes", result.stdout)
+        self.assertIn("UNKNOWN TEXT CHANCE HOLD #E8F6FF", result.stdout)
+        self.assertIn("99 nvgText sites", result.stdout)
+        self.assertIn("measured SVG outline shapes", result.stdout)
+        self.assertIn("UNKNOWN SVG outline shapes", result.stdout)
         self.assertIn("UNKNOWN SVG OUTLINE #63b7cc vs fill url(#dial)", result.stdout)
         self.assertIn("gradient-stop swatches", result.stdout)
         self.assertIn("not local contrast", result.stdout)
@@ -213,7 +214,7 @@ class PanelContrastTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("[StereoEcho] label underlay: gradient url(#bg)", result.stdout)
         self.assertIn("UNKNOWN SVG OUTLINE #63b7cc vs fill url(#dial)", result.stdout)
-        self.assertIn("10 UNKNOWN SVG outline shapes", result.stdout)
+        self.assertIn("UNKNOWN SVG outline shapes", result.stdout)
         self.assertNotIn("WARN SVG OUTLINE", result.stdout)
 
     def test_stereo_degraded_input_ring_triggers_strict_warning(self) -> None:

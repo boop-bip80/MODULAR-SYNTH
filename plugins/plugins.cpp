@@ -1234,6 +1234,7 @@ static void initStatic__ModularSynth()
         p->addModel(modelStereoEcho);
         p->addModel(modelClockedLFO);
         p->addModel(modelFMVoice);
+        p->addModel(modelChanceHold);
     }
 }
 

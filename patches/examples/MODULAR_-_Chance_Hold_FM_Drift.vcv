@@ -1,0 +1,241 @@
+{
+  "version": "2.4.1",
+  "zoom": 0.85,
+  "modules": [
+    {
+      "id": 5726895899473528,
+      "plugin": "Fundamental",
+      "model": "ADSR",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.06
+        },
+        {
+          "id": 1,
+          "value": 0.28
+        },
+        {
+          "id": 2,
+          "value": 0.65
+        },
+        {
+          "id": 3,
+          "value": 0.22
+        },
+        {
+          "id": 4,
+          "value": 0
+        },
+        {
+          "id": 5,
+          "value": 0
+        },
+        {
+          "id": 6,
+          "value": 0
+        },
+        {
+          "id": 7,
+          "value": 0
+        },
+        {
+          "id": 8,
+          "value": 0
+        }
+      ],
+      "pos": [
+        40,
+        0
+      ]
+    },
+    {
+      "id": 4828178296911509,
+      "plugin": "Fundamental",
+      "model": "VCA-1",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.5
+        },
+        {
+          "id": 1,
+          "value": 1
+        }
+      ],
+      "pos": [
+        50,
+        0
+      ]
+    },
+    {
+      "id": 1,
+      "plugin": "Cardinal",
+      "model": "HostAudio2",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.35
+        }
+      ],
+      "data": {
+        "dcFilter": true
+      },
+      "pos": [
+        57,
+        0
+      ]
+    },
+    {
+      "id": 2,
+      "plugin": "Cardinal",
+      "model": "HostMIDI",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "pwRange": 0,
+        "smooth": false,
+        "channels": 1,
+        "polyMode": 0,
+        "lastPitch": 8192,
+        "lastMod": 0,
+        "inputChannel": 0,
+        "outputChannel": 0
+      },
+      "pos": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 930000000031,
+      "plugin": "ModularSynth",
+      "model": "FMVoice",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0
+        },
+        {
+          "id": 1,
+          "value": 0
+        },
+        {
+          "id": 2,
+          "value": 2
+        },
+        {
+          "id": 3,
+          "value": 2.5
+        },
+        {
+          "id": 4,
+          "value": 0.18
+        }
+      ],
+      "pos": [
+        27,
+        0
+      ]
+    },
+    {
+      "id": 930000000032,
+      "plugin": "Cardinal",
+      "model": "TextEditor",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "filepath": "",
+        "lang": "None",
+        "etext": "MODULAR-SYNTH / CHANCE HOLD FM DRIFT\n\nPlay MIDI notes to hear the FM Voice output.\nChance Hold free-runs at 1 Hz. Each clock has\n75% probability of a new random CV sample;\nrejected clocks preserve the previous timbre.\n\nSMOOTH output modulates FM Voice INDEX CV.\nGLIDE=0.4 s makes timbre changes fluid.\nQUANTIZE=ON rounds random steps to 1/12 V;\nRATE/CLOCK/RESET accept CV and triggers.\n\nTry CHANCE 100% for dense motion, or 20%\nfor sparse events. Watch FM aliasing at very\nhigh pitch/index. Keep monitor level low.\n\nData-validated source graph only, host untested.\n",
+        "width": 29
+      },
+      "pos": [
+        69,
+        0
+      ]
+    },
+    {
+      "id": 930000000041,
+      "plugin": "ModularSynth",
+      "model": "ChanceHold",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0
+        },
+        {
+          "id": 1,
+          "value": 0.75
+        },
+        {
+          "id": 2,
+          "value": 0.4
+        },
+        {
+          "id": 3,
+          "value": 1
+        }
+      ],
+      "pos": [
+        9,
+        0
+      ]
+    }
+  ],
+  "cables": [
+    {
+      "id": 930000000211,
+      "outputModuleId": 2,
+      "outputId": 0,
+      "inputModuleId": 930000000031,
+      "inputId": 0,
+      "color": "#ff5252"
+    },
+    {
+      "id": 930000000212,
+      "outputModuleId": 2,
+      "outputId": 1,
+      "inputModuleId": 5726895899473528,
+      "inputId": 4,
+      "color": "#ffd452"
+    },
+    {
+      "id": 930000000213,
+      "outputModuleId": 5726895899473528,
+      "outputId": 0,
+      "inputModuleId": 4828178296911509,
+      "inputId": 0,
+      "color": "#e8ff52"
+    },
+    {
+      "id": 930000000214,
+      "outputModuleId": 930000000031,
+      "outputId": 0,
+      "inputModuleId": 4828178296911509,
+      "inputId": 1,
+      "color": "#a8ff52"
+    },
+    {
+      "id": 930000000215,
+      "outputModuleId": 4828178296911509,
+      "outputId": 0,
+      "inputModuleId": 1,
+      "inputId": 0,
+      "color": "#52beff"
+    },
+    {
+      "id": 930000000241,
+      "outputModuleId": 930000000041,
+      "outputId": 1,
+      "inputModuleId": 930000000031,
+      "inputId": 2,
+      "color": "#b96fff"
+    }
+  ]
+}

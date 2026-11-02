@@ -17,3 +17,4 @@ extern Model* modelMacro8;
 extern Model* modelStereoEcho;
 extern Model* modelClockedLFO;
 extern Model* modelFMVoice;
+extern Model* modelChanceHold;

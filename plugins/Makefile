@@ -230,6 +230,7 @@ PLUGIN_FILES += ModularSynth/src/Macro8.cpp
 PLUGIN_FILES += ModularSynth/src/StereoEcho.cpp
 PLUGIN_FILES += ModularSynth/src/ClockedLFO.cpp
 PLUGIN_FILES += ModularSynth/src/FMVoice.cpp
+PLUGIN_FILES += ModularSynth/src/ChanceHold.cpp
 
 # --------------------------------------------------------------
 # Cardinal (built-in)

@@ -71,6 +71,16 @@
         "Oscillator",
         "Polyphonic"
       ]
+    },
+    {
+      "slug": "ChanceHold",
+      "name": "Chance Hold",
+      "description": "Original deterministic 16-lane probabilistic sample-and-hold CV generator with free/external clocks, per-lane seeds, glide, quantized steps and accepted-hit triggers.",
+      "tags": [
+        "Random",
+        "Sample and Hold",
+        "Polyphonic"
+      ]
     }
   ]
 }
