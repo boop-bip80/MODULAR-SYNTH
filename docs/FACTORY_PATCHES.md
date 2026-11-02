@@ -7,7 +7,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_Pulse_Bass.vcv` | Keyboard-controlled oscillator → resonant filter → envelope/VCA bass voice | Play low notes via host MIDI; adjust VCF cutoff/resonance and ADSR |
 | `MODULAR_-_Granular_Veil.vcv` | Detuned dual oscillators → slow envelope → Clouds stereo texture | Hold notes via host MIDI; experiment with Clouds' grain and texture controls |
 | `MODULAR_-_Clockwork_Pulses.vcv` | Host-clocked 16-step sequence → Plaits → Plateau reverb, with LFO timbral variation | Start the host/DAW transport; alter sequence steps and Plaits controls |
-| `MODULAR_-_Morph_VCO_Performance.vcv` | MIDI-controlled first-party Morph VCO with ADSR/VCA | Play notes; adjust wave morph and pulse width |
+| `MODULAR_-_Morph_VCO_Performance.vcv` | MIDI-controlled first-party Morph VCO with Fundamental ADSR and original Dual VCA stereo outputs | Play notes; adjust wave morph and Dual VCA curve |
 | `MODULAR_-_FM_Voice_Performance.vcv` | MIDI-controlled two-operator FM Voice with ADSR/VCA | Play notes; move ratio, index and feedback; avoid extreme high-frequency aliasing |
 | `MODULAR_-_Chance_Hold_FM_Drift.vcv` | Seeded probabilistic random CV glides the FM Voice modulation index during MIDI performance | Play MIDI with the 1 Hz, 75% Chance Hold source; adjust chance, glide and quantize to vary timbre |
 | `MODULAR_-_Morphing_State_Pad.vcv` | First-party Morph VCO → StateFilter, with three Macro8 CV routes | Recall A/B macro snapshots while holding a note |
@@ -55,7 +55,7 @@ The original three patches were initially parsed as JSON and checked for:
 - Pulse Bass: MIDI note-on produces audio and note-off releases smoothly; stereo channels are audible.
 - Granular Veil: sustained MIDI notes produce a textured stereo signal and stop after release and grain tails.
 - Clockwork Pulses: host play/stop behavior follows the DAW transport; its sequence sounds through both outputs.
-- Morph VCO Performance: keyboard pitch and note gate control the single Morph VCO through ADSR/VCA.
+- Morph VCO Performance: keyboard pitch and note gate control the Morph VCO through Fundamental ADSR and original Dual VCA A/B envelope channels, with separate saved stereo host cables.
 - FM Voice Performance: MIDI pitch drives the two-operator FMVoice while a bundled ADSR/VCA handles note-on/off amplitude. Check 1/8/16 voices, ratio/index/feedback changes, high-register aliasing and low-level output before signing off; **host listening is not yet done**.
 - Morphing State Pad: macro Shape/Resonance/Drive controls and A/B snapshots affect timbre without unexpected gain jumps.
 - Cinematic Drift Pad and Rhythmic Grit Bass: confirm bipolar cutoff CV, four macro routes and documented 4.0/0.20-second snapshot morph settings.

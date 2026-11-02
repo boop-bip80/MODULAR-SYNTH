@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Originals — musician's quick reference
 
-Eight first-party Rack models are **statically registered in source** and expected
+Nine first-party Rack models are **statically registered in source** and expected
 under **MODULAR-SYNTH Originals** in the module browser after a successful build.
 This page is a patching cheat sheet for the models actually
 declared in [the collection manifest](../plugins/ModularSynth/plugin.json)
@@ -20,6 +20,7 @@ measured audio or a verified DAW session.
 | **Clocked LFO** (`ClockedLFO`) | Sixteen-lane free/externally clocked modulation; 5 wave/trigger outputs | **5 in / 5 out** | Free rate 0.5 Hz; clock ratio 1:1; phase 0%; width 50% |
 | **FM Voice** (`FMVoice`) | 16-voice two-operator phase-modulation sine voice with feedback | **4 in / 2 out** | Octave 0; fine 0 cents; ratio 1:1; index 0 rad; feedback 0% |
 | **Chance Hold** (`ChanceHold`) | Seeded 16-lane random S&H with chance, glide and stepped trigger | **5 in / 3 out** | Free clock 1 Hz; chance 75%; glide 0.15 s; quantize off |
+| **Dual VCA** (`DualVCA`) | Two independent 16-lane CV-controlled gains with A/B and bounded SUM | **4 in / 3 out** | A/B levels 100%; linear curves 0%; unplugged CV is full gain |
 
 ### Morph VCO (`MorphVCO`)
 
@@ -158,6 +159,23 @@ measured audio or a verified DAW session.
   the example uses the internal free clock. The green LED indicates only
   a connected CLK input, not confirmed host transport.
 
+### Dual VCA (`DualVCA`)
+
+[Source/configuration](../plugins/ModularSynth/src/DualVCA.cpp) ·
+[DSP, gain curve and headroom contract](DUAL_VCA.md)
+
+- **A/B independently:** AUDIO IN plus envelope CV; **0 V CV mutes**
+  and **+10 V reaches the corresponding LEVEL ceiling**. With no CV
+  cable, gain is held fully open. Negative CV cannot invert audio.
+- **LEVEL A/B:** 0–100% ceiling (both 100% by default).
+  **CURVE A/B:** 0–100% crossfade between linear and cubic CV response
+  (both linear by default); 2 ms per-lane gain slew reduces abrupt jumps.
+- **Outputs:** A, B and **SUM = A+B**, each bounded to ±10 V; SUM has
+  no automatic headroom compensation and may clip at high levels.
+  Up to **16 lanes per side**; disappearing lanes retire smoothing state.
+- The source-backed Morph VCO Performance example now uses Dual VCA
+  A/B to feed both host audio inputs; host playback is not verified.
+
 ## Five suggested wiring recipes (host-unverified)
 
 1. **Keyboard subtractive voice:** `Host MIDI pitch → Morph VCO PITCH`;
@@ -201,7 +219,7 @@ ADSR retrigger and Echo wet mix; it needs host transport for beat lock. **Cinema
 
 All sixteen links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
-existing plugin collection and does not require one of these eight first-party
+existing plugin collection and does not require one of these nine first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
 
 | Patch | Models | Play/try this |

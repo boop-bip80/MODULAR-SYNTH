@@ -81,6 +81,16 @@
         "Sample and Hold",
         "Polyphonic"
       ]
+    },
+    {
+      "slug": "DualVCA",
+      "name": "Dual VCA",
+      "description": "Original independent dual 16-channel gain amplifiers with normalled 10 V envelope CV, linear-to-cubic response curves, 2 ms slew and bounded A, B and SUM outputs.",
+      "tags": [
+        "Amplifier",
+        "Polyphonic",
+        "Utility"
+      ]
     }
   ]
 }

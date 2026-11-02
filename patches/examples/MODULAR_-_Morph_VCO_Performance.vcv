@@ -52,9 +52,9 @@
     },
     {
       "id": 4828178296911509,
-      "plugin": "Fundamental",
-      "model": "VCA-1",
-      "version": "2.0",
+      "plugin": "ModularSynth",
+      "model": "DualVCA",
+      "version": "0.1.0",
       "params": [
         {
           "id": 0,
@@ -62,7 +62,15 @@
         },
         {
           "id": 1,
-          "value": 1
+          "value": 0
+        },
+        {
+          "id": 2,
+          "value": 0.5
+        },
+        {
+          "id": 3,
+          "value": 0
         }
       ],
       "pos": [
@@ -85,7 +93,7 @@
         "dcFilter": true
       },
       "pos": [
-        36,
+        42,
         0
       ]
     },
@@ -151,11 +159,11 @@
       "data": {
         "filepath": "",
         "lang": "None",
-        "etext": "MODULAR-SYNTH / FIRST ORIGINAL MODULE\nMORPH VCO PERFORMANCE PATCH\n\nLoad in Cardinal Synth or Main.\nPlay MIDI notes: Host MIDI pitch controls\nMorph VCO at 1V/oct, gate opens ADSR.\nADSR shapes the VCA; output to stereo host.\n\nMORPH: sine -> saw -> pulse.\nPULSE WIDTH: pulse duty. FM DEPTH: optional.\nHost gain and VCA are deliberately reduced.\nIf you hear sustained tones, stop playback\nand inspect MIDI gate connections.\n\nUses pinned bundled Fundamental ADSR/VCA.\n",
+        "etext": "MODULAR-SYNTH / ORIGINAL DUAL VCA\nMORPH VCO PERFORMANCE PATCH\n\nLoad in Cardinal Synth or Main.\nPlay MIDI notes: Host MIDI pitch controls\nMorph VCO at 1V/oct, gate opens ADSR.\nADSR envelopes both DualVCA A/B CV inputs.\nMorph audio feeds both A/B audio inputs.\nA and B outputs feed host stereo L/R.\n\nMORPH: sine -> saw -> pulse.\nPULSE WIDTH: pulse duty. FM DEPTH: optional.\nHost gain and DualVCA LEVEL A/B are reduced.\nIf you hear sustained tones, stop playback\nand inspect MIDI gate connections.\n\nHost/DAW audition remains unverified.\n",
         "width": 27
       },
       "pos": [
-        46,
+        53,
         0
       ]
     }
@@ -182,7 +190,7 @@
       "outputModuleId": 5726895899473528,
       "outputId": 0,
       "inputModuleId": 4828178296911509,
-      "inputId": 0,
+      "inputId": 1,
       "color": "#e8ff52"
     },
     {
@@ -190,7 +198,7 @@
       "outputModuleId": 930000000001,
       "outputId": 0,
       "inputModuleId": 4828178296911509,
-      "inputId": 1,
+      "inputId": 0,
       "color": "#a8ff52"
     },
     {
@@ -199,6 +207,30 @@
       "outputId": 0,
       "inputModuleId": 1,
       "inputId": 0,
+      "color": "#52beff"
+    },
+    {
+      "id": 930000000016,
+      "outputModuleId": 5726895899473528,
+      "outputId": 0,
+      "inputModuleId": 4828178296911509,
+      "inputId": 3,
+      "color": "#e8ff52"
+    },
+    {
+      "id": 930000000017,
+      "outputModuleId": 930000000001,
+      "outputId": 0,
+      "inputModuleId": 4828178296911509,
+      "inputId": 2,
+      "color": "#a8ff52"
+    },
+    {
+      "id": 930000000018,
+      "outputModuleId": 4828178296911509,
+      "outputId": 1,
+      "inputModuleId": 1,
+      "inputId": 1,
       "color": "#52beff"
     }
   ]

@@ -18,3 +18,4 @@ extern Model* modelStereoEcho;
 extern Model* modelClockedLFO;
 extern Model* modelFMVoice;
 extern Model* modelChanceHold;
+extern Model* modelDualVCA;
