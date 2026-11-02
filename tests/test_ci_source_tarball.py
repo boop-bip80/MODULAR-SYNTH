@@ -69,14 +69,11 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         self.assertIn('tar --lzma -tf "$archive"', checker)
         self.assertIn('root="cardinal-${version}"', checker)
         self.assertIn('required["plugins/ModularSynth/src/plugin.hpp"]', checker)
-        self.assertEqual(len(MODULE_SLUGS), 8)
-        slug_list = re.search(
-            r'module_count = split\("([^"]+)", slugs, " "\)',
-            checker,
-        )
-        self.assertIsNotNone(slug_list)
-        self.assertEqual(set(slug_list.group(1).split()), set(MODULE_SLUGS))
-        self.assertEqual(len(slug_list.group(1).split()), len(MODULE_SLUGS))
+        self.assertGreaterEqual(len(MODULE_SLUGS), 8)
+        self.assertIn('module_count = split(module_names, slugs, " ")', checker)
+        self.assertIn('-v module_names="$module_slugs"', checker)
+        self.assertIn('Path("plugins/ModularSynth/plugin.json")', checker)
+        self.assertIn('cmp -s "plugins/ModularSynth/plugin.json"', checker)
         for directory, extension in (("src", "cpp"), ("src", "hpp"), ("res", "svg")):
             with self.subTest(extension=extension):
                 self.assertIn(
@@ -163,6 +160,25 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
         "GNU tar/LZMA/Bash unavailable for archive smoke test",
     )
+    def test_validator_rejects_stale_archive_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "checkout"
+            project.mkdir()
+            self._stage_source_members(project)
+            self._create_archives(project)
+            # The archived manifest is now stale even though filenames match.
+            changed = (project / "plugins/ModularSynth/plugin.json")
+            manifest = json.loads(changed.read_text(encoding="utf-8"))
+            manifest["version"] = "stale-source-checkout"
+            changed.write_text(json.dumps(manifest), encoding="utf-8")
+            result = self._run(project, VERSION)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("manifest differs", result.stderr)
+
+    @unittest.skipUnless(
+        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
+        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+    )
     def test_validator_rejects_wrong_archive_root(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "checkout"
@@ -194,7 +210,10 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         for name in REQUIRED_FILES:
             destination = project / name
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(f"source placeholder: {name}", encoding="utf-8")
+            if name == "plugins/ModularSynth/plugin.json":
+                destination.write_bytes(MANIFEST.read_bytes())
+            else:
+                destination.write_text(f"source placeholder: {name}", encoding="utf-8")
 
     @staticmethod
     def _create_archives(project: Path, archive_root: str | None = None) -> None:
