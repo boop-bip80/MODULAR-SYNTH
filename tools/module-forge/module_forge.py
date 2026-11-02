@@ -171,6 +171,27 @@ SAW_SOURCE_TEMPLATE = (SOURCE_TEMPLATE
              '                5.f * (rawSaw - correction), voice);'))
 SAW_PANEL_TEMPLATE = PANEL_TEMPLATE.replace("SINE OUT", "SAW OUT")
 
+# A second explicit, opt-in waveform. Two matched polyBLEP corrections smooth
+# the rising and falling edges of a fixed-width pulse without changing the
+# pitch/CV port layout or the byte-for-byte default sine template.
+PULSE_SOURCE_TEMPLATE = (SOURCE_TEMPLATE
+    .replace("// A conservative 16-channel sine oscillator starter, not a finished flagship DSP engine.",
+             "// A 16-channel polyBLEP pulse starter, not a fully bandlimited flagship DSP engine.")
+    .replace("    MS@@SLUG@@Module() {",
+             SAW_BLEP_HELPER + "    MS@@SLUG@@Module() {")
+    .replace('configOutput(AUDIO_OUTPUT, "Sine audio");',
+             'configOutput(AUDIO_OUTPUT, "polyBLEP pulse audio");')
+    .replace('            outputs[AUDIO_OUTPUT].setVoltage(\n'
+             '                5.f * std::sin(6.28318530718f * phase[voice]), voice);',
+             '            const float dt = frequency / sampleRate;\n'
+             '            const float t = phase[voice];\n'
+             '            const float oppositeEdge = t < 0.5f ? t + 0.5f : t - 0.5f;\n'
+             '            const float rawPulse = t < 0.5f ? 1.f : -1.f;\n'
+             '            const float corrected = rawPulse + polyBlep(t, dt)\n'
+             '                - polyBlep(oppositeEdge, dt);\n'
+             '            outputs[AUDIO_OUTPUT].setVoltage(5.f * corrected, voice);'))
+PULSE_PANEL_TEMPLATE = PANEL_TEMPLATE.replace("SINE OUT", "PULSE OUT")
+
 INTEGRATION_TEMPLATE = '''# Integrating @@SLUG@@ into the ModularSynth collection
 
 Generated outputs are a reviewed starting point, not automatically installed modules.
@@ -470,10 +491,10 @@ def validate_kind(kind: str) -> None:
 
 
 def validate_waveform(kind: str, waveform: str) -> None:
-    if waveform not in ("sine", "saw"):
-        raise ValueError("oscillator waveform must be sine or saw")
+    if waveform not in ("sine", "saw", "pulse"):
+        raise ValueError("oscillator waveform must be sine, saw or pulse")
     if kind == "effect" and waveform != "sine":
-        raise ValueError("--waveform saw is only supported for oscillator starters")
+        raise ValueError("non-sine --waveform is only supported for oscillator starters")
 
 
 def manifest_for(slug: str, name: str, kind: str = "oscillator",
@@ -492,6 +513,8 @@ def manifest_for(slug: str, name: str, kind: str = "oscillator",
         "name": name,
         "description": ("Original Module Forge polyBLEP saw oscillator starter"
                         if waveform == "saw"
+                        else "Original Module Forge polyBLEP pulse oscillator starter"
+                        if waveform == "pulse"
                         else "Original Module Forge sine oscillator starter"),
         "tags": ["Oscillator", "Polyphonic"],
     }
@@ -515,6 +538,15 @@ def render_files(slug: str, name: str, kind: str = "oscillator",
             "The starter emits a polyBLEP-corrected saw with about 5 V peak "
             "and limits its frequency below Nyquist. polyBLEP reduces, but "
             "does not eliminate, aliases.")
+    elif waveform == "pulse":
+        source = PULSE_SOURCE_TEMPLATE
+        panel = PULSE_PANEL_TEMPLATE
+        integration = INTEGRATION_TEMPLATE.replace(
+            "The starter emits a 5 V peak sine and limits its frequency below Nyquist.",
+            "The starter emits a fixed 50% duty-cycle polyBLEP pulse with "
+            "a 5 V nominal peak and limits its frequency below Nyquist. "
+            "Both edges are corrected; polyBLEP reduces, but does not "
+            "eliminate, aliases.")
     else:
         source = SOURCE_TEMPLATE
         panel = PANEL_TEMPLATE
@@ -622,8 +654,8 @@ def main(argv: list[str] | None = None) -> int:
     new.add_argument("--name", required=True, help="human-readable module name")
     new.add_argument("--kind", choices=("oscillator", "effect"),
                      default="oscillator", help="starter variant (default: oscillator)")
-    new.add_argument("--waveform", choices=("sine", "saw"), default="sine",
-                     help="oscillator waveform (default sine; saw uses polyBLEP)")
+    new.add_argument("--waveform", choices=("sine", "saw", "pulse"), default="sine",
+                     help="oscillator waveform (default sine; saw/pulse use polyBLEP)")
     new.add_argument("--out", type=Path, default=Path("module-forge-output"),
                      help="parent directory for generated module folder")
     check = subparsers.add_parser("check", help="validate a generated skeleton")
