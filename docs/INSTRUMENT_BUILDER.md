@@ -173,15 +173,16 @@ mapping annotations. A matching `modulatesParameter` describes a **known CV
 input's effect on a first-party knob**, not a cable to that Rack parameter,
 automation assignment, or a promise that the host applies a particular value.
 
-Seven first-party modules are now registered, and all seven have **current
+Eight first-party modules are now registered, and all eight have **current
 source-backed input contracts** for opt-in v2 Macro8 routing: Macro8 (zero
-inputs), MorphVCO, StateFilter, StereoEcho, ClockedLFO, FoldDrive, and FMVoice.
-Descriptors derive from exact `InputIds`, `configInput` and related `configParam`
-declarations in `plugins/ModularSynth/src/*.cpp`; regression tests keep source
-port contracts synchronized. FMVoice descriptors are available for **new
-FMVoice-marked v2 source bundles** only: older contract markers must keep
-previously saved FMVoice routes `unverified`. Source-backed input metadata is
-not a claim about the behavior of a live CV cable.
+inputs), MorphVCO, StateFilter, StereoEcho, ClockedLFO, FoldDrive, FMVoice,
+and ChanceHold. Descriptors derive from exact `InputIds`, `configInput` and
+related `configParam` declarations in `plugins/ModularSynth/src/*.cpp`;
+regression tests keep source port contracts synchronized. The newer FMVoice
+and ChanceHold descriptors are only available in source bundles bearing
+their respective additive v2 mapping contract markers; earlier archive
+contracts must retain their original `unverified` destinations. These saved
+descriptors are not evidence of live host CV behavior.
 
 The `ClockedLFO` source-backed input contract uses its exact zero-based Rack
 `inputId` values:
@@ -240,34 +241,52 @@ DAW automation assignment. These saved source descriptors do not verify that
 a patch loads, produces sound or remains stable at a particular host buffer
 size.
 
+### ChanceHold's five saved clock and probability CV inputs
+
+The original polyphonic ChanceHold module declares five zero-based Rack
+`InputIds` in `plugins/ModularSynth/src/ChanceHold.cpp`. All five saved
+destinations are `inputKind: "cv"`; clock/reset are trigger-oriented inputs,
+not automatable knobs:
+
+| Input ID | Saved Macro8 cable destination | Related Rack knob (if any) |
+| --- | --- | --- |
+| 0 | Free clock rate CV (1 V/oct) | Param 0, Free-run sample rate |
+| 1 | External sample clock (2 V rising threshold) | None — clock pulse |
+| 2 | Reproducible random sequence reset (2 V rising threshold) | None — reset trigger |
+| 3 | Sample probability CV (+10 V adds 100%) | Param 1, Probability of taking a sample |
+| 4 | Glide duration CV (+10 V adds 2 seconds) | Param 2, Glide time (99% settling) |
+
+Clock, reset, probability and glide controls are source-described CV inputs;
+they do not constitute DAW automation. Source-backed cable labels cannot
+prove timing, audio quality, or host compatibility.
+
 ### Immutable v2 source port contracts and old bundle compatibility
 
-Version 2 now has four deliberately distinct historical interpretations:
+Version 2 has five deliberately distinct, cumulative port interpretations:
 
-| Saved v2 contract marker | Verified first-party destinations | FMVoice routes in that archive |
+| Saved v2 contract marker | Verified first-party destinations | ChanceHold routes in that archive |
 | --- | --- | --- |
 | Absent (original v2) | Macro8 (zero inputs), MorphVCO, StateFilter, StereoEcho | `unverified` |
 | `modular-synth-v2-clockedlfo-inputs-v1` | Above plus ClockedLFO | `unverified` |
 | `modular-synth-v2-folddrive-inputs-v1` | Above plus ClockedLFO and FoldDrive | `unverified` |
-| `modular-synth-v2-fmvoice-inputs-v1` | Above plus ClockedLFO, FoldDrive and FMVoice | Source-verified input labels/kinds |
+| `modular-synth-v2-fmvoice-inputs-v1` | Above plus ClockedLFO, FoldDrive and FMVoice | `unverified` |
+| `modular-synth-v2-chancehold-inputs-v1` | Above plus ClockedLFO, FoldDrive, FMVoice and ChanceHold | Source-verified input labels/kinds |
 
-When creating a **new** v2 bundle, a direct Macro8 → FMVoice cable uses
-`performance.controlMappingContract = "modular-synth-v2-fmvoice-inputs-v1"`,
-even if the patch also routes Macro8 to FoldDrive and ClockedLFO. Without an
-FMVoice route, a direct FoldDrive route keeps the existing FoldDrive marker;
-without either, a ClockedLFO route keeps the ClockedLFO marker. Patches with
-none of these three saved direct routes remain unmarked, preserving their
-previous v2 manifest bytes.
+New v2 bundles with a direct Macro8 → ChanceHold route use the latest
+`performance.controlMappingContract = "modular-synth-v2-chancehold-inputs-v1"`,
+even if their patch also maps Macro8 to FMVoice, FoldDrive or ClockedLFO.
+Without a ChanceHold route, the previous FMVoice → FoldDrive → ClockedLFO
+marker precedence remains unchanged. Patches without a direct Macro8 route
+to any of those newer models retain the original unmarked v2 bytes.
 
-Crucially, existing unmarked, ClockedLFO-marked **and FoldDrive-marked**
-archives retain their historical FMVoice interpretation: any saved Macro8 →
-FMVoice cable remains `unverified`, with unknown label and knob reference.
-Unmarked or ClockedLFO-marked archives likewise keep their old FoldDrive
-interpretations, and unmarked archives keep ClockedLFO unknown. Readers
-recompute port mappings using the **saved** marker's historical contract,
-rejecting missing, replaced, unsupported or forged markers and mapping rows.
-Reading a source ZIP never upgrades it. To opt into newly verified FMVoice
-ports, repack the trusted original `.vcv` source with `--format-version 2`.
+Readers preserve the meaning of **every older marker**. In older unmarked,
+ClockedLFO-, FoldDrive- and FMVoice-marked archives, a saved
+Macro8 → ChanceHold cable remains `unverified`; in older marker variants,
+newer FMVoice, FoldDrive and ClockedLFO ports retain their earlier semantics.
+The reader independently re-derives all mappings using the exact saved marker
+and rejects spoofed, unsupported, replaced or missing markers and route rows.
+It never silently upgrades a bundle. Repack a **trusted original .vcv** with
+`--format-version 2` to opt into ChanceHold source descriptions.
 
 The v1 default is unchanged. These additive source-contract revisions inside
 v2 do **not** prove a linked Cardinal plugin, installed modules, DAW routing,
