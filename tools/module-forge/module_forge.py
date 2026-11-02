@@ -36,6 +36,7 @@ struct MS@@SLUG@@Module final : Module {
 
     static constexpr int kMaxChannels = 16;
     std::array<float, kMaxChannels> phase{};
+    int activeChannels = 0;
 
     // std::isfinite() is unsafe with production -ffast-math: its check can
     // be optimized away. Inspect IEEE-754 exponent bits as the effect core does.
@@ -56,11 +57,17 @@ struct MS@@SLUG@@Module final : Module {
 
     void onReset() override {
         phase.fill(0.f);
+        activeChannels = 0;
     }
 
     void process(const ProcessArgs& args) override {
         const int voices = std::min(kMaxChannels,
             std::max(1, inputs[PITCH_INPUT].getChannels()));
+        // Retire inactive lanes before they can later be reused. A dropped
+        // polyphonic note must not resume an unrelated earlier phase.
+        for (int voice = voices; voice < activeChannels; ++voice)
+            phase[voice] = 0.f;
+        activeChannels = voices;
         outputs[AUDIO_OUTPUT].setChannels(voices);
         const float requestedSampleRate = static_cast<float>(args.sampleRate);
         const float sampleRate = (finite(requestedSampleRate)
@@ -190,6 +197,7 @@ struct MS@@SLUG@@Module final : Module {
     static constexpr int kMaxChannels = 16;
     std::array<moduleforge::MS@@SLUG@@OnePole, kMaxChannels> leftFilter{};
     std::array<moduleforge::MS@@SLUG@@OnePole, kMaxChannels> rightFilter{};
+    int activeChannels = 0;
 
     MS@@SLUG@@Module() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -206,6 +214,7 @@ struct MS@@SLUG@@Module final : Module {
             filter.reset();
         for (auto& filter : rightFilter)
             filter.reset();
+        activeChannels = 0;
     }
 
     void process(const ProcessArgs& args) override {
@@ -214,6 +223,13 @@ struct MS@@SLUG@@Module final : Module {
             inputs[RIGHT_INPUT].getChannels(),
             inputs[CUTOFF_CV_INPUT].getChannels()
         }));
+        // A previous voice's filter memory must not leak into a new
+        // voice after polyphony contracts and later expands.
+        for (int voice = voices; voice < activeChannels; ++voice) {
+            leftFilter[voice].reset();
+            rightFilter[voice].reset();
+        }
+        activeChannels = voices;
         outputs[LEFT_OUTPUT].setChannels(voices);
         outputs[RIGHT_OUTPUT].setChannels(voices);
 

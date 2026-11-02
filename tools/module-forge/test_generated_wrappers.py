@@ -112,6 +112,26 @@ int main() {
             return 8;
     }
 
+    // The second oscillator lane must restart at phase zero after a
+    // two-voice -> one-voice -> two-voice transition.
+    args.sampleRate = 48000.0;
+    oscillator.onReset();
+    oscillator.inputs[MSForgeOrbitModule::PITCH_INPUT].setChannels(2);
+    oscillator.inputs[MSForgeOrbitModule::PITCH_INPUT].setVoltage(1.f, 1);
+    for (int i = 0; i < 137; ++i)
+        oscillator.process(args);
+    if (oscillator.phase[1] == 0.f)
+        return 16;
+    oscillator.inputs[MSForgeOrbitModule::PITCH_INPUT].setChannels(1);
+    oscillator.process(args);
+    if (oscillator.phase[1] != 0.f || oscillator.activeChannels != 1)
+        return 17;
+    oscillator.inputs[MSForgeOrbitModule::PITCH_INPUT].setChannels(2);
+    oscillator.inputs[MSForgeOrbitModule::PITCH_INPUT].setVoltage(1.f, 1);
+    oscillator.process(args);
+    if (!near(oscillator.outputs[MSForgeOrbitModule::AUDIO_OUTPUT].getVoltage(1), sine1))
+        return 18;
+
     MSForgeStereoLPModule effect;
     MSForgeStereoLPWidget effectWidget(&effect);
     if (effectWidget.module != &effect)
@@ -165,6 +185,35 @@ int main() {
             || !bitsFinite(effect.outputs[MSForgeStereoLPModule::RIGHT_OUTPUT].getVoltage(0)))
             return 15;
     }
+    // Reusing a dropped effect lane must not revive stale filter memory.
+    args.sampleRate = 48000.0;
+    effect.onReset();
+    effect.inputs[MSForgeStereoLPModule::LEFT_INPUT].setChannels(2);
+    effect.inputs[MSForgeStereoLPModule::RIGHT_INPUT].setChannels(2);
+    effect.inputs[MSForgeStereoLPModule::CUTOFF_CV_INPUT].setChannels(2);
+    effect.inputs[MSForgeStereoLPModule::LEFT_INPUT].setVoltage(5.f, 1);
+    effect.inputs[MSForgeStereoLPModule::RIGHT_INPUT].setVoltage(-5.f, 1);
+    effect.inputs[MSForgeStereoLPModule::CUTOFF_CV_INPUT].setVoltage(0.f, 1);
+    for (int i = 0; i < 64; ++i)
+        effect.process(args);
+    if (effect.leftFilter[1].state == 0.f || effect.rightFilter[1].state == 0.f)
+        return 19;
+    effect.inputs[MSForgeStereoLPModule::LEFT_INPUT].setChannels(1);
+    effect.inputs[MSForgeStereoLPModule::RIGHT_INPUT].setChannels(1);
+    effect.inputs[MSForgeStereoLPModule::CUTOFF_CV_INPUT].setChannels(1);
+    effect.process(args);
+    if (effect.leftFilter[1].state != 0.f || effect.rightFilter[1].state != 0.f
+        || effect.activeChannels != 1)
+        return 20;
+    effect.inputs[MSForgeStereoLPModule::LEFT_INPUT].setChannels(2);
+    effect.inputs[MSForgeStereoLPModule::RIGHT_INPUT].setChannels(2);
+    effect.inputs[MSForgeStereoLPModule::CUTOFF_CV_INPUT].setChannels(2);
+    effect.inputs[MSForgeStereoLPModule::LEFT_INPUT].setVoltage(0.f, 1);
+    effect.inputs[MSForgeStereoLPModule::RIGHT_INPUT].setVoltage(0.f, 1);
+    effect.process(args);
+    if (!near(effect.outputs[MSForgeStereoLPModule::LEFT_OUTPUT].getVoltage(1), 0.f)
+        || !near(effect.outputs[MSForgeStereoLPModule::RIGHT_OUTPUT].getVoltage(1), 0.f))
+        return 21;
     return 0;
 }
 '''
