@@ -133,6 +133,40 @@ class ModuleForgeTests(unittest.TestCase):
         self.assertIn("leftFilter[voice].reset();", effect)
         self.assertIn("rightFilter[voice].reset();", effect)
 
+    def test_opt_in_saw_is_bandlimited_and_keeps_default_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp)
+            legacy = render_files("ForgeSaw", "Forge Saw")
+            explicit_sine = render_files("ForgeSaw", "Forge Saw",
+                                         waveform="sine")
+            self.assertEqual(legacy, explicit_sine)
+            saw = generate("ForgeSaw", "Forge Saw", parent, waveform="saw")
+            self.assertEqual(check_module(saw), [])
+            self.assertEqual(len(list(saw.iterdir())), 4)
+            source = (saw / "ForgeSaw.cpp").read_text()
+            self.assertIn("static float polyBlep(float t, float dt)", source)
+            self.assertIn("rawSaw - correction", source)
+            self.assertNotIn("std::sin(6.28318530718f * phase[voice])", source)
+            self.assertIn("int activeChannels = 0;", source)
+            manifest = json.loads((saw / "ForgeSaw.module.json").read_text())
+            self.assertEqual(manifest["slug"], "ForgeSaw")
+            self.assertIn("polyBLEP saw", manifest["description"])
+            self.assertEqual(manifest["tags"], ["Oscillator", "Polyphonic"])
+            self.assertIn("SAW OUT", (saw / "ForgeSaw.svg").read_text())
+            self.assertIn("does not eliminate, aliases",
+                          (saw / "INTEGRATION.md").read_text())
+
+    def test_saw_is_oscillator_only_and_invalid_modes_do_not_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp)
+            with self.assertRaisesRegex(ValueError, "only supported"):
+                generate("StereoSaw", "Stereo Saw", parent,
+                         kind="effect", waveform="saw")
+            with self.assertRaisesRegex(ValueError, "waveform"):
+                generate("InvalidMode", "Invalid Mode", parent,
+                         waveform="triangle")
+            self.assertEqual(list(parent.iterdir()), [])
+
     def test_effect_generation_validation_and_port_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             destination = generate("StereoTPT", "Stereo TPT", Path(tmp),

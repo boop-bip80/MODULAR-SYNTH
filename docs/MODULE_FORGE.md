@@ -1,6 +1,7 @@
 # Module Forge — first-party oscillator and effect scaffolding
 
-**Status:** developer tooling with two starter variants, not a live module forge. This is not yet an
+**Status:** developer tooling with oscillator (sine or opt-in polyBLEP saw)
+and stereo low-pass effect starters, not a live module forge. This is not yet an
 in-app source editor, just-in-time DSP compiler, module hot loader, or standalone
 plugin exporter. The separate `plugins/ModularSynth` collection is the home
 for original modules; it is distinct from the upstream `plugins/Cardinal`
@@ -14,6 +15,12 @@ collection.
   oscillator with one 1 V/oct pitch input, continuous phase, reset, and
   bounded frequency across host sample-rate changes. Channels retired on
   polyphony contraction reset their phase so a later voice starts cleanly.
+- **`--kind oscillator --waveform saw` (opt-in):** the same stable port layout,
+  16-voice lifecycle and ±5 V nominal range, now emitting a polyBLEP-corrected
+  rising sawtooth. Its generated source contains the anti-alias correction, its
+  manifest description identifies the saw, and the SVG says **SAW OUT**.
+  polyBLEP reduces discontinuity aliases; it does not eliminate them or
+  imply professional spectral certification.
 - **`--kind effect`:** a five-file stereo, 16-voice TPT one-pole low-pass
   effect with left/right audio inputs and outputs, right-input normalled
   from left, and 1 V/oct cutoff CV. Its generated `<Slug>.dsp.hpp` is a
@@ -49,8 +56,20 @@ python3 tools/module-forge/module_forge.py new \
 python3 tools/module-forge/module_forge.py check module-forge-output/StereoTPT
 ```
 
+To generate the opt-in saw oscillator with the unchanged `new` workflow:
+
+```bash
+python3 tools/module-forge/module_forge.py new \
+    --kind oscillator --waveform saw \
+    --slug ForgeSaw --name "Forge Saw" --out module-forge-output
+python3 tools/module-forge/module_forge.py check module-forge-output/ForgeSaw
+```
+
 The outputs will be `module-forge-output/OrbitSine/` and
-`module-forge-output/StereoTPT/`. Read each generated
+`module-forge-output/StereoTPT/` for the initial examples, and
+`module-forge-output/ForgeSaw/` for the opt-in saw. With no waveform option,
+the generator's sine files and manifest remain byte-for-byte unchanged.
+`--waveform saw` is rejected for `--kind effect`. Read each generated
 `INTEGRATION.md` **before** moving source/artwork into
 `plugins/ModularSynth` or registering the model in the static loader.
 Generated sources are not automatically built or installed.
@@ -73,6 +92,15 @@ refusal to overwrite user-edited files, and invalid identifiers. Integration
 fixtures exercise ordinary and effect dry-runs and applies, header collisions,
 registry updates, case-insensitive collisions, stale plans, parent symlinks,
 interruption, and rollback after injected write failures.
+The opt-in saw adds `test_generated_saw.py`: its actual generated HEADLESS
+wrapper is syntax-checked, linked and executed under ordinary, production-style
+and strict fast-math compiler profiles. A coherent-bin 48 kHz test near
+9.28 kHz compares the measured energy of aliased harmonics 3–9 with the
+*same generated phase* feeding an uncorrected saw, requiring at least
+8 dB reduction. It also checks finite/bounded audio, port counts and voice
+retirement after polyphony contraction. This is a limited synthetic
+source test, **not** an exhaustive alias/CPU study or host audition.
+
 When a C++ compiler is available, `test_effect_core.py` also builds and
 executes a standalone C++17 probe against the generated Rack-free filter header:
 DC convergence, reset, impulse decay, 44.1/48/96 kHz, and IEEE-bitwise
@@ -147,8 +175,10 @@ python3 -B tools/module-forge/check_real_generated_headers.py
 The dedicated
 [`Module Forge pinned Rack header syntax`](../.github/workflows/module-forge-real-headers.yml)
 workflow runs this gate and its fail-closed orchestration unit tests on relevant
-changes. A pass means **two generated HEADLESS translation units compile at
-the C++ syntax/API layer** against that pinned SDK. It does not link Cardinal,
+changes. A pass means **the default sine oscillator and effect HEADLESS translation
+units compile at the C++ syntax/API layer** against that pinned SDK. The opt-in
+saw has its own HEADLESS test-shim compile/process/alias test, but **is not yet
+included in this pinned real-Rack header workflow**. It does not link Cardinal,
 compile the non-HEADLESS UI widgets, validate GUI resources, instantiate a
 VST3/CLAP/LV2 host, or render or audition DAW audio. A missing submodule, a
 wrong pinned Gitlink or an absent system header is a gate failure rather than

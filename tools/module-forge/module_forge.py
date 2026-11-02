@@ -139,6 +139,38 @@ PANEL_TEMPLATE = r'''<?xml version="1.0" encoding="UTF-8"?>
 </svg>
 '''
 
+# Preserve the exact default sine starter and its patch-facing port layout.
+# The opt-in saw uses the same finite guards, 16-lane phase lifecycle and GUI.
+SAW_BLEP_HELPER = r'''    // Polynomial BLEP smooths the saw reset over one sample.
+    // dt is bounded to (0, 0.45] by the inherited frequency clamp.
+    static float polyBlep(float t, float dt) noexcept {
+        if (t < dt) {
+            const float u = t / dt;
+            return u + u - u * u - 1.f;
+        }
+        if (t > 1.f - dt) {
+            const float u = (t - 1.f) / dt;
+            return u * u + u + u + 1.f;
+        }
+        return 0.f;
+    }
+
+'''
+SAW_SOURCE_TEMPLATE = (SOURCE_TEMPLATE
+    .replace("// A conservative 16-channel sine oscillator starter, not a finished flagship DSP engine.",
+             "// A 16-channel polyBLEP saw starter, not a fully bandlimited flagship DSP engine.")
+    .replace("    MS@@SLUG@@Module() {",
+             SAW_BLEP_HELPER + "    MS@@SLUG@@Module() {")
+    .replace('configOutput(AUDIO_OUTPUT, "Sine audio");',
+             'configOutput(AUDIO_OUTPUT, "polyBLEP saw audio");')
+    .replace('            outputs[AUDIO_OUTPUT].setVoltage(\n'
+             '                5.f * std::sin(6.28318530718f * phase[voice]), voice);',
+             '            const float rawSaw = 2.f * phase[voice] - 1.f;\n'
+             '            const float correction = polyBlep(phase[voice], frequency / sampleRate);\n'
+             '            outputs[AUDIO_OUTPUT].setVoltage(\n'
+             '                5.f * (rawSaw - correction), voice);'))
+SAW_PANEL_TEMPLATE = PANEL_TEMPLATE.replace("SINE OUT", "SAW OUT")
+
 INTEGRATION_TEMPLATE = '''# Integrating @@SLUG@@ into the ModularSynth collection
 
 Generated outputs are a reviewed starting point, not automatically installed modules.
@@ -437,8 +469,17 @@ def validate_kind(kind: str) -> None:
         raise ValueError("kind must be oscillator or effect")
 
 
-def manifest_for(slug: str, name: str, kind: str = "oscillator") -> dict:
+def validate_waveform(kind: str, waveform: str) -> None:
+    if waveform not in ("sine", "saw"):
+        raise ValueError("oscillator waveform must be sine or saw")
+    if kind == "effect" and waveform != "sine":
+        raise ValueError("--waveform saw is only supported for oscillator starters")
+
+
+def manifest_for(slug: str, name: str, kind: str = "oscillator",
+                 waveform: str = "sine") -> dict:
     validate_kind(kind)
+    validate_waveform(kind, waveform)
     if kind == "effect":
         return {
             "slug": slug,
@@ -449,19 +490,31 @@ def manifest_for(slug: str, name: str, kind: str = "oscillator") -> dict:
     return {
         "slug": slug,
         "name": name,
-        "description": "Original Module Forge sine oscillator starter",
+        "description": ("Original Module Forge polyBLEP saw oscillator starter"
+                        if waveform == "saw"
+                        else "Original Module Forge sine oscillator starter"),
         "tags": ["Oscillator", "Polyphonic"],
     }
 
 
-def render_files(slug: str, name: str, kind: str = "oscillator") -> dict[str, str]:
+def render_files(slug: str, name: str, kind: str = "oscillator",
+                 waveform: str = "sine") -> dict[str, str]:
     validate_slug(slug)
     validate_name(name)
     validate_kind(kind)
+    validate_waveform(kind, waveform)
     if kind == "effect":
         source = EFFECT_SOURCE_TEMPLATE
         panel = EFFECT_PANEL_TEMPLATE
         integration = EFFECT_INTEGRATION_TEMPLATE
+    elif waveform == "saw":
+        source = SAW_SOURCE_TEMPLATE
+        panel = SAW_PANEL_TEMPLATE
+        integration = INTEGRATION_TEMPLATE.replace(
+            "The starter emits a 5 V peak sine and limits its frequency below Nyquist.",
+            "The starter emits a polyBLEP-corrected saw with about 5 V peak "
+            "and limits its frequency below Nyquist. polyBLEP reduces, but "
+            "does not eliminate, aliases.")
     else:
         source = SOURCE_TEMPLATE
         panel = PANEL_TEMPLATE
@@ -469,7 +522,8 @@ def render_files(slug: str, name: str, kind: str = "oscillator") -> dict[str, st
     cpp = source.replace("@@SLUG@@", slug)
     svg = panel.replace("@@TITLE@@", escape(name))
     docs = integration.replace("@@SLUG@@", slug)
-    manifest = json.dumps(manifest_for(slug, name, kind), indent=2) + "\n"
+    manifest = json.dumps(manifest_for(slug, name, kind, waveform),
+                          indent=2) + "\n"
     files = {
         f"{slug}.cpp": cpp,
         f"{slug}.svg": svg,
@@ -482,8 +536,8 @@ def render_files(slug: str, name: str, kind: str = "oscillator") -> dict[str, st
 
 
 def generate(slug: str, name: str, output_root: Path,
-             kind: str = "oscillator") -> Path:
-    files = render_files(slug, name, kind)
+             kind: str = "oscillator", waveform: str = "sine") -> Path:
+    files = render_files(slug, name, kind, waveform)
     destination = output_root / slug
     # Never modify previously generated or manually edited modules.
     destination.mkdir(parents=True, exist_ok=False)
@@ -568,6 +622,8 @@ def main(argv: list[str] | None = None) -> int:
     new.add_argument("--name", required=True, help="human-readable module name")
     new.add_argument("--kind", choices=("oscillator", "effect"),
                      default="oscillator", help="starter variant (default: oscillator)")
+    new.add_argument("--waveform", choices=("sine", "saw"), default="sine",
+                     help="oscillator waveform (default sine; saw uses polyBLEP)")
     new.add_argument("--out", type=Path, default=Path("module-forge-output"),
                      help="parent directory for generated module folder")
     check = subparsers.add_parser("check", help="validate a generated skeleton")
@@ -575,7 +631,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "new":
-            destination = generate(args.slug, args.name, args.out, kind=args.kind)
+            destination = generate(args.slug, args.name, args.out,
+                                   kind=args.kind, waveform=args.waveform)
             print(f"Generated {destination}")
             print(f"Read {destination / 'INTEGRATION.md'} before integrating.")
             return 0
