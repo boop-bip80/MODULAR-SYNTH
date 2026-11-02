@@ -14,6 +14,9 @@ class MappingError(ValueError):
 
 
 CLOCKED_LFO_CONTRACT = "modular-synth-v2-clockedlfo-inputs-v1"
+# FoldDrive is a newer, additive six-model v2 port contract. The new
+# marker implies the existing ClockedLFO contract as well.
+FOLD_DRIVE_CONTRACT = "modular-synth-v2-folddrive-inputs-v1"
 
 
 class InputSpec(NamedTuple):
@@ -68,11 +71,21 @@ FIRST_PARTY_INPUTS: dict[str, tuple[InputSpec, ...]] = {
         InputSpec("MIX_CV_INPUT", "Wet mix CV (adds 10 percentage points/V)",
                   "cv", (2, "Wet mix")),
     ),
+    "FoldDrive": (
+        InputSpec("AUDIO_INPUT", "Audio signal (nominal +/-5 V)", "audio"),
+        InputSpec("DRIVE_CV_INPUT", "Drive CV (+10 V adds 100%; 3 ms slew)",
+                  "cv", (0, "Sine fold drive")),
+        InputSpec("BIAS_CV_INPUT", "Bias CV (+10 V adds +100%; 3 ms slew)",
+                  "cv", (1, "Fold asymmetry bias")),
+        InputSpec("MIX_CV_INPUT", "Wet mix CV (+10 V adds 100%; 3 ms slew)",
+                  "cv", (2, "Wet mix")),
+    ),
 }
 
 
 def _destination(module: dict, input_id: int, *,
-                 clocked_lfo_known: bool) -> dict:
+                 clocked_lfo_known: bool,
+                 fold_drive_known: bool) -> dict:
     plugin, model = module["plugin"], module["model"]
     result = {
         "moduleId": module["id"],
@@ -84,7 +97,8 @@ def _destination(module: dict, input_id: int, *,
         "modulatesParameter": None,
     }
     if (plugin != "ModularSynth" or model not in FIRST_PARTY_INPUTS
-            or (model == "ClockedLFO" and not clocked_lfo_known)):
+            or (model == "ClockedLFO" and not clocked_lfo_known)
+            or (model == "FoldDrive" and not fold_drive_known)):
         return result
     ports = FIRST_PARTY_INPUTS[model]
     if input_id >= len(ports):
@@ -101,7 +115,8 @@ def _destination(module: dict, input_id: int, *,
 
 
 def derive_control_mappings(patch: dict, macro8: list[dict], *,
-                            clocked_lfo_known: bool = True) -> list[dict]:
+                            clocked_lfo_known: bool = True,
+                            fold_drive_known: bool = True) -> list[dict]:
     """Map only direct saved Macro8 output cables to input ports.
 
     Call after the patch/module/cable graph and Macro8 state are validated.
@@ -136,7 +151,8 @@ def derive_control_mappings(patch: dict, macro8: list[dict], *,
             },
             "destination": _destination(
                 modules[cable["inputModuleId"]], cable["inputId"],
-                clocked_lfo_known=clocked_lfo_known),
+                clocked_lfo_known=clocked_lfo_known,
+                fold_drive_known=fold_drive_known),
         })
     routes.sort(key=lambda route: (
         route["source"]["moduleId"], route["source"]["outputId"],

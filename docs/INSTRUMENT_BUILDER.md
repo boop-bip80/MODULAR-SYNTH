@@ -130,7 +130,7 @@ mapping annotations. A matching `modulatesParameter` describes a **known CV
 input's effect on a first-party knob**, not a cable to that Rack parameter,
 automation assignment, or a promise that the host applies a particular value.
 
-For the current five first-party modules, source-backed input contracts come
+For the current six first-party modules, source-backed input contracts come
 from the exact `InputIds` enums, `configInput` descriptors and matching
 `configParam` labels in `plugins/ModularSynth/src/*.cpp`; regression tests keep
 the source-backed port contracts synchronized with those sources.
@@ -153,18 +153,53 @@ override that free-run rate while clock-locked. These descriptors report the
 saved cable's destination and source-code semantics, **not** a direct
 parameter connection, clock synchronization guarantee, or plugin host test.
 
-To preserve already-created v2 archives, any **new** v2 bundle containing a
-direct Macro8 → ClockedLFO cable includes the immutable marker
-`performance.controlMappingContract = "modular-synth-v2-clockedlfo-inputs-v1"`.
-This selects the five-model
-source-backed contract above. Older **unmarked** v2 archives still replay the
-original four-model contract: a saved ClockedLFO destination stays
-`unverified`, and the ZIP remains readable without rewriting its manifest.
-New v2 archives **without** a ClockedLFO destination omit the marker and keep
-their original byte layout. The marker is authenticated through the same
-patch-derived manifest comparison: removing or substituting it without a
-corresponding valid legacy mapping is rejected. This is an explicit contract
-extension inside format v2, not a silent reinterpretation of older bundles.
+### FoldDrive's four saved input ports
+
+The FoldDrive source contract follows the exact Rack input indices from
+`plugins/ModularSynth/src/FoldDrive.cpp` and the real CV semantics used by
+the FoldDrive wrapper:
+
+| Input ID | Saved Macro8 cable destination | Related Rack knob (if any) |
+| --- | --- | --- |
+| 0 | Audio signal input (nominal ±5 V) | None — an **audio** port, not knob modulation |
+| 1 | Drive CV (+10 V adds 100%; 3 ms slew) | Param 0, Sine fold drive |
+| 2 | Bias CV (+10 V adds +100%; 3 ms slew) | Param 1, Fold asymmetry bias |
+| 3 | Wet mix CV (+10 V adds 100%; 3 ms slew) | Param 2, Wet mix |
+
+Input 0 reports `inputKind: "audio"`, while inputs 1–3 report
+`inputKind: "cv"` with source-verified parameter references. The CV values
+are additive signals applied by FoldDrive's wrapper; they are **not** direct
+Rack parameter writes or DAW automation. A Macro8 CV-to-audio cable can be
+described structurally but is not automatically a useful audio connection.
+
+### Immutable v2 source port contracts and old bundle compatibility
+
+Version 2 has three deliberately distinct historical interpretations:
+
+| Saved v2 contract marker | Verified destinations | FoldDrive routes in an existing archive |
+| --- | --- | --- |
+| Absent (original v2) | Macro8 (zero inputs), MorphVCO, StateFilter, StereoEcho | `unverified` |
+| `modular-synth-v2-clockedlfo-inputs-v1` | Above plus ClockedLFO | `unverified` |
+| `modular-synth-v2-folddrive-inputs-v1` | Above plus ClockedLFO and FoldDrive | Source-verified input labels/kinds |
+
+When creating a **new** v2 bundle, a direct Macro8 → FoldDrive cable uses
+`performance.controlMappingContract = "modular-synth-v2-folddrive-inputs-v1"`,
+including if a ClockedLFO cable is also present. If there is no direct
+FoldDrive cable but there is a ClockedLFO cable, the older ClockedLFO marker
+is kept. A v2 source patch with neither direct route keeps its original
+unmarked layout and byte-for-byte compatibility.
+
+Crucially, **existing** unmarked and ClockedLFO-marked archives keep their
+old interpretation: previously saved FoldDrive cables stay `unverified`
+even though the current source now knows their ports. Similarly, unmarked
+ClockedLFO routes stay unverified. The reader validates a saved marker
+against independently derived patch wiring, rejecting missing, replaced,
+unsupported or forged contracts. Historic source ZIPs are read without
+rewriting them, and old v1 remains the default. To get new FoldDrive route
+descriptors, repack a trusted `.vcv` source into a fresh opt-in v2 archive.
+
+These are additive source-contract revisions **inside format v2** and do
+not prove that a compiled plugin, host routing, presets or automation work.
 
 Across first-party and external destinations, the mapping reports:
 
@@ -336,10 +371,10 @@ array order; mixed known and unknown destinations are all shown. A
 CV/audio kind match this **source revision**, not that connecting Macro8 is
 musically useful, that Rack has loaded the module, or that the parameter is
 automatable by a host. Other patch cables, third-party port bounds, binaries,
-DAW automation, and runtime audio remain unverified. Older unmarked v2 bundles
-with ClockedLFO routes retain their original `UNVERIFIED` interpretation; the
-strict gate will fail them until repacked from trusted `.vcv` source with the
-current marked v2 contract. The existing default `check` output remains
+DAW automation, and runtime audio remain unverified. Older unmarked v2 bundles with ClockedLFO routes, and older unmarked or
+ClockedLFO-marked v2 bundles with FoldDrive routes, retain their original
+`UNVERIFIED` interpretations. The strict gate will fail such routes until
+repacked from trusted `.vcv` source with the appropriate new v2 contract. The existing default `check` output remains
 unchanged for backwards compatibility.
 
 **Important:** `DECLARED` does not establish that the model was compiled,
