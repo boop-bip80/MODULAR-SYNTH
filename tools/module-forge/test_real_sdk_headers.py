@@ -64,15 +64,15 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
             fake_first_party = root / "first-party"
             fake_rack.mkdir()
             fake_first_party.mkdir()
-            (fake_rack / "plugin.hpp").write_text("#define RACK_HEADER_WAS_SELECTED 1\\n")
+            (fake_rack / "plugin.hpp").write_text("#define RACK_HEADER_WAS_SELECTED 1\n")
             (fake_first_party / "plugin.hpp").write_text(
-                "#define FIRST_PARTY_HEADER_WAS_SELECTED 1\\n")
+                "#define FIRST_PARTY_HEADER_WAS_SELECTED 1\n")
             source = root / "generated.cpp"
             source.write_text(
-                "#include \\"plugin.hpp\\"\\n"
-                "#ifndef FIRST_PARTY_HEADER_WAS_SELECTED\\n"
-                "#error \\"Wrong plugin.hpp resolved\\"\\n"
-                "#endif\\n")
+                "#include \"plugin.hpp\"\n"
+                "#ifndef FIRST_PARTY_HEADER_WAS_SELECTED\n"
+                "#error \"Wrong plugin.hpp resolved\"\n"
+                "#endif\n")
             command = [shutil.which("c++"), "-std=c++17", "-fsyntax-only",
                        "-I", str(fake_rack), "-iquote", str(fake_first_party),
                        str(source)]
