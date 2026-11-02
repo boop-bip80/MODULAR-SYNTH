@@ -51,14 +51,20 @@ The inherited source-tarball job builds two archives in the checkout's parent
 directory: `cardinal-<version>.tar.xz` and `cardinal+deps-<version>.tar.xz`,
 where `<version>` comes from `make -s version`. A new pre-upload check
 requires **both** files to be nonempty and verifies that GNU tar can list their
-contents using the Makefile's existing `--lzma` encoder. Tag artifact uploads
+contents using the Makefile's existing `--lzma` encoder. It also checks that
+every listed member is inside the expected `cardinal-<version>/` archive
+root, rejects `..` traversal components, and requires the license, README,
+Makefile, original-module manifest and MorphVCO source in **both** archives.
+This catches valid-but-incomplete or mis-versioned archives; it is a narrow
+first-party source inventory, **not** a complete third-party-license audit.
+Tag artifact uploads
 now fail if no files match, and the GitHub Release step uses a **single**
 parent-relative file pattern and fails when it matches nothing. The one-pattern
 contract matters because `softprops/action-gh-release` rejects each unmatched
 pattern individually; the old three alternative `/home/runner` path depths
 would cause false failures if used with strict matching. [Offline release-gate tests](../tests/test_ci_source_tarball.py)
-exercise successful archive validation and rejection of missing, empty, corrupt
-and unsafe-version inputs.
+exercise successful archive validation and rejection of missing, empty, corrupt,
+mis-rooted, incomplete and unsafe-version inputs.
 
 **Caveat:** The upstream Makefile uses GNU tar `--lzma` despite the
 `.tar.xz` filename extension; the guard deliberately tests the *current
