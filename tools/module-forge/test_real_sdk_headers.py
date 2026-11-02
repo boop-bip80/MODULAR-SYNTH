@@ -9,6 +9,8 @@ from __future__ import annotations
 import contextlib
 import io
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -31,11 +33,15 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
 
     def test_gate_uses_headless_real_header_flags_not_test_shim(self) -> None:
         paths = [Path("/tmp/a/ForgeRealOsc.cpp"), Path("/tmp/b/ForgeRealLP.cpp")]
-        flags = ["-DHEADLESS", "-fsyntax-only", "-I", "/real/rack/include"]
+        sdk_rack_headers = str(gate.ROOT / "src" / "Rack" / "include")
+        flags = ["-DHEADLESS", "-fsyntax-only", "-I", sdk_rack_headers]
         commands = gate.syntax_commands("c++", flags, paths)
         self.assertEqual(len(commands), 2)
         for command, source in zip(commands, paths):
             self.assertEqual(command[0], "c++")
+            self.assertEqual(command[1:3], ["-iquote", str(gate.COLLECTION)])
+            self.assertLess(command.index(str(gate.COLLECTION)),
+                            command.index(sdk_rack_headers))
             self.assertIn("-I", command)
             self.assertIn(str(gate.COLLECTION), command)
             self.assertEqual(command[-1], str(source))
@@ -48,6 +54,31 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
         ):
             with self.subTest(flags=bad), self.assertRaises(gate.sdk.PreflightError):
                 gate.syntax_commands("c++", bad, paths)
+
+    @unittest.skipUnless(shutil.which("c++"), "C++ compiler unavailable")
+    def test_quote_header_priority_over_rack_i_path(self) -> None:
+        """GCC must choose first-party plugin.hpp despite earlier Rack -I."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            fake_rack = root / "rack"
+            fake_first_party = root / "first-party"
+            fake_rack.mkdir()
+            fake_first_party.mkdir()
+            (fake_rack / "plugin.hpp").write_text("#define RACK_HEADER_WAS_SELECTED 1\\n")
+            (fake_first_party / "plugin.hpp").write_text(
+                "#define FIRST_PARTY_HEADER_WAS_SELECTED 1\\n")
+            source = root / "generated.cpp"
+            source.write_text(
+                "#include \\"plugin.hpp\\"\\n"
+                "#ifndef FIRST_PARTY_HEADER_WAS_SELECTED\\n"
+                "#error \\"Wrong plugin.hpp resolved\\"\\n"
+                "#endif\\n")
+            command = [shutil.which("c++"), "-std=c++17", "-fsyntax-only",
+                       "-I", str(fake_rack), "-iquote", str(fake_first_party),
+                       str(source)]
+            completed = subprocess.run(command, text=True, capture_output=True,
+                                       check=False, timeout=20)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_sdk_preflight_failure_is_not_treated_as_success(self) -> None:
         with mock.patch.object(gate.sdk, "check_dependencies",
