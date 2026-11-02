@@ -1,9 +1,8 @@
 # MODULAR-SYNTH — Manual UI and DAW State QA
 
 **Status: NOT EXECUTED.** This is a checklist for human verification of
-the six first-party modules, including the introductory Morph VCO, State Filter
-and Macro8 voice. No desktop/DAW
-UI run is claimed. All checkboxes intentionally remain unchecked.
+the seven first-party modules, including the introductory Morph VCO, State Filter
+and Macro8 voice as well as FMVoice. No desktop/DAW UI run is claimed. All checkboxes intentionally remain unchecked.
 
 | Record before running | Value |
 | --- | --- |
@@ -23,8 +22,8 @@ each supported host/plugin format.
   missing SVG warning, or host rescan error.
 - [ ] Module browser offers exactly one each of **Morph VCO**,
   **State Filter**, **Fold Drive**, **Macro8 Performance Macros**,
-  **Stereo Echo** and **Clocked LFO** in the **MODULAR-SYNTH Originals**
-  collection. Search resolves all six.
+  **Stereo Echo**, **Clocked LFO** and **FM Voice** in the **MODULAR-SYNTH Originals**
+  collection. Search resolves all seven.
 - [ ] Inspect each SVG panel, ports, labels, controls and lights at normal
   and HiDPI scaling; zoom, close/reopen the editor and check alignment.
 - [ ] Confirm the release package actually contains
@@ -32,8 +31,9 @@ each supported host/plugin format.
   `ModularSynth/res/StateFilter.svg`,
   `ModularSynth/res/FoldDrive.svg`,
   `ModularSynth/res/Macro8.svg`,
-  `ModularSynth/res/StereoEcho.svg` and
-  `ModularSynth/res/ClockedLFO.svg`.
+  `ModularSynth/res/StereoEcho.svg`,
+  `ModularSynth/res/ClockedLFO.svg` and
+  `ModularSynth/res/FMVoice.svg`.
 
 - [ ] With Fold Drive between Morph VCO and State Filter, verify dry
   transparency at zero DRIVE, audible fold changes with increasing DRIVE,
@@ -121,7 +121,7 @@ each supported host/plugin format.
 - [ ] Run all discovered standalone C++ DSP suites using
   `python3 -B tests/run_dsp_tests.py --sanitize=auto`, then run the
   repository/Module Forge/Instrument Builder Python suites. Attach their
-  exact commit, compiler/sanitizer profile and outputs. The six-original
+  exact commit, compiler/sanitizer profile and outputs. The seven-original
   and generated-module HEADLESS wrapper smokes use a **test-only Rack stub**;
   they do **not** prove a real Rack/DPF plugin build.
 - [ ] Check CI/build status and release archive contents. Attach
@@ -152,11 +152,11 @@ python3 tools/ui-check/validate_panels.py
 python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
 ```
 
-The standard-library-only checker validates six first-party source panels
-(Morph VCO, State Filter, FoldDrive, Macro8, StereoEcho, ClockedLFO) as parseable SVGs
-with an SVG namespace and expected **12/14/12/20/16/16 HP** widths, standard
+The standard-library-only checker validates seven first-party source panels
+(Morph VCO, State Filter, FoldDrive, Macro8, StereoEcho, ClockedLFO, FMVoice) as parseable SVGs
+with an SVG namespace and expected **12/14/12/20/16/16/12 HP** widths, standard
 **3U height** and Rack viewBoxes of **15 px/HP × 380 px**. The first five
-panels specify 128.5 mm physical height; ClockedLFO declares equivalent
+panels and FMVoice specify 128.5 mm physical height; ClockedLFO declares equivalent
 380 px dimensions. It cross-checks the exact `setPanel()` asset paths in C++ and
 checks statically resolvable centered knobs, ports, switches and lights
 against panel coordinate bounds. It conservatively expands simple constant
@@ -177,7 +177,7 @@ python3 -m unittest discover -s tests -p 'test_panel_contrast.py' -v
 ```
 
 The audit derives **actual text foreground colors** from NanoVG
-`nvgRGB()` / `nvgText()` calls in all six module widgets, and reads SVG
+`nvgRGB()` / `nvgText()` calls in all seven module widgets, and reads SVG
 panel fill and decorative control-outline colors. It computes standard
 sRGB relative luminance and contrast ratios and flags measured swatches
 below **4.5:1** for small text and **3:1** for SVG control outlines as
@@ -209,11 +209,11 @@ not account for decorative circles, lines, shadows, Rack knobs, NanoVG
 antialiasing or an actual font glyph pixel; it is **not a measured local
 label contrast or a WCAG pass**.
 
-Across the five dark-gradient panels, the source palette bounds
+Across the six dark-gradient panels, the source palette bounds
 remain comfortably above the 4.5:1 text advisory. ClockedLFO has a
-separately inspected flat/layered SVG background; all **71 local source-label
-contrasts across the six panels remain UNKNOWN**, including Macro8's
-dynamic labels. The base-only bounds can be evaluated for 54 sites but
+separately inspected flat/layered SVG background; all **84 local source-label
+contrasts across the seven panels remain UNKNOWN**, including Macro8's
+dynamic labels. The base-only bounds can be evaluated for 67 sites but
 never establish the actual local pixel background. An
 invalid/missing stop, transparency, stylesheet or unsupported paint construct
 withholds the bound; a weak lower bound is **inconclusive**, not automatic
@@ -247,6 +247,7 @@ not on a recorded plugin-tooltip screenshot.
 | **Fold Drive** | DRIVE **0–100%** (30% default), BIAS **−100…+100%** (0% default), WET MIX **0–100%** (65% default); smooth ~3 ms control changes | IN nominal ±5 V; DRV/BIA/MIX CV each add **0.1 normalized units per volt**; OUT is clamped to ±10 V **per lane**, not summed host audio; sine fold is not bandlimited or oversampled |
 | **Macro8** | Eight macro positions show **0–100%**; snapshot transition time **0–5 s** represents **99.9% settling** | Each CV output selects **0 to +10 V** unipolar or **−5 to +5 V** bipolar; A–D buttons **store or recall according to mode**; LIVE returns to physical macro knobs |
 | **StereoEcho** | Echo time **1–1000 ms** (**250 ms** default); feedback **0–90%** (**35%** default); wet mix **0–100%** (**40%** default); ping-pong crossfeed **0–100%** (**50%** default) | Unpatched **right input uses left audio**; signed TIME CV adds **100 ms/V**, feedback and wet-mix CV add **0.1 normalized units (10 percentage points) per volt**; L/R outputs are mixed wet/dry audio |
+| **FMVoice** | Octave **−4 to +4**; fine tune **−100 to +100 cents**; carrier/modulator ratio **0.125–16×**; phase-modulation index **0–8 radians**; modulator feedback **0–95%** | Pitch CV **1 V/oct** (C4 at 0 V); ratio CV **+1 V doubles the ratio**; index CV adds **0.8 radians/V**; feedback CV adds **9.5 percentage points/V**; separate carrier FM and modulator sine audio outputs are nominally **±5 V**. The phase-modulation core is not bandlimited. |
 | **ClockedLFO** | Free-run rate **1/64–16 Hz** (**0.5 Hz** default); snapped clock ratios **1/4, 1/2, 1, 2 or 4** cycles per clock period (default **1**); output phase **0–100%**; pulse width **5–95%** | External **CLK** and **RESET** are rising-edge inputs (≥2 V, rearmed at ≤1 V); free RATE CV is **1 V/oct**; SIN/TRI/RAMP/PULSE are **±5 V**, EOC nominal **+10 V / 1 ms**. External pulses, not host BPM, govern tempo lock. |
 
 The percentages describe *control positions*, not linear acoustic
@@ -277,8 +278,8 @@ plugin loader/manifest registration. Its **16 HP x 3U**
 SVG uses a **240 x 380** viewBox; the C++ widget statically declares
 **4 centered controls**, **5 input jacks**, **2 output jacks**, and
 **13 `nvgText()` call sites**. At the four-model PR #41 snapshot, these
-augmented 31 earlier calls to **44**; the current **six-model** source
-audit checks **71** label calls after ClockedLFO and FoldDrive integration. Since the panel background and four
+augmented 31 earlier calls to **44**; the current **seven-model** source
+audit checks **84** label calls after FMVoice integration. Since the panel background and four
 knob-dial fills are gradients, those local contrasts remain **UNKNOWN**;
 none are promoted to a contrast pass by inspecting gradient stops.
 
@@ -309,3 +310,27 @@ python3 -m unittest discover -s tests -p 'test_panel_contrast.py' -v
 The checks do not render StereoEcho, prove jack hitboxes, or determine
 pixel contrast over its gradient panel. Runtime audio/host behavior is
 outside these static geometry and color tools.
+
+## 11. FMVoice manual host acceptance (NOT EXECUTED)
+
+FMVoice has a registered original **12 HP** source panel, five controls,
+four CV inputs and two audio outputs. Its two-operator phase-modulation
+engine has standalone C++ tests; this does not establish host audio quality,
+GUI alignment, real Rack-header compatibility or a published plugin binary.
+
+- [ ] Discover **FM Voice** exactly once in the **MODULAR-SYNTH Originals**
+  module browser. Verify the 12 HP artwork, five knobs, four CV inputs,
+  two output jacks and tooltip labels at normal and HiDPI zoom.
+- [ ] Open [FM Voice Performance](../patches/examples/MODULAR_-_FM_Voice_Performance.vcv)
+  in an actual fork build. Route HostMIDI pitch through FMVoice and the
+  bundled ADSR/VCA to HostAudio2. Verify key-on, note-off release and no
+  unintended stuck sound.
+- [ ] Exercise octave/fine, ratio, index and feedback knobs and each CV
+  input; compare to the source-defined scaling in the table above.
+  Record output level, high-register aliasing and audible clicks.
+- [ ] Test 1, 8 and 16 simultaneous MIDI voices, resets and sample rates
+  44.1/48/96 kHz; record CPU, summed headroom and a low-level audio sample.
+- [ ] Save and reopen a standalone patch and DAW session; verify parameter,
+  port, panel and cable state. Record build SHA, host version and screenshots.
+
+All items remain unverified pending a real host build and audition.
