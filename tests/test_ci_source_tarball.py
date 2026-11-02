@@ -5,6 +5,7 @@ evidence of any completed hosted build or downloadable release.
 """
 
 from pathlib import Path
+import json
 import re
 import shutil
 import subprocess
@@ -18,12 +19,20 @@ WORKFLOW = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
 MAKEFILE = (ROOT / "Makefile").read_text(encoding="utf-8")
 VERSION = re.search(r"(?m)^VERSION = (\S+)$", MAKEFILE).group(1)
 ARCHIVES = (f"cardinal-{VERSION}.tar.xz", f"cardinal+deps-{VERSION}.tar.xz")
+MANIFEST = json.loads(
+    (ROOT / "plugins/ModularSynth/plugin.json").read_text(encoding="utf-8")
+)
+MODULE_SLUGS = tuple(module["slug"] for module in MANIFEST["modules"])
 REQUIRED_FILES = (
     "LICENSE",
     "README.md",
     "Makefile",
     "plugins/ModularSynth/plugin.json",
-    "plugins/ModularSynth/src/MorphVCO.cpp",
+    "plugins/ModularSynth/src/plugin.hpp",
+) + tuple(
+    f"plugins/ModularSynth/{directory}/{slug}.{extension}"
+    for slug in MODULE_SLUGS
+    for directory, extension in (("src", "cpp"), ("src", "hpp"), ("res", "svg"))
 )
 
 
@@ -59,9 +68,21 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         self.assertIn('[[ ! -s "$archive" ]]', checker)
         self.assertIn('tar --lzma -tf "$archive"', checker)
         self.assertIn('root="cardinal-${version}"', checker)
-        for required in REQUIRED_FILES:
-            with self.subTest(required=required):
-                self.assertIn(f'required["{required}"]', checker)
+        self.assertIn('required["plugins/ModularSynth/src/plugin.hpp"]', checker)
+        self.assertEqual(len(MODULE_SLUGS), 7)
+        slug_list = re.search(
+            r'module_count = split\("([^"]+)", slugs, " "\)',
+            checker,
+        )
+        self.assertIsNotNone(slug_list)
+        self.assertEqual(set(slug_list.group(1).split()), set(MODULE_SLUGS))
+        self.assertEqual(len(slug_list.group(1).split()), len(MODULE_SLUGS))
+        for directory, extension in (("src", "cpp"), ("src", "hpp"), ("res", "svg")):
+            with self.subTest(extension=extension):
+                self.assertIn(
+                    f'required["plugins/ModularSynth/{directory}/" slugs[i] ".{extension}"]',
+                    checker,
+                )
         self.assertIn("Archive member escapes versioned root", checker)
 
     def test_tagged_upload_and_release_fail_on_unmatched_files(self) -> None:
@@ -120,15 +141,23 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         "GNU tar/LZMA/Bash unavailable for archive smoke test",
     )
     def test_validator_rejects_missing_first_party_source(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            project = Path(temp) / "checkout"
-            project.mkdir()
-            self._stage_source_members(project)
-            (project / "plugins/ModularSynth/src/MorphVCO.cpp").unlink()
-            self._create_archives(project)
-            result = self._run(project, VERSION)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("missing required member", result.stderr)
+        missing_cases = (
+            "plugins/ModularSynth/src/FMVoice.cpp",
+            "plugins/ModularSynth/src/StateFilter.hpp",
+            "plugins/ModularSynth/res/FMVoice.svg",
+        )
+        for missing in missing_cases:
+            with self.subTest(missing=missing):
+                with tempfile.TemporaryDirectory() as temp:
+                    project = Path(temp) / "checkout"
+                    project.mkdir()
+                    self._stage_source_members(project)
+                    (project / missing).unlink()
+                    self._create_archives(project)
+                    result = self._run(project, VERSION)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("missing required member", result.stderr)
+                    self.assertIn(missing, result.stderr)
 
     @unittest.skipUnless(
         shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
