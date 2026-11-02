@@ -25,6 +25,7 @@ from control_mapping import (
     CLOCKED_LFO_CONTRACT, FOLD_DRIVE_CONTRACT, MappingError,
     derive_control_mappings)
 from verified_routes import verified_routes_report
+from route_report import build_route_report, text_route_report
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -559,6 +560,12 @@ def main(argv: list[str] | None = None) -> int:
         help="source manifest v1 (default) or v2 with verified Macro8 cable mappings")
     info = subs.add_parser("inspect", help="validate and print an instrument manifest")
     info.add_argument("bundle", type=Path)
+    routes = subs.add_parser(
+        "routes", help="explain saved direct Macro8 cable routes in musician terms")
+    routes.add_argument("bundle", type=Path)
+    routes.add_argument(
+        "--json", action="store_true",
+        help="machine-readable source-only route report")
     extract = subs.add_parser("unpack", help="extract into a NEW directory only")
     extract.add_argument("bundle", type=Path)
     extract.add_argument("--out", required=True, type=Path)
@@ -591,6 +598,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "preview":
             preview(args.bundle, args.out)
             print(f"Generated static SVG preview {args.out}")
+        elif args.command == "routes":
+            report = build_route_report(inspect(args.bundle))
+            if args.json:
+                print(_canonical_json(report).decode("utf-8"), end="")
+            else:
+                print(text_route_report(report), end="")
         elif args.command == "check":
             report = check(
                 args.bundle, args.repo_root,
