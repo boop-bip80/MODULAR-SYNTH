@@ -165,6 +165,65 @@ def _insert_manifest(source: str, fragment: dict) -> str:
     return json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
 
 
+def _verify_existing_registration(makefile: str, loader: str, header: str,
+                                  manifest_text: str) -> None:
+    """Refuse to extend an already inconsistent first-party static collection.
+
+    File presence and individual insertion anchors are not enough: a missing
+    existing build source or C++ registration silently breaks patch loading.
+    This checks identifiers only, not C++ compilation or host behavior.
+    """
+    try:
+        manifest = json.loads(manifest_text)
+    except json.JSONDecodeError as exc:
+        raise IntegrationError(f"invalid existing ModularSynth manifest: {exc}") from exc
+    if not isinstance(manifest, dict) or manifest.get("slug") != "ModularSynth":
+        raise IntegrationError("expected a ModularSynth collection manifest")
+    modules = manifest.get("modules")
+    if not isinstance(modules, list) or not all(
+        isinstance(item, dict) and isinstance(item.get("slug"), str)
+        and item["slug"] for item in modules
+    ):
+        raise IntegrationError("manifest modules must have nonempty slugs")
+
+    make_slugs = re.findall(
+        r"(?m)^PLUGIN_FILES \+= ModularSynth/src/([A-Za-z0-9]+)\.cpp$",
+        makefile)
+    manifest_slugs = [item["slug"] for item in modules]
+    declarations = re.findall(
+        r"(?m)^extern Model\* (model[A-Za-z0-9_]+);$", header)
+
+    anchor = "static void initStatic__ModularSynth()"
+    if loader.count(anchor) != 1:
+        raise IntegrationError("expected exactly one ModularSynth loader function")
+    opening = loader.find("{", loader.index(anchor) + len(anchor))
+    if opening < 0:
+        raise IntegrationError("ModularSynth loader body is missing")
+    body = loader[opening + 1:_matching_brace(loader, opening)]
+    registrations = re.findall(
+        r"(?m)^[ \t]+p->addModel\((model[A-Za-z0-9_]+)\);$", body)
+
+    def unique(items: list[str], description: str) -> None:
+        if not items or len({item.casefold() for item in items}) != len(items):
+            raise IntegrationError(f"empty or duplicate existing {description}")
+
+    for items, description in (
+        (make_slugs, "Makefile source slugs"),
+        (manifest_slugs, "manifest module slugs"),
+        (declarations, "model declarations"),
+        (registrations, "model registrations"),
+    ):
+        unique(items, description)
+    if sorted(make_slugs) != sorted(manifest_slugs):
+        raise IntegrationError(
+            "existing ModularSynth Makefile/manifest source drift: "
+            f"Makefile={sorted(make_slugs)!r}; manifest={sorted(manifest_slugs)!r}")
+    if sorted(declarations) != sorted(registrations):
+        raise IntegrationError(
+            "existing ModularSynth header/loader model drift: "
+            f"declared={sorted(declarations)!r}; loaded={sorted(registrations)!r}")
+
+
 def integration_plan(module_dir: Path, repo_root: Path) -> list[FileEdit]:
     root = repo_root.resolve(strict=True)
     module = module_dir.resolve(strict=True)
@@ -219,6 +278,12 @@ def integration_plan(module_dir: Path, repo_root: Path) -> list[FileEdit]:
     originals: dict[str, tuple[Path, bytes, str]] = {
         relative: _read_checked(root, relative) for relative in REGISTRY_FILES
     }
+    _verify_existing_registration(
+        originals["plugins/Makefile"][2],
+        originals["plugins/plugins.cpp"][2],
+        originals["plugins/ModularSynth/src/plugin.hpp"][2],
+        originals["plugins/ModularSynth/plugin.json"][2],
+    )
     makefile = _insert_makefile(originals["plugins/Makefile"][2], slug)
     loader = _insert_registry(originals["plugins/plugins.cpp"][2], slug)
     header = _insert_header(

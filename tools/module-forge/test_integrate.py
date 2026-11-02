@@ -154,6 +154,40 @@ class IntegrationTests(unittest.TestCase):
                 integration_plan(module, root)
             self.assertEqual(registered_files(root), before)
 
+    def test_existing_manifest_makefile_drift_blocks_integration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary))
+            makefile = root / "plugins/Makefile"
+            makefile.write_text(makefile.read_text() +
+                                "PLUGIN_FILES += ModularSynth/src/GhostModule.cpp\n")
+            before = registered_files(root)
+            with self.assertRaisesRegex(IntegrationError, "Makefile/manifest source drift"):
+                integration_plan(module, root)
+            self.assertEqual(registered_files(root), before)
+
+    def test_existing_header_loader_drift_blocks_integration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary), LOADER_BRACED)
+            header = root / "plugins/ModularSynth/src/plugin.hpp"
+            header.write_text(header.read_text() + "extern Model* modelGhost;\n")
+            before = registered_files(root)
+            with self.assertRaisesRegex(IntegrationError, "header/loader model drift"):
+                integration_plan(module, root)
+            self.assertEqual(registered_files(root), before)
+
+    def test_duplicate_existing_loader_registration_blocks_integration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary), LOADER_BRACED)
+            loader = root / "plugins/plugins.cpp"
+            loader.write_text(loader.read_text().replace(
+                "        p->addModel(modelMorphVCO);",
+                "        p->addModel(modelMorphVCO);\n"
+                "        p->addModel(modelMorphVCO);"))
+            before = registered_files(root)
+            with self.assertRaisesRegex(IntegrationError, "duplicate existing model registrations"):
+                integration_plan(module, root)
+            self.assertEqual(registered_files(root), before)
+
     def test_generated_module_tampering_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, module = fixture_root(Path(temporary))

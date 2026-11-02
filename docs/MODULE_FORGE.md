@@ -179,6 +179,15 @@ compatibility before writing. It refuses to
 overwrite existing source, DSP header, or panel files and refuses changes to unsupported loader
 layouts. It never edits the upstream `plugins/Cardinal` collection.
 
+Before planning edits, the integrator also checks **existing static collection
+consistency**: the current `PLUGIN_FILES` source slugs must match the
+`plugin.json` module slugs, and `plugin.hpp` model declarations must match
+`initStatic__ModularSynth()` registrations, with no duplicates. If an earlier
+manual integration left these out of sync, fix that source/manifest mismatch
+first; Module Forge refuses to layer another module over it. This is a
+source-level integrity check, **not** proof of a successful linked build,
+GUI compilation, plugin load, or DAW audio.
+
 On `--apply`, all replacement content is staged first, then published one
 file at a time. Original registry files are backed up during the transaction.
 If publication fails, the tool attempts to restore every completed edit and
