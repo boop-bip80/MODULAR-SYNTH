@@ -1,8 +1,8 @@
-# Offline MorphVCO → StateFilter render
+# Offline MorphVCO → StateFilter render (optional StereoEcho)
 
 This standalone tool renders a **four-second, original sixteen-note stereo arpeggio** through the real first-party [MorphVCO](../plugins/ModularSynth/src/MorphVCO.hpp) and [StateFilter](../plugins/ModularSynth/src/StateFilter.hpp) pure DSP headers. It is a reproducible audio-regression artifact and a short demonstration of those cores, **not** a Cardinal/Rack plugin build or a host-render fidelity claim.
 
-No Rack SDK, audio device, package downloads, external C++ libraries, or generated WAVs in Git are needed.
+No Rack SDK, audio device, package downloads, external C++ libraries, or generated WAVs in Git are needed. The optional post-filter effect calls the actual first-party [StereoEchoDSP](../plugins/ModularSynth/src/StereoEcho.hpp) code; no imitation delay algorithm is used.
 
 ## Build and render
 
@@ -14,9 +14,13 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -I . \
 
 /tmp/morph_filter_render --sample-rate 48000 \
   --output /tmp/modular-synth-morph-filter-48000.wav
+
+# Optional stereo-delay audition, same duration and file format:
+/tmp/morph_filter_render --sample-rate 48000 --with-stereo-echo \
+  --output /tmp/modular-synth-morph-filter-echo-48000.wav
 ~~~
 
-The CLI supports --sample-rate 44100, 48000 (default), or 96000. It requires `--output PATH` (use a `.wav` filename by convention); `--help` shows usage. To protect existing recordings, it checks for an existing output file **or symlink (including a dangling symlink)** and refuses the write. This is a preflight check, **not an atomic guarantee** against a concurrent writer replacing the path between inspection and opening. Give each render a fresh filename in a private output directory.
+The CLI supports `--sample-rate` 44100, 48000 (default), or 96000, and optional `--with-stereo-echo` (off by default). It requires `--output PATH` (use a `.wav` filename by convention); `--help` shows usage. Its status line reports `echo=off` or `echo=on` and the PCM data checksum. To protect existing recordings, it checks for an existing output file **or symlink (including a dangling symlink)** and refuses the write. This is a preflight check, **not an atomic guarantee** against a concurrent writer replacing the path between inspection and opening. Give each render a fresh filename in a private output directory.
 
 The result is standard **stereo PCM16 little-endian WAV**, exactly four seconds long:
 
@@ -33,6 +37,7 @@ The program streams two samples per frame directly to disk, so it does not alloc
 - One phase-continuous MorphVCO follows the original sixteen-step pitch sequence. Morph and pulse width evolve smoothly throughout the phrase.
 - A second MorphVCO supplies a lower voice. Each goes into an independent real StateFilter DSP core with animated cutoff and modest resonance/drive.
 - Each quarter-second note has short attack/release shaping to reduce transition clicks. Left/right mixes use different amounts of low-pass and band-pass output.
+- Optional StereoEcho post-filter stereo delay: **187.5 ms** fixed time, **32%** feedback, **35%** wet, **70%** crossfeed. Each stereo sample is converted from normalized WAV amplitude to the DSP's ±5 V convention, passed through the same original StereoEcho DSP used by the Rack module, then converted back. The echo rings allocate once only when enabled, not per sample. The fixed **four-second** WAV can truncate the last echo tails; this is not tempo/BPM synchronization.
 - Before PCM conversion, every sample is checked with the existing bitwise IEEE-754 finite guard (robust even with strict -ffast-math) and limited to **±0.75 full scale** to provide headroom.
 
 The DSP is intentionally single-rate: **polyBLEP does not eliminate all oscillator aliasing**, and nonlinear drive has no oversampling. This is a functional sound/regression fixture, not a mastered release.
@@ -43,19 +48,20 @@ The DSP is intentionally single-rate: **polyBLEP does not eliminate all oscillat
 python3 -m unittest discover -s tests -p test_audio_render.py -v
 ~~~
 
-The test uses only Python's standard library, a local C++17 compiler and the two in-tree DSP headers. It builds both a normal -O2 and an aggressive -O3 -ffast-math renderer in a temporary directory, then checks:
+The test uses only Python's standard library, a local C++17 compiler and the three in-tree DSP headers. It builds both a normal -O2 and an aggressive -O3 -ffast-math renderer in a temporary directory, then checks:
 
 1. **44.1, 48 and 96 kHz**: exact RIFF/PCM16 layout, 2 channels, four-second length, finite/active audio, evolving stereo, peak below 75% FS and healthy non-silent RMS.
 2. Repeat each rate with the same executable: **byte-identical SHA-256** of the whole WAV, FNV-1a of PCM bytes equal to the renderer's own report, and different checksums across rates.
 3. Every quarter-second note has non-silent PCM energy, the sixteen-note phrase varies dynamically, and note boundaries have no large discontinuities.
 4. Existing files and dangling symlink outputs are rejected; the symlink test skips only where creating test symlinks is unsupported.
-5. Strict fast-math 48 kHz render and basic CLI validation, including refusing to overwrite an existing file.
+5. Strict fast-math 48 kHz dry and optional echo renders and basic CLI validation, including refusing to overwrite an existing file.
+6. Optional echo at **44.1/48/96 kHz**: repeat-run WAV/checksum identity and distinct dry versus delayed output. Before the first 187.5 ms tap, the output must equal the expected 65% dry signal (within PCM quantization tolerance); later, delayed energy must appear.
 
 All generated files live inside Python's temporary directory and are discarded after the tests. They should **not be committed to the repository**; a CI workflow may attach an example WAV as an ephemeral artifact in the future.
 
 ### Measured reference (GCC 13.3, x86-64, 2026-11-01)
 
-The standalone renderer compiled and executed at -O2 -Werror -pedantic and -O3 -ffast-math -Werror using the merged MorphVCO/StateFilter headers. Both profiles produced these same PCM checksums in this environment:
+The original dry/default standalone renderer compiled and executed at -O2 -Werror -pedantic and -O3 -ffast-math -Werror using the merged MorphVCO/StateFilter headers. Both profiles produced these PCM checksums in that historical environment. The optional echo mode was not part of this reference measurement:
 
 | Rate | Normalized peak | RMS | PCM FNV-1a 64-bit |
 | --- | ---: | ---: | --- |
