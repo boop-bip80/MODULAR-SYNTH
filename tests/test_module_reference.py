@@ -244,7 +244,7 @@ class ModuleQuickReferenceTests(unittest.TestCase):
             "MODULAR_-_Echo_Motion_Performance.vcv)", self.document
         )
         self.assertIn("Macro8 A–D", self.document)
-        self.assertIn("remaining eleven", self.document)
+        self.assertIn("the other examples accept MIDI notes", self.document)
 
     def test_documented_factory_menu_matches_actual_source_label(self) -> None:
         menu = (ROOT / "src/override/MenuBar.cpp").read_text(encoding="utf-8")
