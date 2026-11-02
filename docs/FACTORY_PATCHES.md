@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Factory Patches — original examples
 
-These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `Macro8`, `StereoEcho` `ClockedLFO` and `FMVoice` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
+These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `Macro8`, `StereoEcho`, `ClockedLFO` and `FMVoice` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
 
 | Patch | Purpose | Interaction |
 | --- | --- | --- |
@@ -55,6 +55,7 @@ The original three patches were initially parsed as JSON and checked for:
 - Granular Veil: sustained MIDI notes produce a textured stereo signal and stop after release and grain tails.
 - Clockwork Pulses: host play/stop behavior follows the DAW transport; its sequence sounds through both outputs.
 - Morph VCO Performance: keyboard pitch and note gate control the single Morph VCO through ADSR/VCA.
+- FM Voice Performance: MIDI pitch drives the two-operator FMVoice while a bundled ADSR/VCA handles note-on/off amplitude. Check 1/8/16 voices, ratio/index/feedback changes, high-register aliasing and low-level output before signing off; **host listening is not yet done**.
 - Morphing State Pad: macro Shape/Resonance/Drive controls and A/B snapshots affect timbre without unexpected gain jumps.
 - Cinematic Drift Pad and Rhythmic Grit Bass: confirm bipolar cutoff CV, four macro routes and documented 4.0/0.20-second snapshot morph settings.
 - Polyphonic Motion Pad: hold 2, 4 and 8 simultaneous MIDI notes; check each pitch follows its own channel, releases independently and filter cutoff keytracks each note. Check four Macro8 A-D recalls, output gain, and audible clipping.
