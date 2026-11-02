@@ -12,12 +12,14 @@ collection.
 
 - **`--kind oscillator` (default, unchanged):** a four-file, 16-voice sine
   oscillator with one 1 V/oct pitch input, continuous phase, reset, and
-  bounded frequency across host sample-rate changes.
+  bounded frequency across host sample-rate changes. Channels retired on
+  polyphony contraction reset their phase so a later voice starts cleanly.
 - **`--kind effect`:** a five-file stereo, 16-voice TPT one-pole low-pass
   effect with left/right audio inputs and outputs, right-input normalled
   from left, and 1 V/oct cutoff CV. Its generated `<Slug>.dsp.hpp` is a
   Rack-independent, standard-library-only DSP core; `<Slug>.cpp` supplies
-  Rack module metadata and GUI/headless widgets.
+  Rack module metadata and GUI/headless widgets. When polyphony contracts,
+  both filter states for retired channels are cleared before reuse.
 - Both generate an SVG panel, **single-module JSON manifest fragment**, and
   `INTEGRATION.md` outlining the exact first-party build/registration edits.
 
@@ -99,7 +101,8 @@ It also compiles and executes a program including both generated wrappers and
 the stereo effect's Rack-free DSP header. This checks exported model symbols,
 parameter and CV/audio port cardinality, sample processing, two-voice 1 V/oct
 pitch tracking, stereo right-input normalled from left, independent stereo
-inputs, polyphony, resets, nonfinite audio/CV and invalid sample-rate fallback.
+inputs, polyphony contraction/expansion with retired oscillator/filter state,
+resets, nonfinite audio/CV and invalid sample-rate fallback.
 The C++ probe runs under ordinary `-O2`, production-style
 `-O2 -ffast-math -fno-finite-math-only`, and strict `-O2 -ffast-math`;
 the oscillator uses the same IEEE-754 bitwise finite guard as the effect core.
