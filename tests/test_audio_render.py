@@ -32,18 +32,19 @@ def fnv1a64(data: bytes) -> str:
     return f"{value:016x}"
 
 
-def inspect_wav(path: Path, rate: int) -> tuple[str, float, float]:
+def inspect_wav(path: Path, rate: int, tail_seconds: int = 0) -> tuple[str, float, float]:
     """Check PCM shape, amplitude, channel activity and return its digest."""
     with wave.open(str(path), "rb") as wav:
         if wav.getnchannels() != 2 or wav.getsampwidth() != 2:
             raise AssertionError("render must be stereo PCM16")
-        if wav.getframerate() != rate or wav.getnframes() != rate * SECONDS:
-            raise AssertionError("sample rate or exact 4-second length is wrong")
+        if (wav.getframerate() != rate
+                or wav.getnframes() != rate * (SECONDS + tail_seconds)):
+            raise AssertionError("sample rate or requested duration is wrong")
         if wav.getcomptype() != "NONE":
             raise AssertionError("WAV must be uncompressed")
         frames = wav.readframes(wav.getnframes())
 
-    expected_bytes = rate * SECONDS * 2 * 2
+    expected_bytes = rate * (SECONDS + tail_seconds) * 2 * 2
     if len(frames) != expected_bytes or path.stat().st_size != 44 + expected_bytes:
         raise AssertionError("RIFF/PCM data length mismatch")
 
@@ -105,22 +106,25 @@ class AudioRenderTest(unittest.TestCase):
         cls.temp.cleanup()
 
     def render(self, profile: str, rate: int, name: str,
-               echo: bool = False) -> tuple[Path, str, float, float]:
+               echo: bool = False, tail_seconds: int = 0
+               ) -> tuple[Path, str, float, float]:
         output = self.directory / name
         command = [
             str(self.binaries[profile]), "--sample-rate", str(rate),
             "--output", str(output),
             *(("--with-stereo-echo",) if echo else ()),
+            *(("--tail-seconds", str(tail_seconds)) if tail_seconds else ()),
         ]
         result = subprocess.run(command, text=True, capture_output=True,
                                 check=False, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(f"rate={rate}", result.stdout)
-        self.assertIn(f"frames={rate * SECONDS}", result.stdout)
+        self.assertIn(f"frames={rate * (SECONDS + tail_seconds)}", result.stdout)
         self.assertIn("echo=on" if echo else "echo=off", result.stdout)
+        self.assertIn(f"tail_seconds={tail_seconds}", result.stdout)
         reported = re.search(r"pcm_fnv1a64=([0-9a-f]{16})", result.stdout)
         self.assertIsNotNone(reported, result.stdout)
-        fnv, peak, rms = inspect_wav(output, rate)
+        fnv, peak, rms = inspect_wav(output, rate, tail_seconds)
         self.assertEqual(reported.group(1), fnv, "program/PCM checksum disagreement")
         return output, fnv, peak, rms
 
@@ -220,10 +224,57 @@ class AudioRenderTest(unittest.TestCase):
                                     wet_pcm[2 * begin:2 * end]))
                 self.assertGreater(delayed_error, 80.0)
 
+    def test_optional_echo_tail_preserves_original_audio_and_decays(self) -> None:
+        # Extended files must preserve the exact 4-second default PCM prefix.
+        # Tail frames are generated only by flushing the actual StereoEchoDSP
+        # feedback rings with silence, without another musical note.
+        for rate in RATES:
+            with self.subTest(sample_rate=rate):
+                baseline, baseline_hash, _, _ = self.render(
+                    "normal", rate, f"tail-base-{rate}.wav", echo=True)
+                with wave.open(str(baseline), "rb") as wav:
+                    original_pcm = wav.readframes(wav.getnframes())
+
+                for seconds in (1, 2):
+                    with self.subTest(tail_seconds=seconds):
+                        extended, full_hash, _, _ = self.render(
+                            "normal", rate, f"tail-{rate}-{seconds}.wav",
+                            echo=True, tail_seconds=seconds)
+                        repeated, again_hash, _, _ = self.render(
+                            "normal", rate, f"tail-repeat-{rate}-{seconds}.wav",
+                            echo=True, tail_seconds=seconds)
+                        self.assertNotEqual(full_hash, baseline_hash)
+                        self.assertEqual(full_hash, again_hash)
+                        self.assertEqual(
+                            hashlib.sha256(extended.read_bytes()).digest(),
+                            hashlib.sha256(repeated.read_bytes()).digest())
+                        with wave.open(str(extended), "rb") as wav:
+                            self.assertEqual(
+                                wav.getnframes(), rate * (SECONDS + seconds))
+                            payload = wav.readframes(wav.getnframes())
+                        self.assertEqual(payload[:len(original_pcm)], original_pcm)
+                        tail = array.array("h", payload[len(original_pcm):])
+                        if sys.byteorder != "little":
+                            tail.byteswap()
+                        early = tail[:2 * (rate // 4)]
+                        self.assertGreater(max(map(abs, early)), 8)
+                        if seconds == 2:
+                            ending = tail[-2 * (rate // 4):]
+                            self.assertLess(
+                                max(map(abs, ending)),
+                                max(map(abs, early)) * 0.1)
+
     def test_optional_stereo_echo_aggressive_fastmath(self) -> None:
         _, checksum, peak, rms = self.render(
             "aggressive-fastmath", 48000, "fastmath-echo-48000.wav",
             echo=True)
+        self.assertRegex(checksum, r"^[0-9a-f]{16}$")
+        self.assertGreater(peak, 0.15)
+        self.assertGreater(rms, 0.02)
+        # Long feedback flushing must also remain finite under -ffast-math.
+        _, checksum, peak, rms = self.render(
+            "aggressive-fastmath", 48000, "fastmath-echo-tail-48000.wav",
+            echo=True, tail_seconds=2)
         self.assertRegex(checksum, r"^[0-9a-f]{16}$")
         self.assertGreater(peak, 0.15)
         self.assertGreater(rms, 0.02)
@@ -252,8 +303,16 @@ class AudioRenderTest(unittest.TestCase):
         self.assertEqual(help_result.returncode, 0)
         self.assertIn("Usage:", help_result.stdout)
         self.assertIn("--with-stereo-echo", help_result.stdout)
+        self.assertIn("--tail-seconds", help_result.stdout)
         for args in ([], ["--sample-rate", "12345", "--output", "invalid.wav"],
-                     ["--output"], ["--unknown"]):
+                     ["--output"], ["--unknown"],
+                     ["--tail-seconds", "1", "--output", "invalid.wav"],
+                     ["--tail-seconds", "-1", "--with-stereo-echo",
+                      "--output", "invalid.wav"],
+                     ["--tail-seconds", "3", "--with-stereo-echo",
+                      "--output", "invalid.wav"],
+                     ["--tail-seconds", "1.5", "--with-stereo-echo",
+                      "--output", "invalid.wav"]):
             with self.subTest(args=args):
                 result = subprocess.run([binary, *args], capture_output=True,
                                         text=True, timeout=10)
