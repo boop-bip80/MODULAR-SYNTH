@@ -1,7 +1,7 @@
 # Module Forge — first-party oscillator and effect scaffolding
 
-**Status:** developer tooling with oscillator (sine or opt-in polyBLEP saw)
-and stereo low-pass effect starters, not a live module forge. This is not yet an
+**Status:** developer tooling with oscillator (sine, opt-in polyBLEP saw or
+opt-in polyBLEP pulse) and stereo low-pass effect starters, not a live module forge. This is not yet an
 in-app source editor, just-in-time DSP compiler, module hot loader, or standalone
 plugin exporter. The separate `plugins/ModularSynth` collection is the home
 for original modules; it is distinct from the upstream `plugins/Cardinal`
@@ -21,6 +21,11 @@ collection.
   manifest description identifies the saw, and the SVG says **SAW OUT**.
   polyBLEP reduces discontinuity aliases; it does not eliminate them or
   imply professional spectral certification.
+- **`--kind oscillator --waveform pulse` (opt-in):** a fixed 50% duty-cycle,
+  16-voice ±5 V nominal pulse, using independent polyBLEP corrections on its
+  rising and falling edges. It retains the default pitch/CV port indices,
+  reset semantics and voice-retirement behavior; its SVG says **PULSE OUT**.
+  This is a musical starter, not an alias-free pulse oscillator or a PWM module.
 - **`--kind effect`:** a five-file stereo, 16-voice TPT one-pole low-pass
   effect with left/right audio inputs and outputs, right-input normalled
   from left, and 1 V/oct cutoff CV. Its generated `<Slug>.dsp.hpp` is a
@@ -65,11 +70,21 @@ python3 tools/module-forge/module_forge.py new \
 python3 tools/module-forge/module_forge.py check module-forge-output/ForgeSaw
 ```
 
+Generate the additional fixed-duty pulse starter:
+
+```bash
+python3 tools/module-forge/module_forge.py new \
+    --kind oscillator --waveform pulse \
+    --slug ForgePulse --name "Forge Pulse" --out module-forge-output
+python3 tools/module-forge/module_forge.py check module-forge-output/ForgePulse
+```
+
 The outputs will be `module-forge-output/OrbitSine/` and
 `module-forge-output/StereoTPT/` for the initial examples, and
-`module-forge-output/ForgeSaw/` for the opt-in saw. With no waveform option,
+`module-forge-output/ForgeSaw/` and `module-forge-output/ForgePulse/` for the
+opt-in polyBLEP waveforms. With no waveform option,
 the generator's sine files and manifest remain byte-for-byte unchanged.
-`--waveform saw` is rejected for `--kind effect`. Read each generated
+`--waveform saw` and `--waveform pulse` are rejected for `--kind effect`. Read each generated
 `INTEGRATION.md` **before** moving source/artwork into
 `plugins/ModularSynth` or registering the model in the static loader.
 Generated sources are not automatically built or installed.
@@ -86,7 +101,7 @@ python3 -m unittest discover -s tools/module-forge \
     -p "test_*.py" -v
 ```
 
-Tests cover both deterministic variants, backward-compatible default oscillator
+Tests cover both original starter kinds and the opt-in waveforms, backward-compatible default oscillator
 output, manifest and port metadata, C++ model/panel/DSP header references,
 refusal to overwrite user-edited files, and invalid identifiers. Integration
 fixtures exercise ordinary and effect dry-runs and applies, header collisions,
@@ -100,6 +115,13 @@ and strict fast-math compiler profiles. A coherent-bin 48 kHz test near
 8 dB reduction. It also checks finite/bounded audio, port counts and voice
 retirement after polyphony contraction. This is a limited synthetic
 source test, **not** an exhaustive alias/CPU study or host audition.
+`test_generated_pulse.py` also compiles and executes the *actual generated*
+fixed-duty pulse under those three compiler modes. It checks both discontinuity
+corrections, Rack-shim port and polyphony behavior, bitwise finite guards,
+invalid sample-rate fallback, and at least 8 dB lower aggregate folded odd
+harmonic (3, 5, 7, 9) energy than an uncorrected 9.28 kHz square wave using
+the same oscillator phase. These are isolated source and spectral tests, not
+measurements from a loadable plugin, and they do not prove alias-free audio.
 
 When a C++ compiler is available, `test_effect_core.py` also builds and
 executes a standalone C++17 probe against the generated Rack-free filter header:
@@ -156,8 +178,8 @@ shipping.
 
 ### Fresh generated modules against pinned real Rack headers
 
-A separate Linux/HEADLESS compatibility gate generates all three oscillator
-waveform/effect variants (sine, opt-in polyBLEP saw and stereo TPT low-pass)
+A separate Linux/HEADLESS compatibility gate generates all four oscillator
+waveform/effect variants (sine, opt-in polyBLEP saw, opt-in polyBLEP pulse and stereo TPT low-pass)
 into a temporary directory, validates each output, and syntax-checks each
 actual `.cpp` against the **real pinned Rack/DPF/Jansson headers**. It shares
 the exact Gitlink/dependency preflight and Cardinal C++ definitions of
@@ -176,11 +198,12 @@ python3 -B tools/module-forge/check_real_generated_headers.py
 The dedicated
 [`Module Forge pinned Rack header syntax`](../.github/workflows/module-forge-real-headers.yml)
 workflow runs this gate and its fail-closed orchestration unit tests on relevant
-changes. A successful hosted run means **the default sine oscillator, opt-in
-polyBLEP saw, and stereo TPT effect HEADLESS translation units compile at the
+changes. A successful hosted run means **the default sine oscillator, both
+opt-in polyBLEP waveforms, and stereo TPT effect HEADLESS translation units compile at the
 C++ syntax/API layer** against that pinned SDK. The orchestration tests verify
-that the saw source actually contains the BLEP correction, reject tampered
-generated saw output before compilation, and fail if the saw compiler step fails.
+that the saw and pulse sources contain their respective BLEP corrections,
+reject tampered generated outputs before compilation, and fail if either
+waveform's compiler step fails.
 These mocked orchestration tests alone are **not** a real SDK compile; the separate
 hosted gate must complete successfully to establish that evidence. It does not link Cardinal,
 compile the non-HEADLESS UI widgets, validate GUI resources, instantiate a
