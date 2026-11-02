@@ -52,6 +52,49 @@ are embedded. ZIP entries are stored uncompressed with a fixed 1980-01-01
 timestamp, regular-file permissions and fixed ordering. Packing the same patch
 bytes with the same instrument name produces **byte-identical bundles**.
 
+### Compare two saved instrument revisions (source-only)
+
+The `diff` command compares **two independently validated** `.msinstrument`
+archives before printing a report. It is useful for reviewing saved performance
+changes before replacing a preset or sharing a patch with collaborators:
+
+```bash
+python3 tools/instrument-builder/instrument_builder.py diff \
+  Old_Pad.msinstrument New_Pad.msinstrument
+
+# Deterministic JSON, suitable for review automation:
+python3 tools/instrument-builder/instrument_builder.py diff \
+  Old_Pad.msinstrument New_Pad.msinstrument --json
+
+# Optional CI gate: status 1 if saved semantic state changed:
+python3 tools/instrument-builder/instrument_builder.py diff \
+  Old_Pad.msinstrument New_Pad.msinstrument --fail-on-change
+```
+
+It checks both source ZIPs, SHA-256, full patch schemas, Macro8 state and
+manifest-to-patch consistency first. No file is written or migrated. The
+machine-readable comparison tracks the instrument name, format version,
+historical mapping-contract marker, top-level patch metadata, modules and
+cables by **stable saved Rack IDs**, plus changed Macro8 controls and A–D
+scenes. This catches patch rewiring, renamed macros, changed live values,
+snapshot adjustments and state/format changes without relying on JSON array
+order. Added, removed and modified IDs are sorted reproducibly.
+
+A patch JSON whitespace or array-order rewrite is identified separately as
+`sourcePatchBytesChanged`, but is **not** treated as a semantic change if
+the saved objects and metadata are equivalent. Ordinary `diff` returns
+**0** for two valid inputs, whether different or identical. The optional
+`--fail-on-change` returns **1** when saved semantic state differs; **2**
+means either archive could not be read or verified. The default text output
+keeps the saved-ID details compact; use `--json` for exact ID lists.
+
+This comparison never upgrades older v1 or historical v2 route contracts.
+A changed mapping-contract marker is reported as an **interpretation**
+difference, not evidence of a newly working CV route. Both archives may
+still fail to load in Cardinal or a DAW, require external samples/plugins,
+or behave differently at runtime: no audio, MIDI, automation, CPU, live
+state-restoration or plugin execution is tested.
+
 ### Manifest schema v1
 
 The manifest has `format: "modular-synth-source-instrument"`,

@@ -27,6 +27,7 @@ from control_mapping import (
 from verified_routes import verified_routes_report
 from route_report import build_route_report, text_route_report
 from control_report import build_control_report, text_control_report
+from instrument_diff import compare_verified_bundles, text_diff_report
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -572,6 +573,19 @@ def check(bundle_path: Path, repo_root: Path | None = None, *,
         raise InstrumentError(f"compatibility preflight: {exc}") from exc
 
 
+def compare_bundles(previous_path: Path, current_path: Path) -> dict:
+    """Compare two independently validated saved instruments without writing."""
+    verified = []
+    for path in (previous_path, current_path):
+        if path.suffix.lower() != ".msinstrument":
+            raise InstrumentError("source bundle must end with .msinstrument")
+        blob = _read_limited(path, MAX_BUNDLE_BYTES, "instrument bundle")
+        verified.append(read_bundle(blob))
+    (old_manifest, old_patch), (new_manifest, new_patch) = verified
+    return compare_verified_bundles(
+        old_manifest, old_patch, new_manifest, new_patch)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest="command", required=True)
@@ -597,6 +611,14 @@ def main(argv: list[str] | None = None) -> int:
     controls.add_argument(
         "--json", action="store_true",
         help="deterministic source-only saved performance inventory")
+    difference = subs.add_parser(
+        "diff", help="compare validated saved patch, Macro8 and routing state")
+    difference.add_argument("old_bundle", type=Path)
+    difference.add_argument("new_bundle", type=Path)
+    difference.add_argument("--json", action="store_true",
+                            help="deterministic structured source-only comparison")
+    difference.add_argument("--fail-on-change", action="store_true",
+                            help="exit 1 on saved semantic changes (for CI)")
     extract = subs.add_parser("unpack", help="extract into a NEW directory only")
     extract.add_argument("bundle", type=Path)
     extract.add_argument("--out", required=True, type=Path)
@@ -647,6 +669,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(_canonical_json(report).decode("utf-8"), end="")
             else:
                 print(text_control_report(report), end="")
+        elif args.command == "diff":
+            report = compare_bundles(args.old_bundle, args.new_bundle)
+            if args.json:
+                print(_canonical_json(report).decode("utf-8"), end="")
+            else:
+                print(text_diff_report(report), end="")
+            return 1 if args.fail_on_change and report["changed"] else 0
         elif args.command == "check":
             report = check(
                 args.bundle, args.repo_root,
