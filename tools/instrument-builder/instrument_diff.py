@@ -78,7 +78,8 @@ def compare_verified_bundles(
     patch_metadata_changed = sorted(
         field for field in before.keys() | after.keys()
         if field not in ("modules", "cables")
-        and before.get(field) != after.get(field))
+        and ((field in before) != (field in after)
+             or before.get(field) != after.get(field)))
     old_macros = _by_id(old_manifest["performance"]["macro8"])
     new_macros = _by_id(new_manifest["performance"]["macro8"])
     macro_ids = _delta(old_macros, new_macros)
