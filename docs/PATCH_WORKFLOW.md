@@ -245,3 +245,47 @@ criteria only: a route through a third-party VCA, through CV/gate inputs, or
 into a muted processor still qualifies, and there is **no claim of audio
 continuity, audibility, waveform validity or DAW behavior**. A disconnected
 voice can also be an intentional patching choice.
+
+
+### Source-verified signal-port chain audit (opt in)
+
+The existing `--require-generator-route` gate deliberately accepts **any**
+directed module-level path, including a synthesizer patched solely to a filter's
+cutoff CV jack. For a stricter preflight when building *all-first-party*
+signal chains, the audit now distinguishes:
+
+- `source_verified_signal_routes`: a MorphVCO/FMVoice output reaches a
+  HostAudio2 input directly or via **source-declared signal ports** on
+  StateFilter, FoldDrive, StereoEcho and DualVCA. DualVCA A/B inputs
+  reach only their matching lane output and SUM output, never each other's
+  lane. Each record includes the host jack and
+  deterministic `via_module_ids` path. Input/output enum identities and counts
+  are checked against the pinned C++ sources; a changed contract becomes
+  **unverified**, never silently accepted.
+- `unverified_first_party_signal_routes`: a generator has a directed host
+  cable path, but no such source-verified signal-port path. Examples include
+  filter cutoff CV used as the only input, CV-controlled echo time only, or a
+  third-party VCA/mixer whose port semantics are outside this source checker.
+  This is a *review-needed* classification, not proof the patch is silent.
+- `unrouted_first_party_generators`: no directed cable route at all, as before.
+
+To see the strict gate identify an opaque third-party processing hop in a
+committed example (expected exit **1**), run:
+
+```sh
+python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_FM_Voice_Performance.vcv --require-source-verified-signal-route --json
+```
+
+This FMVoice factory patch routes through a Fundamental/VCA-1 module whose
+input/output semantics are not source-verified by this checker; it can still be
+musically valid. Use the strict flag as a passing CI gate only on patches built
+entirely from the checked first-party audio-chain modules above; after the
+  DualVCA patch is integrated, its matching A/B-to-output chain qualifies.
+
+The exit status is **1** if any source-verified first-party generator lacks
+the conservative signal-port chain or the HostAudio2 source contract cannot
+be verified; invalid patch structure still exits **2**. Without this flag,
+the reports remain advisory and compatibility with third-party-driven patches
+is preserved. The gate checks *potential wiring only*: internal gain settings,
+muting, sample rates, channel/polyphony behavior, audible output, host binaries,
+and DAW save/reopen remain untested.
