@@ -55,7 +55,9 @@ sinc(z)     = sin(z)/z, with sinc(0) = 1
 The implementation uses a small-argument polynomial for `sinc` to avoid
 division by tiny values. First process/reset samples use `p = x`, so they
 retain the original stationary transfer. Every sample updates `p` even while
-dry, keeping history current for later wet automation. The input is clamped
+dry, keeping history current for later wet automation. A dedicated regression
+checks exact dry output, CV-slewed wet reopening against the last dry sample,
+and fresh stationary transfer after reset. The input is clamped
 to ±10 V. `d`, `b` and `m` are the smoothed settings, not instantaneous CV
 values. At DRIVE=0 the
 transfer is dry, and at MIX=0 the output is dry regardless of drive/bias.
@@ -105,9 +107,11 @@ elsewhere but are not independently certified by the generic inspector.
   **Host CPU has not been benchmarked**, and 16-channel performance remains
   an explicit acceptance gate.
 - **Aliasing:** First-order ADAA reduces *some* folding aliases without
-  oversampling, but **does not bandlimit the output**. It trades a small
-  frequency- and signal-dependent phase/timbre change in the folded signal
-  for less foldback. In a deterministic 3 V sine benchmark, DRIVE=50%, MIX=100%,
+  oversampling, but **does not bandlimit the output**. It adds history to
+  the folded component (roughly a half-sample phase lag for slowly varying
+  signals), while the dry component remains undelayed; wet/dry blends can
+  therefore change timbre appreciably at higher pitches. The tradeoff is
+  reduced foldback in some cases, not universally better sound. In a deterministic 3 V sine benchmark, DRIVE=50%, MIX=100%,
   BIAS=0, odd-harmonic alias bins 3/5/7/9 are evaluated using coherent
   4096-frame DFT measurements. At **8.1 kHz/44.1 kHz** and **8.8 kHz/48 kHz**
   the selected summed alias-bin power decreases **8.18 dB**, with an

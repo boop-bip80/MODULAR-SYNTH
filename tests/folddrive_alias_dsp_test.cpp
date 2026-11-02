@@ -110,10 +110,57 @@ void checkConstantInputExactness() {
                 "steady/first-sample transfer matches un-antialiased transfer");
     }
 }
+// A dry-only passage must still update the ADAA input history. Otherwise
+// the first CV-slewed wet sample incorrectly averages against stale audio.
+void checkDryReopenHistory() {
+    constexpr double rate = 48000.0;
+    constexpr double drive = 0.8;
+    constexpr double bias = 0.31;
+    constexpr double nextInput = 3.1;
+    FoldDrive voice;
+
+    require(voice.process(5.0, rate, drive, bias, 0.0) == 5.0f,
+            "initial MIX=0 must remain exactly dry");
+    require(voice.process(-5.0, rate, drive, bias, 0.0) == -5.0f,
+            "changing MIX=0 audio must remain exactly dry");
+
+    const double x = nextInput / 5.0;
+    const double previous = -1.0;  // Most recent dry sample: -5 V.
+    const double gain = FoldDrive::kHalfPi * (1.0 + 8.0 * drive * drive);
+    const double phase = FoldDrive::kHalfPi * bias;
+    const double wetAlpha = 1.0 / (FoldDrive::kSmoothingSeconds * rate);
+    const auto expectedWithPrevious = [&](double prior) {
+        const double halfDelta = 0.5 * gain * (x - prior);
+        const double sinc = std::sin(halfDelta) / halfDelta;
+        const double folded = std::sin(0.5 * gain * (x + prior) + phase)
+                            * sinc - std::sin(phase);
+        const double shaped = x + drive * (folded - x);
+        return nextInput + wetAlpha * (5.0 * shaped - nextInput);
+    };
+
+    const double expected = expectedWithPrevious(previous);
+    const double stale = expectedWithPrevious(1.0);  // Initial dry sample.
+    require(std::abs(expected - stale) > 0.005,
+            "reopen fixture distinguishes current history from stale history");
+    const float reopened = voice.process(nextInput, rate, drive, bias, 1.0);
+    require(std::abs(reopened - expected) < 2e-6,
+            "reopened wet CV must use last dry sample for ADAA");
+
+    // Reset must discard history and initialize with the current sample,
+    // even if that sample immediately arrives fully wet.
+    voice.reset();
+    const double foldedFirst = std::sin(gain * x + phase) - std::sin(phase);
+    const double firstExpected = 5.0 * (x + drive * (foldedFirst - x));
+    const float firstAfterReset = voice.process(nextInput, rate, drive, bias, 1.0);
+    require(std::abs(firstAfterReset - firstExpected) < 2e-6,
+            "reset must discard dry history and use stationary transfer");
+}
+
 } // namespace
 
 int main() {
     checkConstantInputExactness();
+    checkDryReopenHistory();
     checkAliasRejection(751, 44100.0);
     checkAliasRejection(751, 48000.0);
     checkAliasRejection(891, 48000.0);
