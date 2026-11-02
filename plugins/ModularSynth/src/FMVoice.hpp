@@ -23,6 +23,9 @@ public:
     static constexpr double kMaxRatio = 16.0;
     static constexpr double kMaxIndexRadians = 8.0;
     static constexpr double kMaxFeedback = 0.95;
+    // Below this sub-audio threshold, phase increments may approach double
+    // subnormal values.  Rack's clamped pitch range never reaches it.
+    static constexpr double kQuietFrequencyHz = 1.0e-12;
 
     struct Input {
         double frequencyHz = kC4Hz;
@@ -80,6 +83,11 @@ public:
             return kMaxIndexRadians;
         const double guardHz = 0.45 * sampleRateHz;
         const double roomHz = std::max(0.0, guardHz - std::min(carrierHz, guardHz));
+        // Rearrange the saturated case first: roomHz / a subnormal
+        // modulatorHz may overflow to infinity.  The former finite()
+        // fallback turned that legitimate full-bandwidth limit into zero.
+        if (modulatorHz <= roomHz / (kMaxIndexRadians + 1.0))
+            return kMaxIndexRadians;
         return bounded(roomHz / modulatorHz - 1.0, 0.0, 0.0,
                        kMaxIndexRadians);
     }
@@ -126,11 +134,16 @@ public:
         // Individual oscillator frequency caps avoid invalid phase steps;
         // FM/feedback sidebands themselves are NOT bandlimited.
         const double maxHz = 0.45 * input.sampleRateHz;
-        const double carrierHz = std::min(input.frequencyHz, maxHz);
+        // Avoid double denormals in both phase accumulators for unrealistically
+        // low direct-DSP frequencies.  Zero freezes the phase rather than
+        // resetting the oscillator, so returning to audible pitch is smooth.
+        const double requestedHz = input.frequencyHz < kQuietFrequencyHz
+            ? 0.0 : input.frequencyHz;
+        const double carrierHz = std::min(requestedHz, maxHz);
         // Divide before multiplication: extreme finite input frequencies
         // must not overflow when multiplied by the modulator ratio.
-        const double modulatorHz = input.frequencyHz >= maxHz / smoothedRatio
-            ? maxHz : input.frequencyHz * smoothedRatio;
+        const double modulatorHz = requestedHz >= maxHz / smoothedRatio
+            ? maxHz : requestedHz * smoothedRatio;
         const double carrierStep = carrierHz / input.sampleRateHz;
         const double modulatorStep = modulatorHz / input.sampleRateHz;
         const double ceiling = bandwidthIndexCeiling(
