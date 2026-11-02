@@ -239,10 +239,17 @@ def _validate_display_name(name: object) -> str:
 def build_manifest(patch_bytes: bytes, name: str, *,
                    format_version: int = FORMAT_VERSION,
                    legacy_v2_mapping: bool = False,
-                   legacy_fold_drive_mapping: bool = False) -> dict:
+                   legacy_fold_drive_mapping: bool | None = None) -> dict:
     name = _validate_display_name(name)
     if not _is_int(format_version) or format_version not in SUPPORTED_FORMAT_VERSIONS:
         raise InstrumentError("unsupported instrument manifest format/version")
+    # The old unmarked v2 contract predates BOTH ClockedLFO and FoldDrive.
+    # Keep the historic public test/replay API compatible while rejecting
+    # impossible mixed flags that could falsely claim FoldDrive input labels.
+    if legacy_fold_drive_mapping is None:
+        legacy_fold_drive_mapping = legacy_v2_mapping
+    elif legacy_v2_mapping and not legacy_fold_drive_mapping:
+        raise InstrumentError("incompatible historical v2 mapping contracts")
     performance, plugins = patch_performance(patch_bytes)
     manifest = {
         "format": FORMAT,

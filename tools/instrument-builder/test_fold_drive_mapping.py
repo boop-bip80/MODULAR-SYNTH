@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import redirect_stdout
 from io import StringIO
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -119,6 +120,14 @@ class FoldDriveMappingTests(unittest.TestCase):
             with self.subTest(name=name):
                 old = old_bundle(historical, name, old_clocked=clocked_legacy,
                                  old_fold=True)
+                # Independent golden ZIPs produced by the pre-extension
+                # affce31c source generator on these exact synthetic patches.
+                self.assertEqual(hashlib.sha256(old).hexdigest(), {
+                    "Historic Unmarked":
+                    "75a01d995ec63d41e38c53d944b75fa7d1b4bf99b852f49f14afb27444f85666",
+                    "Historic Clocked":
+                    "73d1848dc4092988b0d3afb761400cd97d0597e1172cd9c08fc6a2f33515fc50",
+                }[name])
                 saved_manifest, recovered = read_bundle(old)
                 self.assertEqual(recovered, patch_bytes(historical))
                 self.assertEqual(saved_manifest["performance"].get(
@@ -167,6 +176,22 @@ class FoldDriveMappingTests(unittest.TestCase):
                 self.assertEqual(read_bundle(old)[0]["performance"]
                                  ["controlMappings"][0]["destination"]["inputKind"],
                                  "unverified")
+
+    def test_mixed_historical_flags_cannot_forge_a_contract(self) -> None:
+        raw = patch_bytes(fold_drive_patch())
+        with self.assertRaisesRegex(
+                InstrumentError, "incompatible historical v2 mapping contracts"):
+            build_manifest(raw, "Impossible", format_version=2,
+                           legacy_v2_mapping=True,
+                           legacy_fold_drive_mapping=False)
+        # Existing callers simulating original unmarked v2 use only the old
+        # flag; the FoldDrive contract must automatically stay legacy, too.
+        legacy = build_manifest(raw, "Original V2", format_version=2,
+                                legacy_v2_mapping=True)
+        self.assertNotIn("controlMappingContract", legacy["performance"])
+        self.assertTrue(all(
+            route["destination"]["inputKind"] == "unverified"
+            for route in legacy["performance"]["controlMappings"]))
 
     def test_unrelated_and_non_macro_folddrive_cables_do_not_retag_v2(self) -> None:
         patch = sample_patch()
