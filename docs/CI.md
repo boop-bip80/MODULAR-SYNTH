@@ -7,10 +7,20 @@ This fork inherits the substantial upstream Cardinal build matrix. It also has a
 | Workflow | Automatic triggers | Manual trigger | Purpose |
 | --- | --- | --- | --- |
 | `quality-baseline.yml` | Pull requests and pushes to `main` | Yes | Fast repository/patch tests, offline submodule preflight, Module Forge and Instrument Builder suites, and standalone DSP compile/smoke tests (optimization and runtime-probed sanitizers) |
-| `real-rack-headers.yml` | PRs and `main` pushes changing original wrapper source, Rack/DPF pins or the check itself | Yes | Eight original HEADLESS syntax checks and temporary eight-object ELF link smoke against exact pinned **real** Rack/DPF/Jansson headers; no loadable plugin or host execution |
-| `module-forge-real-headers.yml` | PRs and `main` pushes changing Module Forge source or its gate | Yes | Syntax-only pinned real-header validation of generated sine, opt-in polyBLEP saw and stereo TPT effect; no host build |
-| `build.yml` | Pushes to `main` (except documentation-only changes) and all tag pushes | Yes | Full cross-platform builds, plugin validation, platform packaging, release uploads |
+| `real-rack-headers.yml` | PRs and `main` pushes changing original wrapper source, Rack/DPF pins or the check itself | Yes | Nine original HEADLESS syntax checks and temporary nine-object ELF link smoke against exact pinned **real** Rack/DPF/Jansson headers; no loadable plugin or host execution |
+| `module-forge-real-headers.yml` | PRs and `main` pushes changing Module Forge source or its gate | Yes | Syntax-only pinned real-header validation of generated sine, opt-in polyBLEP saw, fixed-duty polyBLEP pulse and stereo TPT effect; no host build |
+| `build.yml` | Pushes to `main` (except documentation-only changes) and all tag pushes | Yes | Full cross-platform builds, linked Linux ELF manifest-inventory validation, platform packaging, manifest-complete source archives and release uploads |
 | `irc.yml` | None | Yes, but its upstream-only job is skipped on this fork | Prevent derivative activity from posting announcements to Cardinal's upstream IRC channel |
+
+## Latest merged-main source checkpoint — 2026-11-02
+
+Six PRs (#114–#119) are merged at [`2f14a2f`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/2f14a2f3ea4a10557385cac62db022658927c5f0): nine original modules (including DualVCA), sixteen factory source patches, a four-variant generated Module Forge family, ChanceHold instrument-routing metadata, FMVoice offline unison and source-verified signal-path diagnostics.
+
+An independent run on that **exact merged source** passed **296/296 repository/CI/patch, 63/63 Module Forge and 118/118 Instrument Builder tests** (**477/477 Python tests** total), plus **15 standalone C++ DSP suites × four compile/run profiles = 60/60** (strict, production, aggressive fast-math and UBSan). The nine-panel/121-source-center geometry and strict first-party provenance audit also passed with zero audit errors or warnings. ASan+UBSan could not run under this environment's ptrace constraints; **do not claim an ASan pass**.
+
+The new [compiled collection gate](../tools/ci/verify_compiled_collection.py) searches the linked Linux ELF for NUL-terminated manifest model identifiers, and the [source tarball gate](../.github/workflows/scripts/verify-source-tarballs.sh) requires every manifest-declared module's wrapper/header/panel plus an exactly matching archived manifest. They are **narrow inventory checks**, not evidence that Rack instantiates the models, MIDI/audio renders correctly or a DAW can load the plugin.
+
+At this source check, [source-quality](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41400281556) and [full-build](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41400281570) jobs for `2f14a2f` were **queued**, not successful. Current genuine nine-module Rack SDK syntax/link, hosted binary, UI/DAW audition, saved-project roundtrip, measured host CPU/latency, platform artifacts and fork-owned release **remain unverified**. Earlier run records below are historical snapshots.
 
 Previously, the full build workflow ran on every feature-branch push **and** its associated pull request. This produced duplicate heavyweight matrices for one change. Full matrices now run only for integration/release/manual verification, while the quality gate remains available on every PR.
 
