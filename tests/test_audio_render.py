@@ -104,17 +104,20 @@ class AudioRenderTest(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls.temp.cleanup()
 
-    def render(self, profile: str, rate: int, name: str) -> tuple[Path, str, float, float]:
+    def render(self, profile: str, rate: int, name: str,
+               echo: bool = False) -> tuple[Path, str, float, float]:
         output = self.directory / name
         command = [
             str(self.binaries[profile]), "--sample-rate", str(rate),
             "--output", str(output),
+            *("--with-stereo-echo",) if echo else (),
         ]
         result = subprocess.run(command, text=True, capture_output=True,
                                 check=False, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(f"rate={rate}", result.stdout)
         self.assertIn(f"frames={rate * SECONDS}", result.stdout)
+        self.assertIn("echo=on" if echo else "echo=off", result.stdout)
         reported = re.search(r"pcm_fnv1a64=([0-9a-f]{16})", result.stdout)
         self.assertIsNotNone(reported, result.stdout)
         fnv, peak, rms = inspect_wav(output, rate)
@@ -173,6 +176,58 @@ class AudioRenderTest(unittest.TestCase):
                 self.assertGreater(max(note_rms) - min(note_rms), 0.01)
                 self.assertLess(max(boundary_jumps), 0.01)
 
+    def test_optional_stereo_echo_multirate_delay_and_repeatability(self) -> None:
+        # The opt-in effect must use the genuine StereoEchoDSP delay state,
+        # not simply mark WAVs as "wet" or apply a dry amplitude multiplier.
+        for rate in RATES:
+            with self.subTest(sample_rate=rate):
+                dry, dry_hash, _, _ = self.render(
+                    "normal", rate, f"echo-baseline-{rate}.wav")
+                first, wet_hash, peak, rms = self.render(
+                    "normal", rate, f"echo-first-{rate}.wav", echo=True)
+                second, repeated_hash, peak2, rms2 = self.render(
+                    "normal", rate, f"echo-repeat-{rate}.wav", echo=True)
+                self.assertNotEqual(dry_hash, wet_hash)
+                self.assertEqual(wet_hash, repeated_hash)
+                self.assertEqual((peak, rms), (peak2, rms2))
+                self.assertEqual(hashlib.sha256(first.read_bytes()).digest(),
+                                 hashlib.sha256(second.read_bytes()).digest())
+
+                def samples_at(path: Path) -> array.array:
+                    with wave.open(str(path), "rb") as wav:
+                        pcm = array.array("h", wav.readframes(wav.getnframes()))
+                    if sys.byteorder != "little":
+                        pcm.byteswap()
+                    return pcm
+
+                dry_pcm = samples_at(dry)
+                wet_pcm = samples_at(first)
+                # At 187.5 ms delay, the first 160 ms must be entirely
+                # the 65%-dry output, up to PCM16 round-off (two channels).
+                early_frames = int(rate * 0.16)
+                pre_delay_error = max(
+                    abs(w - 0.65 * x)
+                    for x, w in zip(dry_pcm[:2 * early_frames],
+                                    wet_pcm[:2 * early_frames]))
+                self.assertLessEqual(pre_delay_error, 3.0)
+                # Delayed samples must appear beyond the first tap, proving
+                # that the effect is not just a stateless dry attenuation.
+                begin = int(rate * 0.23)
+                end = int(rate * 0.75)
+                delayed_error = max(
+                    abs(w - 0.65 * x)
+                    for x, w in zip(dry_pcm[2 * begin:2 * end],
+                                    wet_pcm[2 * begin:2 * end]))
+                self.assertGreater(delayed_error, 80.0)
+
+    def test_optional_stereo_echo_aggressive_fastmath(self) -> None:
+        _, checksum, peak, rms = self.render(
+            "aggressive-fastmath", 48000, "fastmath-echo-48000.wav",
+            echo=True)
+        self.assertRegex(checksum, r"^[0-9a-f]{16}$")
+        self.assertGreater(peak, 0.15)
+        self.assertGreater(rms, 0.02)
+
     def test_dangling_symlink_does_not_create_target(self) -> None:
         # Without a file-entry check, an ifstream probe of a dangling
         # symlink fails and the subsequent ofstream follows it.
@@ -196,6 +251,7 @@ class AudioRenderTest(unittest.TestCase):
                                      text=True, timeout=10)
         self.assertEqual(help_result.returncode, 0)
         self.assertIn("Usage:", help_result.stdout)
+        self.assertIn("--with-stereo-echo", help_result.stdout)
         for args in ([], ["--sample-rate", "12345", "--output", "invalid.wav"],
                      ["--output"], ["--unknown"]):
             with self.subTest(args=args):
