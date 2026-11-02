@@ -132,5 +132,47 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
             self.assertTrue(all("rack_stub" not in " ".join(c) for c in calls))
 
 
+    def test_invalid_generated_saw_fails_closed_before_compile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            def check(folder: Path) -> list[str]:
+                return ["tampered saw"] if folder.name == "ForgeRealSaw" else []
+
+            with mock.patch.object(gate, "check_module", side_effect=check):
+                with self.assertRaisesRegex(gate.sdk.PreflightError, "tampered saw"):
+                    gate.generate_starters(Path(temp))
+
+    def test_saw_compiler_failure_is_reported_not_a_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            rack = Path(temp) / "rack"
+            template = rack / "dep/speexdsp/include/speex/speexdsp_config_types.h.in"
+            template.parent.mkdir(parents=True)
+            template.write_text("template", encoding="utf-8")
+            calls = []
+
+            def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+                calls.append(command)
+                if command[-1].endswith("/ForgeRealSaw/ForgeRealSaw.cpp"):
+                    return SimpleNamespace(returncode=1, stdout="saw compiler error")
+                return SimpleNamespace(returncode=0, stdout="")
+
+            with (mock.patch.object(gate.sdk, "check_dependencies"),
+                  mock.patch.object(gate.sdk, "render_linux_speex_types",
+                                    return_value="#pragma once\\n"),
+                  mock.patch.object(gate.sdk, "compiler_flags",
+                                    return_value=["-DHEADLESS", "-fsyntax-only",
+                                                  "-I", "/pinned/rack/include"]),
+                  mock.patch.object(gate.shutil, "which", return_value="c++"),
+                  mock.patch.object(gate.subprocess, "run", side_effect=fake_run)):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(output):
+                    result = gate.main(["--rack-root", str(rack),
+                                        "--dpf-root", str(Path(temp) / "dpf")])
+
+            self.assertEqual(result, 1)
+            self.assertEqual(len(calls), 2)
+            self.assertIn("FAIL: generated ForgeRealSaw", output.getvalue())
+            self.assertIn("saw compiler error", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
