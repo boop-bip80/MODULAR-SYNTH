@@ -287,6 +287,14 @@ python3 tools/instrument-builder/instrument_builder.py check \
 # Optional: inspect against a different MODULAR-SYNTH source checkout.
 python3 tools/instrument-builder/instrument_builder.py check \
   Morphing_State_Pad.msinstrument --repo-root /path/to/MODULAR-SYNTH --json
+
+# Optional fail-fast preflight: require v2 *source-verified* Macro8 routing.
+python3 tools/instrument-builder/instrument_builder.py check \
+  Echo_Motion.msinstrument --require-verified-routes
+
+# Machine-readable result includes `verifiedRoutes` only with this flag.
+python3 tools/instrument-builder/instrument_builder.py check \
+  Echo_Motion.msinstrument --require-verified-routes --json
 ```
 
 The command first validates the ZIP member allowlist, saved patch, manifest
@@ -307,6 +315,32 @@ Exit code **0** means no missing first-party declarations; **1** means at
 least one missing first-party slug (report still printed); **2** means the
 bundle, schema or collection manifest is invalid/unreadable. Third-party
 `UNKNOWN` references alone do **not** cause failure.
+
+With `--require-verified-routes`, `check` additionally demands an intact
+**format-v2** bundle with at least **one direct saved Macro8 output cable** and
+source-backed descriptors for **every** such cable's destination input. This
+optional stricter check fails with exit code **1** if any destination is
+`UNVERIFIED`, there are zero Macro8 routes, or the bundle is format v1. It
+does not change how source ZIPs are packed, checked by default, or reopened.
+Pack a v2 archive with `pack --format-version 2` when this gate is needed;
+v1 deliberately has no saved mapping contract and cannot receive a false
+empty-route pass.
+
+The opt-in JSON `verifiedRoutes` report contains a separate `status`, a
+machine-readable `reason` (`V1_NO_ROUTE_CONTRACT`,
+`NO_DIRECT_MACRO8_ROUTES`, or `UNVERIFIED_DESTINATIONS`), route counts, and
+every direct Macro8 cable's stable ID, source, destination module/model and
+input index. Route diagnostics are ordered by saved cable ID, not by cable
+array order; mixed known and unknown destinations are all shown. A
+`SOURCE_VERIFIED` destination means its first-party Rack input name/index and
+CV/audio kind match this **source revision**, not that connecting Macro8 is
+musically useful, that Rack has loaded the module, or that the parameter is
+automatable by a host. Other patch cables, third-party port bounds, binaries,
+DAW automation, and runtime audio remain unverified. Older unmarked v2 bundles
+with ClockedLFO routes retain their original `UNVERIFIED` interpretation; the
+strict gate will fail them until repacked from trusted `.vcv` source with the
+current marked v2 contract. The existing default `check` output remains
+unchanged for backwards compatibility.
 
 **Important:** `DECLARED` does not establish that the model was compiled,
 registered in a specific build, installed in the user's host, or loadable in a

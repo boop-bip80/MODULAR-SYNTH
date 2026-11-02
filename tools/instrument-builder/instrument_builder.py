@@ -23,6 +23,7 @@ from panel_preview import PreviewError, render_svg
 from compatibility import CompatibilityError, compatibility_report, text_report
 from control_mapping import (
     CLOCKED_LFO_CONTRACT, MappingError, derive_control_mappings)
+from verified_routes import verified_routes_report
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -489,10 +490,14 @@ def preview(bundle_path: Path, svg_path: Path) -> dict:
     return manifest
 
 
-def check(bundle_path: Path, repo_root: Path | None = None) -> dict:
+def check(bundle_path: Path, repo_root: Path | None = None, *,
+          require_verified_routes: bool = False) -> dict:
     """Verify a source bundle, then check only first-party model declarations.
 
-    External plugin/model availability is intentionally never inferred.
+    External plugin/model availability is intentionally never inferred. The
+    optional route gate requires a v2 source mapping contract and at least one
+    direct Macro8 cable, then checks every destination's source port descriptor.
+    It never checks a DAW's automatable parameter or audio behavior.
     """
     if bundle_path.suffix.lower() != ".msinstrument":
         raise InstrumentError("source bundle must end with .msinstrument")
@@ -506,10 +511,16 @@ def check(bundle_path: Path, repo_root: Path | None = None) -> dict:
         "first-party collection manifest")
     patch = _decode_json(source_patch, "VCV patch")
     try:
-        return compatibility_report(
+        report = compatibility_report(
             patch, registry,
             patch_sha256=manifest["patch"]["sha256"],
             required_plugins=manifest["requiredPlugins"])
+        if require_verified_routes:
+            routes = verified_routes_report(manifest)
+            report["verifiedRoutes"] = routes
+            if routes["status"] == "FAIL":
+                report["status"] = "FAIL"
+        return report
     except CompatibilityError as exc:
         raise InstrumentError(f"compatibility preflight: {exc}") from exc
 
@@ -543,6 +554,10 @@ def main(argv: list[str] | None = None) -> int:
         "--format", choices=("text", "json"), default="text")
     compatibility.add_argument(
         "--json", action="store_true", help="alias for --format json")
+    compatibility.add_argument(
+        "--require-verified-routes", action="store_true",
+        help=("fail unless a v2 bundle has at least one direct Macro8 cable "
+              "and every destination input port is source-verified"))
     args = parser.parse_args(argv)
     try:
         if args.command == "pack":
@@ -556,7 +571,9 @@ def main(argv: list[str] | None = None) -> int:
             preview(args.bundle, args.out)
             print(f"Generated static SVG preview {args.out}")
         elif args.command == "check":
-            report = check(args.bundle, args.repo_root)
+            report = check(
+                args.bundle, args.repo_root,
+                require_verified_routes=args.require_verified_routes)
             if args.json or args.format == "json":
                 print(_canonical_json(report).decode("utf-8"), end="")
             else:
