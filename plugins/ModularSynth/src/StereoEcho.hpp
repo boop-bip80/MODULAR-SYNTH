@@ -35,6 +35,9 @@ public:
     static constexpr std::size_t kCapacityFrames =
         static_cast<std::size_t>(kMaxFullRateHz) + 2u;
     static constexpr double kSlewSecondsTo99Point9Percent = 0.025;
+    // Wet, feedback and stereo crossfeed reach 99.9% of a new setting in 10 ms.
+    // Initialization/reset keep the first requested setting immediate.
+    static constexpr double kControlSlewSecondsTo99Point9Percent = 0.010;
 
     static_assert(sizeof(float) == 4 && sizeof(double) == 8
                   && std::numeric_limits<float>::is_iec559
@@ -78,10 +81,18 @@ public:
         previousSampleRate_ = 0.0;
         currentDelaySamples_ = 0.0;
         slewAmount_ = 1.0;
+        controlSlewAmount_ = 1.0;
+        currentFeedback_ = 0.0;
+        currentWet_ = 0.0;
+        currentCrossfeed_ = 0.0;
         initialized_ = false;
+        controlsInitialized_ = false;
     }
 
     double currentDelaySamples() const noexcept { return currentDelaySamples_; }
+    double currentFeedback() const noexcept { return currentFeedback_; }
+    double currentWet() const noexcept { return currentWet_; }
+    double currentCrossfeed() const noexcept { return currentCrossfeed_; }
 
     // The maximum actual milliseconds decreases above 192 kHz rather than
     // allocating a larger ring in the audio thread.
@@ -105,8 +116,11 @@ public:
             validFrames_ = 0;
             previousSampleRate_ = sampleRate;
             initialized_ = false;
+            controlsInitialized_ = false;
             slewAmount_ = 1.0 - std::exp(
                 -6.907755278982137 / (kSlewSecondsTo99Point9Percent * sampleRate));
+            controlSlewAmount_ = 1.0 - std::exp(
+                -6.907755278982137 / (kControlSlewSecondsTo99Point9Percent * sampleRate));
         }
 
         const double safeL = clampFinite(inputL, 0.0, -20.0, 20.0);
@@ -114,9 +128,24 @@ public:
         const double maxMs = effectiveMaxMs(sampleRate);
         const double ms = clampFinite(delayMs, 250.0, kMinDelayMs, maxMs);
         const double targetSamples = ms * sampleRate / 1000.0;
-        const double fb = clampFinite(feedback, 0.0, 0.0, kMaxFeedback);
-        const double blend = clampFinite(wet, 0.0, 0.0, 1.0);
-        const double swap = clampFinite(crossfeed, 0.0, 0.0, 1.0);
+        const double targetFeedback = clampFinite(feedback, 0.0, 0.0, kMaxFeedback);
+        const double targetWet = clampFinite(wet, 0.0, 0.0, 1.0);
+        const double targetCrossfeed = clampFinite(crossfeed, 0.0, 0.0, 1.0);
+        if (!controlsInitialized_) {
+            currentFeedback_ = targetFeedback;
+            currentWet_ = targetWet;
+            currentCrossfeed_ = targetCrossfeed;
+            controlsInitialized_ = true;
+        } else {
+            // One-pole smoothing is bounded by the already-clamped targets,
+            // and introduces no buffers, locks or allocations on the audio path.
+            currentFeedback_ += controlSlewAmount_ * (targetFeedback - currentFeedback_);
+            currentWet_ += controlSlewAmount_ * (targetWet - currentWet_);
+            currentCrossfeed_ += controlSlewAmount_ * (targetCrossfeed - currentCrossfeed_);
+        }
+        const double fb = currentFeedback_;
+        const double blend = currentWet_;
+        const double swap = currentCrossfeed_;
 
         if (!initialized_) {
             currentDelaySamples_ = targetSamples;
@@ -180,7 +209,12 @@ private:
     double previousSampleRate_ = 0.0;
     double currentDelaySamples_ = 0.0;
     double slewAmount_ = 1.0;
+    double controlSlewAmount_ = 1.0;
+    double currentFeedback_ = 0.0;
+    double currentWet_ = 0.0;
+    double currentCrossfeed_ = 0.0;
     bool initialized_ = false;
+    bool controlsInitialized_ = false;
 };
 
 } // namespace dsp
