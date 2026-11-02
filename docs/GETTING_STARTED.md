@@ -1,6 +1,6 @@
 # Getting started with MODULAR-SYNTH
 
-> **Musician's guide · Early development · Updated 2026-11-01**
+> **Musician's guide · Early development · Updated 2026-11-02**
 >
 > MODULAR-SYNTH is a [DISTRHO Cardinal](https://github.com/DISTRHO/Cardinal)-derived modular synthesizer in active development. **Six original first-party modules** are now registered in source: Morph VCO, State Filter, Fold Drive, Macro8, StereoEcho and ClockedLFO. This guide introduces their saved patch workflows, not a publicly tested fork release.
 
@@ -220,11 +220,13 @@ python3 tools/instrument-builder/instrument_builder.py pack \
   --out Echo_Motion.msinstrument
 python3 tools/instrument-builder/instrument_builder.py inspect Echo_Motion.msinstrument
 python3 tools/instrument-builder/instrument_builder.py check Echo_Motion.msinstrument
+python3 tools/instrument-builder/instrument_builder.py check \
+  Echo_Motion.msinstrument --require-verified-routes
 python3 tools/instrument-builder/instrument_builder.py preview \
   Echo_Motion.msinstrument --out Echo_Motion.svg
 ```
 
-The opt-in `performance.controlMappings` records **direct saved Macro8 output cables**, including source-backed first-party destination input names and CV/audio semantics; third-party inputs remain `unverified`. New v2 bundles with a Macro8 → ClockedLFO cable use a compatibility marker, while old unmarked v2 and default v1 archives remain supported. A static preview is **not** a functioning control surface or evidence of DAW automation. See [Instrument Builder's format and limits](INSTRUMENT_BUILDER.md) for v1/v2 compatibility and archive safety.
+The opt-in `performance.controlMappings` records **direct saved Macro8 output cables**, including source-backed first-party destination input names and CV/audio semantics; third-party inputs remain `unverified`. New v2 bundles with a Macro8 → ClockedLFO cable use a compatibility marker, while old unmarked v2 and default v1 archives remain supported. The optional **strict verified-route check** above requires the v2 archive created by `--format-version 2` and rejects a bundle if any direct Macro8 destination lacks a source-verified contract (including FoldDrive, inherited external/third-party routes or unmarked legacy v2 data); default `check` remains backward-compatible. Echo Motion's four direct Macro8 routes are all source-verified, so this example passes the strict source check. That check **does not** show that CV sounds correct or automates in a DAW. A static preview is **not** a functioning control surface or evidence of DAW automation. See [Instrument Builder's format and limits](INSTRUMENT_BUILDER.md) for v1/v2 compatibility and archive safety.
 
 ## 9. Credits and next steps
 

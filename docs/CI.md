@@ -7,15 +7,15 @@ This fork inherits the substantial upstream Cardinal build matrix. It also has a
 | Workflow | Automatic triggers | Manual trigger | Purpose |
 | --- | --- | --- | --- |
 | `quality-baseline.yml` | Pull requests and pushes to `main` | Yes | Fast repository/patch tests, offline submodule preflight, Module Forge and Instrument Builder suites, and standalone DSP compile/smoke tests (optimization and runtime-probed sanitizers) |
-| `real-rack-headers.yml` | PRs and `main` pushes changing original wrapper source, Rack/DPF pins or the check itself | Yes | Five original HEADLESS C++ translation-unit syntax checks against exact pinned **real** Rack/DPF dependency headers; no linking or host execution |
+| `real-rack-headers.yml` | PRs and `main` pushes changing original wrapper source, Rack/DPF pins or the check itself | Yes | Six original HEADLESS C++ translation-unit syntax checks against exact pinned **real** Rack/DPF/Jansson headers; no linking or host execution |
 | `build.yml` | Pushes to `main` (except documentation-only changes) and all tag pushes | Yes | Full cross-platform builds, plugin validation, platform packaging, release uploads |
 | `irc.yml` | None | Yes, but its upstream-only job is skipped on this fork | Prevent derivative activity from posting announcements to Cardinal's upstream IRC channel |
 
 Previously, the full build workflow ran on every feature-branch push **and** its associated pull request. This produced duplicate heavyweight matrices for one change. Full matrices now run only for integration/release/manual verification, while the quality gate remains available on every PR.
 
-The [fast workflow](../.github/workflows/quality-baseline.yml) directly discovers `tools/instrument-builder/test_*.py` alongside repository and Module Forge tests ([PR #59](https://github.com/boop-bip80/MODULAR-SYNTH/pull/59)). In an independently executed **local source run on exact merged [`4f3ba5af`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/4f3ba5afa9d7e6b2196560b49955fe0617278045)**, **205 repository + 40 Forge + 56 Instrument Builder = 301/301 Python tests passed**; nine standalone DSP suites passed **36/36 compiled-and-executed profiles including UBSan**. Combined ASan+UBSan was unavailable at runtime, so this is **not an ASan pass**. These counts are **local evidence, not a claim that a hosted Actions run or the full build matrix succeeded**.
+The [fast workflow](../.github/workflows/quality-baseline.yml) directly discovers `tools/instrument-builder/test_*.py` alongside repository and Module Forge tests ([PR #59](https://github.com/boop-bip80/MODULAR-SYNTH/pull/59)). In an independently executed **local source run on exact merged [`3fbda096`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/3fbda096db2165dcc681abd8c210892624ad7b92)** on 2026-11-02, **219 repository + 40 Forge + 65 Instrument Builder = 324/324 Python tests passed**; ten standalone DSP suites passed **40/40 compiled-and-executed profiles including UBSan**. Combined ASan+UBSan was unavailable at runtime, so this is **not an ASan pass**. A separate pinned-real-header gate passed **6/6 local HEADLESS `-fsyntax-only` checks** (not plugin linking). These counts are **local evidence, not a claim that a hosted Actions run or the full build matrix succeeded**.
 
-**Hosted-status snapshot (2026-11-01, exact `4f3ba5af`):** the [source-quality run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41357736067) was **queued with zero executed steps**, and the [full-build run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41357736009) had **20 queued jobs and zero executed steps**. Prior superseded runs were cancelled by concurrency policy; cancellation is not evidence of failed compilation. These historical statuses must be rechecked before any release decision.
+**Hosted-status snapshot (2026-11-02 00:23 UTC, exact `3fbda096`):** the [source-quality run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41366740187) had **one queued job and zero executed steps**; the [real Rack header run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41366740367) had **one queued job and zero executed steps**; and the [full-build run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41366740224) had **20 queued jobs and zero executed steps**. These exact-run observations are **pending, not passing**. No fork-owned release was listed at the same check. Prior superseded runs may be cancelled by concurrency policy; cancellation is not evidence of failed compilation. Recheck hosted jobs and release contents before any release decision.
 
 ## Build matrix scope
 
@@ -65,7 +65,7 @@ python3 -B tests/run_dsp_tests.py --sanitize=auto
 
 [`tools/ci/check_real_rack_headers.py`](../tools/ci/check_real_rack_headers.py)
 adds a **separate, narrower Linux source compatibility signal** beyond the
-`tests/rack_stub` test double. It parses the actual five
+`tests/rack_stub` test double. It parses the actual six
 `plugins/ModularSynth/src/*.cpp` translation units individually with the
 production `pluginInstance` alias, `HEADLESS` and `USING_CARDINAL_NOT_RACK`
 definitions, actual pinned Rack/DPF API headers, and authentic dependency
@@ -103,8 +103,8 @@ with a targeted setup message; source compilation failure exits 1. The
 SpeexDSP Linux type header is generated from the pinned upstream `.in`
 template in an automatically removed temporary directory—never vendored.
 
-**Local evidence (2026-11-01):** GCC 13.3.0 `-fsyntax-only` completed for
-**MorphVCO, StateFilter, Macro8, StereoEcho and ClockedLFO (5/5)** against
+**Local evidence (2026-11-02, exact merged `3fbda096`):** GCC 13.3.0 `-fsyntax-only` completed for
+**MorphVCO, StateFilter, FoldDrive, Macro8, StereoEcho and ClockedLFO (6/6)** against
 the exact Rack and DPF Gitlinks, exact six nested dependency Gitlinks,
 and official Ubuntu 24.04 `libjansson-dev` 2.14-2build2 headers. The runner
 does **not link** Rack/Cardinal libraries, build GUI widgets in a running host,
@@ -113,7 +113,7 @@ or establish audio quality/performance. A hosted green job must be observed
 before reporting the gate as passing on GitHub Actions. A real full host
 build and manual patch/audio/DAW QA remain required for Phase 1 acceptance.
 
-The auto-discovered [five-original wrapper smoke](../tests/test_rack_wrapper_smoke.py) builds actual first-party `.cpp` wrappers as HEADLESS translation units and exercises basic processing/state against **`tests/rack_stub`**, a deliberately small fake Rack API. [Module Forge's generated wrapper tests](../tools/module-forge/test_generated_wrappers.py) compile both fresh oscillator/effect starters using the **same stub** under ordinary and aggressive optimization modes. These are valuable additional C++ source checks, **not real Rack SDK headers, binary ABI compatibility, GUI builds, plugin packaging, DAW loading or audio auditions**.
+The [five-original shared wrapper smoke](../tests/test_rack_wrapper_smoke.py) exercises MorphVCO/StateFilter/Macro8/StereoEcho/ClockedLFO, while the separate [FoldDrive wrapper/concurrency contract](../tests/test_folddrive_contract.py) exercises the sixth original. Together they compile/process HEADLESS wrappers against **`tests/rack_stub`**, a deliberately small fake Rack API. [Module Forge's generated wrapper tests](../tools/module-forge/test_generated_wrappers.py) compile both fresh oscillator/effect starters using the **same stub** under ordinary and aggressive optimization modes. These are valuable additional C++ source checks, **not real Rack SDK headers, binary ABI compatibility, GUI builds, plugin packaging, DAW loading or audio auditions**.
 
 The DSP runner discovers only top-level `tests/*_dsp_smoke.cpp` and `tests/*_dsp_test.cpp` entrypoints, excluding names containing `rack` or `wrapper`. Each test is compiled and executed in three profiles: strict `-O2 -Wall -Wextra -Werror`, production-style `-O3 -ffast-math -fno-finite-math-only`, and aggressive `-O3 -ffast-math` (the last deliberately exposes finite-math-only assumptions). All profiles use C++17 and warnings-as-errors. Tests must have their own `main()` and be independent of JUCE/VCV Rack. Temporary executables are automatically removed.
 
@@ -131,6 +131,8 @@ The **optional sanitizer profile** is enabled by `--sanitize=auto` (used by the 
 For releases, push the intended version tag and inspect all release jobs and artifacts. An artifact or a GitHub release must not be described as verified until its corresponding workflow has actually completed successfully.
 
 For a **macOS tagged release**, additionally confirm that the exact-tag run **produced and uploaded a real `.pkg`**, its contents match the intended fork revision, a maintainer actually installed it on macOS, and the resulting plugin/standalone passed appropriate host and patch-reopen tests. The new missing-package failure checks are a safeguard against silently absent files, **not proof that such a package exists**. Repeat analogous installed-artifact QA for Linux/Windows targets; never substitute upstream Cardinal release files.
+
+For a **Windows tagged release**, confirm the exact tag's nonempty `MODULAR-SYNTH-win32|win64-<tag>.zip` **and** exactly one matching-target nonempty `Cardinal-winXX-<version>-installer.exe` were packaged and uploaded; then install and test that build on Windows. The [source ZIP/installer gate](../tests/test_ci_windows_release_assets.py) is not evidence that a real host or installer passed. For an offline instrument bundle, opt-in `python3 tools/instrument-builder/instrument_builder.py check <bundle>.msinstrument --require-verified-routes` can reject unknown *direct Macro8 routes*, but this does not replace any installed-DAW routing test.
 
 ## What passing means
 

@@ -1,7 +1,8 @@
 # MODULAR-SYNTH — Manual UI and DAW State QA
 
 **Status: NOT EXECUTED.** This is a checklist for human verification of
-the first-party Morph VCO, State Filter, and Macro8 modules. No desktop/DAW
+the six first-party modules, including the introductory Morph VCO, State Filter
+and Macro8 voice. No desktop/DAW
 UI run is claimed. All checkboxes intentionally remain unchecked.
 
 | Record before running | Value |
@@ -21,17 +22,26 @@ each supported host/plugin format.
 - [ ] The app/DAW discovers and opens the plugin with no crash, blank panel,
   missing SVG warning, or host rescan error.
 - [ ] Module browser offers exactly one each of **Morph VCO**,
-  **State Filter**, **Macro8 Performance Macros**, **Stereo Echo** and
-  **Clocked LFO** in the **MODULAR-SYNTH Originals** collection. Search
-  resolves all five.
+  **State Filter**, **Fold Drive**, **Macro8 Performance Macros**,
+  **Stereo Echo** and **Clocked LFO** in the **MODULAR-SYNTH Originals**
+  collection. Search resolves all six.
 - [ ] Inspect each SVG panel, ports, labels, controls and lights at normal
   and HiDPI scaling; zoom, close/reopen the editor and check alignment.
 - [ ] Confirm the release package actually contains
   `ModularSynth/res/MorphVCO.svg`,
   `ModularSynth/res/StateFilter.svg`,
+  `ModularSynth/res/FoldDrive.svg`,
   `ModularSynth/res/Macro8.svg`,
   `ModularSynth/res/StereoEcho.svg` and
   `ModularSynth/res/ClockedLFO.svg`.
+
+- [ ] With Fold Drive between Morph VCO and State Filter, verify dry
+  transparency at zero DRIVE, audible fold changes with increasing DRIVE,
+  positive/negative BIAS asymmetry and MIX CV direction. Start with low
+  VCA/host gain, test 1/8/16 lanes, and record aliasing, summed headroom,
+  CPU and reset-on-playback behavior at 44.1/48/96 kHz. **No results are
+  recorded yet:** the source fold is not bandlimited or oversampled, and
+  its ±10 V bound applies per voice, not to summed host audio.
 
 ## 2. State Filter signal and CV
 
@@ -111,7 +121,7 @@ each supported host/plugin format.
 - [ ] Run all discovered standalone C++ DSP suites using
   `python3 -B tests/run_dsp_tests.py --sanitize=auto`, then run the
   repository/Module Forge/Instrument Builder Python suites. Attach their
-  exact commit, compiler/sanitizer profile and outputs. The five-original
+  exact commit, compiler/sanitizer profile and outputs. The six-original
   and generated-module HEADLESS wrapper smokes use a **test-only Rack stub**;
   they do **not** prove a real Rack/DPF plugin build.
 - [ ] Check CI/build status and release archive contents. Attach
@@ -122,6 +132,11 @@ each supported host/plugin format.
   its missing-file YAML guard passed source tests). Install it on a real
   macOS machine and validate plugin discovery, loading, audio, state and
   DAW reopens. Apply equivalent artifact/install checks to other targets.
+- [ ] For Windows release tags, confirm a **nonempty tag-matching fork ZIP**
+  (`MODULAR-SYNTH-win32|win64-<tag>.zip`) **and exactly one matching-target
+  nonempty Inno Setup installer** were uploaded. Install that exact artifact
+  on Windows and exercise plugin discovery, audio and state reopen; the
+  source YAML gate alone is not sufficient evidence.
 
 **Release gate:** Keep **UNVERIFIED** until a real tester records successful
 GUI/host results, not just compilation or DSP unit tests. Block a
@@ -137,10 +152,10 @@ python3 tools/ui-check/validate_panels.py
 python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
 ```
 
-The standard-library-only checker validates five first-party source panels
-(Morph VCO, State Filter, Macro8, StereoEcho, ClockedLFO) as parseable SVGs
-with an SVG namespace and expected **12/14/20/16/16 HP** widths, standard
-**3U height** and Rack viewBoxes of **15 px/HP × 380 px**. The first four
+The standard-library-only checker validates six first-party source panels
+(Morph VCO, State Filter, FoldDrive, Macro8, StereoEcho, ClockedLFO) as parseable SVGs
+with an SVG namespace and expected **12/14/12/20/16/16 HP** widths, standard
+**3U height** and Rack viewBoxes of **15 px/HP × 380 px**. The first five
 panels specify 128.5 mm physical height; ClockedLFO declares equivalent
 380 px dimensions. It cross-checks the exact `setPanel()` asset paths in C++ and
 checks statically resolvable centered knobs, ports, switches and lights
@@ -162,7 +177,7 @@ python3 -m unittest discover -s tests -p 'test_panel_contrast.py' -v
 ```
 
 The audit derives **actual text foreground colors** from NanoVG
-`nvgRGB()` / `nvgText()` calls in all five module widgets, and reads SVG
+`nvgRGB()` / `nvgText()` calls in all six module widgets, and reads SVG
 panel fill and decorative control-outline colors. It computes standard
 sRGB relative luminance and contrast ratios and flags measured swatches
 below **4.5:1** for small text and **3:1** for SVG control outlines as
@@ -194,11 +209,11 @@ not account for decorative circles, lines, shadows, Rack knobs, NanoVG
 antialiasing or an actual font glyph pixel; it is **not a measured local
 label contrast or a WCAG pass**.
 
-Across the four earlier dark-gradient panels, the source palette bounds
+Across the five dark-gradient panels, the source palette bounds
 remain comfortably above the 4.5:1 text advisory. ClockedLFO has a
-separately inspected flat/layered SVG background; all **61 local source-label
-contrasts across the five panels remain UNKNOWN**, including Macro8's
-dynamic labels. The base-only bounds can be evaluated for 44 sites but
+separately inspected flat/layered SVG background; all **71 local source-label
+contrasts across the six panels remain UNKNOWN**, including Macro8's
+dynamic labels. The base-only bounds can be evaluated for 54 sites but
 never establish the actual local pixel background. An
 invalid/missing stop, transparency, stylesheet or unsupported paint construct
 withholds the bound; a weak lower bound is **inconclusive**, not automatic
@@ -229,6 +244,7 @@ not on a recorded plugin-tooltip screenshot.
 | --- | --- | --- |
 | **Morph VCO** | Snapped octave offset **−4 to +4**; fine tune **−100 to +100 cents**; wave morph **0–100%**; pulse width **5–95%**; FM depth **0–100%** | Pitch **1 V/oct**; FM **5 V/oct at full depth**; morph and PWM CV each add **0.1 normalized units per volt** to their knobs; morphed/sine audio outputs nominally **±5 V** |
 | **State Filter** | Cutoff shows actual Hz (about **20 Hz–20 kHz**, **1 kHz** default) despite log2 internal storage; resonance/drive show **0–100% of normalized control range** | Cutoff CV adds **1 octave per volt**; resonance/drive CV each add **0.1 normalized units per volt**; LP/BP/HP outputs are filtered audio |
+| **Fold Drive** | DRIVE **0–100%** (30% default), BIAS **−100…+100%** (0% default), WET MIX **0–100%** (65% default); smooth ~3 ms control changes | IN nominal ±5 V; DRV/BIA/MIX CV each add **0.1 normalized units per volt**; OUT is clamped to ±10 V **per lane**, not summed host audio; sine fold is not bandlimited or oversampled |
 | **Macro8** | Eight macro positions show **0–100%**; snapshot transition time **0–5 s** represents **99.9% settling** | Each CV output selects **0 to +10 V** unipolar or **−5 to +5 V** bipolar; A–D buttons **store or recall according to mode**; LIVE returns to physical macro knobs |
 | **StereoEcho** | Echo time **1–1000 ms** (**250 ms** default); feedback **0–90%** (**35%** default); wet mix **0–100%** (**40%** default); ping-pong crossfeed **0–100%** (**50%** default) | Unpatched **right input uses left audio**; signed TIME CV adds **100 ms/V**, feedback and wet-mix CV add **0.1 normalized units (10 percentage points) per volt**; L/R outputs are mixed wet/dry audio |
 | **ClockedLFO** | Free-run rate **1/64–16 Hz** (**0.5 Hz** default); snapped clock ratios **1/4, 1/2, 1, 2 or 4** cycles per clock period (default **1**); output phase **0–100%**; pulse width **5–95%** | External **CLK** and **RESET** are rising-edge inputs (≥2 V, rearmed at ≤1 V); free RATE CV is **1 V/oct**; SIN/TRI/RAMP/PULSE are **±5 V**, EOC nominal **+10 V / 1 ms**. External pulses, not host BPM, govern tempo lock. |
@@ -261,8 +277,8 @@ plugin loader/manifest registration. Its **16 HP x 3U**
 SVG uses a **240 x 380** viewBox; the C++ widget statically declares
 **4 centered controls**, **5 input jacks**, **2 output jacks**, and
 **13 `nvgText()` call sites**. At the four-model PR #41 snapshot, these
-augmented 31 earlier calls to **44**; the current **five-model** source
-audit checks **61** label calls after ClockedLFO integration. Since the panel background and four
+augmented 31 earlier calls to **44**; the current **six-model** source
+audit checks **71** label calls after ClockedLFO and FoldDrive integration. Since the panel background and four
 knob-dial fills are gradients, those local contrasts remain **UNKNOWN**;
 none are promoted to a contrast pass by inspecting gradient stops.
 
