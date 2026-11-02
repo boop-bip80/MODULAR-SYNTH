@@ -90,6 +90,13 @@ jobs:
         run: |
           # workaround for ncurses riscv64 build failure
           if [[ "${{ matrix.target }}" = "riscv64" ]]; then
+              # The runner is amd64. Register the foreign dpkg architecture
+              # before installing libtinfo6:riscv64 or libsdl2-dev:riscv64.
+              # Restrict the stock Ubuntu mirrors to amd64; riscv64 packages
+              # are served by ports.ubuntu.com, not archive.ubuntu.com.
+              dpkg --add-architecture riscv64
+              sed -i -E 's|^deb (https?://)|deb [arch=amd64] \1|' /etc/apt/sources.list
+              dpkg --print-foreign-architectures | grep -qx riscv64
               echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports jammy main restricted universe multiverse" | tee -a /etc/apt/sources.list
               echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main restricted universe multiverse" | tee -a /etc/apt/sources.list
               echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports jammy-backports main restricted universe multiverse" | tee -a /etc/apt/sources.list
