@@ -72,3 +72,56 @@ The original dry/default standalone renderer compiled and executed at -O2 -Werro
 These hashes are informative reference points, **not cross-platform golden test requirements**. The automated test compares repeated renders of the same executable and checks decoded PCM properties to avoid flaky CI across libm implementations.
 
 **Not tested by this harness:** Cardinal/VST host integration, plugin UI, realtime latency, polyphonic Rack wrapper routing, auditory perception across speakers, and long-duration performance.
+
+
+---
+
+## Separate FMVoice sound-check renderer
+
+The independent [FMVoice offline renderer](../tools/audio-render/fm_voice_render.cpp)
+exercises the **actual first-party two-operator FMVoice DSP header**, with
+ratio/index/feedback motion, a four-second sixteen-note original phrase and a
+slightly detuned stereo pair. Unlike the MorphVCO → StateFilter demo above,
+this tests the source-only FM oscillator in isolation. It does **not** claim
+that the Rack wrapper, MIDI inputs, patch or DAW host has been executed.
+
+Build with a standard C++17 compiler and render both FM and a
+zero-index/zero-feedback **sine reference**:
+
+~~~sh
+c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -I . \
+  tools/audio-render/fm_voice_render.cpp -o /tmp/fm_voice_render
+
+/tmp/fm_voice_render --sample-rate 48000 \
+  --output /tmp/modular-fm-48000.wav
+/tmp/fm_voice_render --sample-rate 48000 --sine-reference \
+  --output /tmp/modular-sine-reference-48000.wav
+~~~
+
+The supported rates are **44.1, 48 and 96 kHz**. Both modes write stereo,
+little-endian PCM16 WAVs, exactly four seconds long. Per-note 15 ms attack and
+40 ms release windows bound transitions. The FM default varies the frequency
+ratio, modulation index and feedback, while the reference uses the same
+FMVoice implementation with its phase modulation disabled; neither mode
+changes FMVoice source or loads a saved `.vcv` patch.
+
+The status line reports `mode=fm` or `mode=sine`, rate, frame count,
+normalized peak, RMS and an FNV-1a hash of the PCM bytes. Independent tests
+check the hash against the decoded WAV, two identical renders at each rate,
+non-silent energy in **all 16 note windows**, stereo differences, bounded
+note-edge sample discontinuities, finite amplitude/headroom, a measurable PCM
+difference between FM and sine-reference modes, and a strict
+`-O3 -ffast-math` render. Avoid treating a changed digest as a subjective
+sound-quality verdict; it identifies a changed output.
+
+~~~sh
+python3 -m unittest discover -s tests -p test_fm_voice_audio_render.py -v
+~~~
+
+As with the existing renderer, output files and symlink destinations are
+preflight-protected from overwriting, but this does not provide atomic
+protection against a concurrent writer. Use a private output folder. No
+generated WAV files are committed. FMVoice's bandwidth guard is not an ideal
+bandlimiter; the tests do **not** certify alias-free output, accurate analog
+emulation, real-time CPU, linked Cardinal audio, UI behavior, listening
+quality or DAW project roundtrips.
