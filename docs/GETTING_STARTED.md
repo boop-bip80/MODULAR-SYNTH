@@ -2,20 +2,20 @@
 
 > **Musician's guide · Early development · Updated 2026-11-02**
 >
-> MODULAR-SYNTH is a [DISTRHO Cardinal](https://github.com/DISTRHO/Cardinal)-derived modular synthesizer in active development. **Six original first-party modules** are now registered in source: Morph VCO, State Filter, Fold Drive, Macro8, StereoEcho and ClockedLFO. This guide introduces their saved patch workflows, not a publicly tested fork release.
+> MODULAR-SYNTH is a [DISTRHO Cardinal](https://github.com/DISTRHO/Cardinal)-derived modular synthesizer in active development. **Seven original first-party modules** are now registered in source: Morph VCO, State Filter, Fold Drive, Macro8, StereoEcho, ClockedLFO and FMVoice. This guide introduces their saved patch workflows, not a publicly tested fork release.
 
 ## 1. What can I use today?
 
 | Item | What exists | What is still unverified |
 | --- | --- | --- |
-| First-party modules | Six registered `ModularSynth` models: `MorphVCO`, `StateFilter`, `FoldDrive`, `Macro8`, `StereoEcho`, `ClockedLFO` | Installation, GUI operation, listening quality and DAW roundtrips on real binaries |
-| Factory patches | [Fourteen checked-in `.vcv` arrangements](FACTORY_PATCHES.md) under `patches/examples/`; the inspector and coverage checker validate saved graphs and source-backed first-party bounds | Audible sound, MIDI/transport responsiveness, CPU use, clipping, patch/DAW reopen in a plugin |
-| Module Forge | Original C++17 oscillator **and** stereo-effect source/manifest/SVG starters, schema checks and dry-run/opt-in static integration | An in-app compiler, runtime hot loader, standalone instrument exporter or sandbox for arbitrary code |
-| Instrument Builder | Offline `.msinstrument` v1 source bundles and opt-in v2 saved Macro8 cable mappings, static SVG concept preview, manifest/integrity checks | A playable instrument panel, DAW parameter automation, VST/CLAP/AU export or host-tested patch roundtrip |
+| First-party modules | Seven registered `ModularSynth` models: `MorphVCO`, `StateFilter`, `FoldDrive`, `Macro8`, `StereoEcho`, `ClockedLFO`, `FMVoice` | Installation, GUI operation, listening quality and DAW roundtrips on real binaries |
+| Factory patches | [Fifteen checked-in `.vcv` arrangements](FACTORY_PATCHES.md) under `patches/examples/`; the inspector and coverage checker validate saved graphs and source-backed first-party bounds | Audible sound, MIDI/transport responsiveness, CPU use, clipping, patch/DAW reopen in a plugin |
+| Module Forge | Original C++17 oscillator **and** stereo-effect source/manifest/SVG starters, schema checks, dry-run/opt-in static integration and polyphonic generated-core voice retirement | An in-app compiler, runtime hot loader, standalone instrument exporter or sandbox for arbitrary code |
+| Instrument Builder | Offline `.msinstrument` v1 source bundles and opt-in v2 saved Macro8 cable mappings, static SVG concept preview, a `controls [--json]` Macro8 inventory, and manifest/integrity checks | A playable instrument panel, DAW parameter automation, VST/CLAP/AU export or host-tested patch roundtrip |
 | Plugin formats | The inherited Cardinal/DPF project has AU, CLAP, LV2, VST2, VST3 and standalone build variants | Whether a **MODULAR-SYNTH** build for a particular platform/host has passed real testing |
 | Downloads | The [fork releases page](https://github.com/boop-bip80/MODULAR-SYNTH/releases) and [fork Actions page](https://github.com/boop-bip80/MODULAR-SYNTH/actions) are the authoritative locations | **No fork-owned release was published as of this guide's update.** Workflow jobs may be queued, cancelled or fail; an existing workflow is not a passing build |
 
-The upstream [Cardinal releases](https://github.com/DISTRHO/Cardinal/releases) contain **upstream Cardinal**, not this fork's original modules. Do not install an upstream build and expect to find Morph VCO, State Filter, Fold Drive, Macro8, StereoEcho or ClockedLFO. For a current source build, follow [the inherited build instructions](BUILDING.md) with recursive submodules, then verify your own resulting plugin and host before recording music. Do not treat this document as a promise of a ready-made download or a screenshot of a working fork binary.
+The upstream [Cardinal releases](https://github.com/DISTRHO/Cardinal/releases) contain **upstream Cardinal**, not this fork's original modules. Do not install an upstream build and expect to find Morph VCO, State Filter, Fold Drive, Macro8, StereoEcho, ClockedLFO or FMVoice. For a current source build, follow [the inherited build instructions](BUILDING.md) with recursive submodules, then verify your own resulting plugin and host before recording music. Do not treat this document as a promise of a ready-made download or a screenshot of a working fork binary.
 
 ## 2. Start with a patch
 
@@ -100,7 +100,7 @@ Source: [`Macro8.cpp`](../plugins/ModularSynth/src/Macro8.cpp), [snapshot/DSP co
 - **Controls:** Time (parameter 0, 1–1000 ms), Feedback (1, 0–90%), Wet Mix (2, 0–100%), Ping-Pong Crossfeed (3, 0–100%).
 - **Inputs:** Left/Right audio (0/1), Time CV (2, additive 100 ms/V), Feedback CV (3) and Mix CV (4, both additive ten percentage points/V).
 - **Outputs:** Mixed wet/dry Left and Right audio (0/1). Unpatched Right audio input uses Left as its source; an explicit Right cable overrides this normal.
-- **Behavior:** Up to 16 lanes, bounded feedback and finite/denormal handling. A stereo patch is not proof of audible stereo separation, controlled clipping or a host-tested release tail.
+- **Behavior:** Up to 16 lanes, bounded feedback and finite/denormal handling; wet mix, feedback and crossfeed smooth toward target values over about 10 ms. A stereo patch is not proof of audible stereo separation, controlled clipping or a host-tested release tail.
 
 Try [Stereo Echo Showcase](../patches/examples/MODULAR_-_Stereo_Echo_Showcase.vcv) to inspect the saved StateFilter LP/HP → echo Left/Right → HostAudio2 L/R routes. [Echo Motion Performance](../patches/examples/MODULAR_-_Echo_Motion_Performance.vcv) adds four Macro8 CV routes to echo time/feedback/wet and oscillator morph.
 
@@ -115,7 +115,7 @@ Source: [`StereoEcho.cpp`](../plugins/ModularSynth/src/StereoEcho.cpp), [DSP con
 
 For tempo-aware source wiring, [Clocked Modulation Studio](../patches/examples/MODULAR_-_Clocked_Modulation_Studio.vcv) saves `Cardinal/HostTime` **BEAT output 3 → ClockedLFO Clock input 1** and **RESET output 1 → LFO Reset input 2**. Its LFO sine/triangle/pulse/EOC outputs modulate MorphVCO, StateFilter, StereoEcho and an envelope retrigger. For an intentionally **free-running**, non-BPM-synchronized pulse pattern, [Cinematic Pulse Score](../patches/examples/MODULAR_-_Cinematic_Pulse_Score.vcv) sends LFO Pulse output 3 to a separate ADSR gate and uses a second VCA on the low-pass echo path; keep the master level low until you verify audio in a real host.
 
-Source: [`ClockedLFO.cpp`](../plugins/ModularSynth/src/ClockedLFO.cpp), [standalone timing contract](CLOCKED_LFO.md). See the [six-module quick reference](MODULE_QUICK_REFERENCE.md) for concise port and voltage tables.
+Source: [`ClockedLFO.cpp`](../plugins/ModularSynth/src/ClockedLFO.cpp), [standalone timing contract](CLOCKED_LFO.md). See the [seven-module quick reference](MODULE_QUICK_REFERENCE.md) for concise port and voltage tables.
 
 ### FoldDrive — expressive folded harmonics
 
@@ -134,10 +134,28 @@ factory patch saves eight MIDI voices, ADSR/VCA, a free-running LFO for
 drive/bias, channel pressure for oscillator timbre, and CC1 for Fold Drive
 wet mix. The LFO is **not synchronized to host tempo**.
 
+### FMVoice — two-operator phase-modulation voice
+
+FMVoice provides an original **12 HP** two-operator FM-style voice with independent
+polyphonic phases, up to 16 channels. It supplies a phase-modulated carrier
+and a separate modulator sine output, nominally **±5 V** per lane. The five
+knobs set octave (−4 to +4), fine tune (±100 cents), modulator/carrier
+frequency ratio (0.125–16), modulation index (0–8 radians), and modulator
+feedback (0–95%). Pitch follows **1 V/oct**, ratio CV doubles the ratio for
++1 V, index CV adds 0.8 radians/V, and feedback CV adds 9.5 percentage
+points/V. This is not a bandlimited/alias-free oscillator.
+
+Inspect [FM Voice Performance](../patches/examples/MODULAR_-_FM_Voice_Performance.vcv),
+which saves HostMIDI pitch into FMVoice and MIDI gate into a bundled ADSR/VCA
+before HostAudio2. Use low monitoring gain and confirm note release in a
+real fork-built host; the saved arrangement and offline DSP tests are
+**not** a listening test. See the [FMVoice DSP notes](FM_VOICE.md).
+
 ## 4. Choose a sound-design patch
 
 | Patch | Musical use | What to play or change |
 | --- | --- | --- |
+| [FM Voice Performance](../patches/examples/MODULAR_-_FM_Voice_Performance.vcv) | Two-operator FM voice with gate-controlled amplitude | Play MIDI, adjust ratio/index/feedback, listen for aliasing and verify release |
 | [Morphing State Pad](../patches/examples/MODULAR_-_Morphing_State_Pad.vcv) | First complete MorphVCO + StateFilter + Macro8 performance setup | MIDI note/chord; recall A/B for a roughly one-second timbral transition |
 | [Cinematic Drift Pad](../patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv) | Sustained bed and slowly shifting harmonic texture | Hold a chord; manually recall A/B for a four-second macro transition |
 | [Rhythmic Grit Bass](../patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv) | Tight low-register, modulated bass | Program short DAW MIDI notes; recall A/B for quick 0.20-second growl changes |
@@ -151,7 +169,7 @@ wet mix. The LFO is **not synchronized to host tempo**.
 
 There is also the simpler [Morph VCO Performance](../patches/examples/MODULAR_-_Morph_VCO_Performance.vcv) patch, which introduces the oscillator before adding State Filter and Macro8.
 
-The **Cinematic Drift** patch is driven by held MIDI and *manual* snapshot morphs, not a self-running LFO; the **Rhythmic Grit** patch's rhythm comes from incoming MIDI, not an internal sequencer. **Clocked Modulation Studio** needs transport pulses for beat lock, whereas **Cinematic Pulse Score** and **Fold Drive Cinematic Motion** deliberately free-run without HostTime. The saved gains are conservative choices, **not** listening-tested headroom guarantees. The [fourteen-patch catalog](FACTORY_PATCHES.md) also lists bundled-only community-module arrangements, and [Patch Workflow](PATCH_WORKFLOW.md) explains inspection limits.
+The **Cinematic Drift** patch is driven by held MIDI and *manual* snapshot morphs, not a self-running LFO; the **Rhythmic Grit** patch's rhythm comes from incoming MIDI, not an internal sequencer. **Clocked Modulation Studio** needs transport pulses for beat lock, whereas **Cinematic Pulse Score** and **Fold Drive Cinematic Motion** deliberately free-run without HostTime. The saved gains are conservative choices, **not** listening-tested headroom guarantees. The [fifteen-patch catalog](FACTORY_PATCHES.md) also lists bundled-only community-module arrangements, and [Patch Workflow](PATCH_WORKFLOW.md) explains inspection limits.
 
 ## 5. Validate a patch before recording
 
@@ -163,9 +181,10 @@ python3 tools/patches/patch_inspector.py validate \
   patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv \
   patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv
 python3 -m unittest discover -s tests -p 'test_patch_tools.py' -v
+python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_*.vcv --require-host-input
 ```
 
-`inspect` shows module inventory, cable graph, connected groups and errors/warnings. `validate` returns failure on structural errors; `--json` provides machine-readable output. The inspector checks first-party source-derived counts and ranges where it can determine them. It **does not** guarantee actual plugin/module availability, audible sound, correct semantic signal type or third-party port bounds. For pinned Fundamental/Cardinal modules with unavailable machine-readable schemas, it reports honest warnings.
+`patch_audio_routes.py` adds source-only HostAudio2 connectivity diagnostics; it cannot establish audible output. `inspect` shows module inventory, cable graph, connected groups and errors/warnings. `validate` returns failure on structural errors; `--json` provides machine-readable output. The inspector checks first-party source-derived counts and ranges where it can determine them. It **does not** guarantee actual plugin/module availability, audible sound, correct semantic signal type or third-party port bounds. For pinned Fundamental/Cardinal modules with unavailable machine-readable schemas, it reports honest warnings.
 
 Use a real instrument build and listen after validation. Save/reload the patch and your DAW project, try 44.1/48/96 kHz and different buffer sizes as practical, then record observations. Passing JSON checks is only the beginning.
 
@@ -219,6 +238,7 @@ python3 tools/instrument-builder/instrument_builder.py pack \
   --name "Echo Motion Performance" --format-version 2 \
   --out Echo_Motion.msinstrument
 python3 tools/instrument-builder/instrument_builder.py inspect Echo_Motion.msinstrument
+python3 tools/instrument-builder/instrument_builder.py controls Echo_Motion.msinstrument --json
 python3 tools/instrument-builder/instrument_builder.py check Echo_Motion.msinstrument
 python3 tools/instrument-builder/instrument_builder.py check \
   Echo_Motion.msinstrument --require-verified-routes
