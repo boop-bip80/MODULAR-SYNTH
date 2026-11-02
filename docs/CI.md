@@ -50,8 +50,11 @@ directory: `cardinal-<version>.tar.xz` and `cardinal+deps-<version>.tar.xz`,
 where `<version>` comes from `make -s version`. A new pre-upload check
 requires **both** files to be nonempty and verifies that GNU tar can list their
 contents using the Makefile's existing `--lzma` encoder. Tag artifact uploads
-now fail if no files match, and GitHub Release upload fails on unmatched
-patterns. [Offline release-gate tests](../tests/test_ci_source_tarball.py)
+now fail if no files match, and the GitHub Release step uses a **single**
+parent-relative file pattern and fails when it matches nothing. The one-pattern
+contract matters because `softprops/action-gh-release` rejects each unmatched
+pattern individually; the old three alternative `/home/runner` path depths
+would cause false failures if used with strict matching. [Offline release-gate tests](../tests/test_ci_source_tarball.py)
 exercise successful archive validation and rejection of missing, empty, corrupt
 and unsafe-version inputs.
 
