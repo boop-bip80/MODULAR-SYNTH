@@ -22,7 +22,18 @@ Up to **16 independent polyphonic stereo lanes** are supported. A polyphonic CV 
 
 ### Time modulation and sample-rate changes
 
-The delay read tap uses **linear interpolation** for fractional samples. Delay-time automation slews with a one-pole response that reaches about **99.9% of the new sample position in 25 ms**. This reduces abrupt zipper clicks but deliberate time sweeps can still pitch-bend and smear transients; there is no dual-head time-stretching or high-quality interpolation filter.
+Each delay read tap uses **linear interpolation** for fractional samples. For ordinary **continuous or small** delay-time modulation, the tap still follows a one-pole slew that reaches about **99.9% of the new sample position in 25 ms**; intentional sweeps can pitch-bend and smear transients.
+
+For a **discontinuous time-setting jump of at least 20 ms from the preceding target**, the DSP instead blends two **fixed** delay read heads over **25 ms** with a linear crossfade. Left/right share the exact crossfade weight, and the two weights sum to one (preserving the feedback loop's ≤90% gain bound). New requests during an active fade are deferred and re-evaluated after the fade completes; a sustained new target is not lost. This mitigates the extreme frequency sweep/skipped-read artifact of abrupt automation without any additional ring allocation or saved-state change. The tradeoff is a brief **mixture of old and new echoes**, potentially causing momentary comb coloration or a level dip for phase-opposed signals. This is not arbitrary click-proofing, beat synchronization, dual-head time-stretching, or pitch preservation for continuous sweeps.
+
+**Quantitative standalone step test, C++17 -O2, feedback 0%, wet 100%:** a 523.25 Hz / 4 V sine is buffered for 600 ms, then delay time steps forward/back. Values are worst absolute adjacent-sample output differences measured during each 25 ms transition plus 5 ms margin; lower is smoother in this controlled signal, not a listening-quality score.
+
+| Sample rate / step | Single-slewed-tap baseline, forward / back | Crossfade, forward / back |
+| --- | ---: | ---: |
+| 48 kHz, 7 → 200 → 7 ms | 7.942780 V / 7.986163 V | **0.274171 V / 0.273919 V** |
+| 384 kHz, 7 → 450 → 7 ms | 3.871342 V / 3.909636 V | **0.034528 V / 0.034246 V** |
+
+The negative right channel remained exactly half the left channel in this test (zero measured stereo mismatch); neither a linked host nor audible DAW test is implied.
 
 **Wet mix, feedback and stereo crossfeed** now use independent bounded one-pole automation slews, each reaching about **99.9% of the new setting within 10 ms** at the host sample rate. This limits abrupt changes in the audible dry/wet balance and the stereo feedback matrix. The first process call after construction, a reset or a host sample-rate switch adopts its requested control settings immediately; unchanged saved patches therefore begin at their set values, not a previous value. The feedback state always remains between 0 and 90% while slewing. This is *parameter smoothing*, not a click-free guarantee for arbitrary audio transients or a pitch-preserving delay algorithm. Rapid MIDI/CV modulation of those controls is intentionally filtered by the 10 ms time constant.
 
@@ -92,6 +103,7 @@ The standalone tests cover:
 - 48.5-sample fractional-delay interpolation over precisely two adjacent samples.
 - Dry, 50% mix and fully wet behavior; 50% ping-pong feedback decay across four echoes.
 - 25 ms delay-time smoothing, history invalidation across host sample-rate changes, and 16 independent lane states.
+- 25 ms stereo-coherent, gain-convex crossfade for abrupt ≥20 ms time jumps, with a quantitative before/after 48/384 kHz step-discontinuity regression.
 - 10 ms feedback/wet/crossfeed control smoothing, reset/sample-rate initialization and a bounded first-sample wet automation transient.
 - Fixed ring-memory bounds and an impulse arriving at exactly 192,000 history samples at both 192/384 kHz, 384 kHz reduced maximum time, extreme CV/audio values, NaN/Inf sanitation under strict fast-math and recovery after invalid rates.
 - Deterministic 16-lane stress for **210,000 frames at each of 44.1/48/96/192/384 kHz** (16.8 million lane updates), including repeated ring wraps, rapid delay-time sweeps, non-finite controls, output ±10 V bounds and bitwise independent replay of lane 0.
