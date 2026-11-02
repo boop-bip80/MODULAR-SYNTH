@@ -173,7 +173,7 @@ void testTriggerWidthGlideAndQuantization() {
     // With no further external clock, the filtered output converges.
     for (int i = 101; i < 24000; ++i)
         unit.process(in);
-    expect(std::abs(unit.glideVoltage() - unit.heldVoltage()) < 0.011 * 
+    expect(std::abs(unit.glideVoltage() - unit.heldVoltage()) < 0.011 *
            std::max(0.1, std::abs(unit.heldVoltage())),
            "glide reaches within ~1% of target after 99% settling time");
 }
