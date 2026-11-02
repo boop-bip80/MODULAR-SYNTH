@@ -18,11 +18,15 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -I . \
 # Optional stereo-delay audition, same duration and file format:
 /tmp/morph_filter_render --sample-rate 48000 --with-stereo-echo \
   --output /tmp/modular-synth-morph-filter-echo-48000.wav
+
+# Let the real echo feedback decay for two more seconds after the melody:
+/tmp/morph_filter_render --sample-rate 48000 --with-stereo-echo \
+  --tail-seconds 2 --output /tmp/modular-synth-morph-filter-tail-48000.wav
 ~~~
 
-The CLI supports `--sample-rate` 44100, 48000 (default), or 96000, and optional `--with-stereo-echo` (off by default). It requires `--output PATH` (use a `.wav` filename by convention); `--help` shows usage. Its status line reports `echo=off` or `echo=on` and the PCM data checksum. To protect existing recordings, it checks for an existing output file **or symlink (including a dangling symlink)** and refuses the write. This is a preflight check, **not an atomic guarantee** against a concurrent writer replacing the path between inspection and opening. Give each render a fresh filename in a private output directory.
+The CLI supports `--sample-rate` 44100, 48000 (default), or 96000, and optional `--with-stereo-echo` (off by default). `--tail-seconds 0|1|2` (default `0`) adds one or two seconds of natural StereoEcho feedback decay after the four-second phrase; **positive tail lengths require `--with-stereo-echo`**. It requires `--output PATH` (use a `.wav` filename by convention); `--help` shows usage. Its status line reports `echo=off` or `echo=on` and the PCM data checksum. To protect existing recordings, it checks for an existing output file **or symlink (including a dangling symlink)** and refuses the write. This is a preflight check, **not an atomic guarantee** against a concurrent writer replacing the path between inspection and opening. Give each render a fresh filename in a private output directory.
 
-The result is standard **stereo PCM16 little-endian WAV**, exactly four seconds long:
+The default result is standard **stereo PCM16 little-endian WAV**, exactly four seconds long. Positive echo-tail settings yield exactly **five or six seconds** with the same sample rate and format:
 
 | Rate | Frames | Audio data bytes | Approx. file size |
 | --- | ---: | ---: | ---: |
@@ -37,7 +41,7 @@ The program streams two samples per frame directly to disk, so it does not alloc
 - One phase-continuous MorphVCO follows the original sixteen-step pitch sequence. Morph and pulse width evolve smoothly throughout the phrase.
 - A second MorphVCO supplies a lower voice. Each goes into an independent real StateFilter DSP core with animated cutoff and modest resonance/drive.
 - Each quarter-second note has short attack/release shaping to reduce transition clicks. Left/right mixes use different amounts of low-pass and band-pass output.
-- Optional StereoEcho post-filter stereo delay: **187.5 ms** fixed time, **32%** feedback, **35%** wet, **70%** crossfeed. Each stereo sample is converted from normalized WAV amplitude to the DSP's ±5 V convention, passed through the same original StereoEcho DSP used by the Rack module, then converted back. The echo rings allocate once only when enabled, not per sample. The fixed **four-second** WAV can truncate the last echo tails; this is not tempo/BPM synchronization.
+- Optional StereoEcho post-filter stereo delay: **187.5 ms** fixed time, **32%** feedback, **35%** wet, **70%** crossfeed. Each stereo sample is converted from normalized WAV amplitude to the DSP's ±5 V convention, passed through the same original StereoEcho DSP used by the Rack module, then converted back. The echo rings allocate once only when enabled, not per sample. By default the fixed **four-second** WAV truncates the remaining delay tails. With `--tail-seconds 1` or `2`, the oscillator/filter notes stop at precisely four seconds and the **same echo DSP** receives zero-valued input for the added duration; its actual feedback ring decays without fabricated notes or reverb. This is not tempo/BPM synchronization.
 - Before PCM conversion, every sample is checked with the existing bitwise IEEE-754 finite guard (robust even with strict -ffast-math) and limited to **±0.75 full scale** to provide headroom.
 
 The DSP is intentionally single-rate: **polyBLEP does not eliminate all oscillator aliasing**, and nonlinear drive has no oversampling. This is a functional sound/regression fixture, not a mastered release.
@@ -56,6 +60,7 @@ The test uses only Python's standard library, a local C++17 compiler and the thr
 4. Existing files and dangling symlink outputs are rejected; the symlink test skips only where creating test symlinks is unsupported.
 5. Strict fast-math 48 kHz dry and optional echo renders and basic CLI validation, including refusing to overwrite an existing file.
 6. Optional echo at **44.1/48/96 kHz**: repeat-run WAV/checksum identity and distinct dry versus delayed output. Before the first 187.5 ms tap, the output must equal the expected 65% dry signal (within PCM quantization tolerance); later, delayed energy must appear.
+7. Optional one- and two-second echo-tail renders at all three sample rates: deterministic full-file bytes, exact 5/6-second RIFF lengths, byte-for-byte preservation of the original first four seconds of PCM, active early echo tails and (for two seconds) clear decay toward the end. Invalid/negative/fractional tail lengths and nonzero tails without the echo flag are rejected.
 
 All generated files live inside Python's temporary directory and are discarded after the tests. They should **not be committed to the repository**; a CI workflow may attach an example WAV as an ephemeral artifact in the future.
 
