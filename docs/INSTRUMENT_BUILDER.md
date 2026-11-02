@@ -241,6 +241,44 @@ v1 archives are not silently upgraded. Future changes to existing source-backed
 destination semantics require a new format or explicit immutable contract
 identifier; old source-bundle claims must not be silently reinterpreted.
 
+### Readable saved Macro8 route map
+
+Use `routes` to see the **actual saved direct Macro8 cable graph** in
+performer-friendly text, including each Macro8 control number/name/range,
+destination model and input port, source-declared audio/CV label, and the
+related knob (when the module source associates one with that CV port).
+Rows sort deterministically by Macro8 controller, control number, and
+destination, so performers can scan one control's fan-out together:
+
+```bash
+python3 tools/instrument-builder/instrument_builder.py routes \
+  Echo_Motion.msinstrument
+
+# Stable machine-readable representation of the same saved source mapping:
+python3 tools/instrument-builder/instrument_builder.py routes \
+  Echo_Motion.msinstrument --json
+```
+
+For example, a MorphVCO destination is described as a **source-verified
+wave-morph CV input** with a related Wave morph position knob. That does not
+turn the cable into a Rack parameter write, DAW automation assignment, or
+proof that the patch loads and sounds in a host. Audio ports are separately
+marked `audio`; unidentified external and historical ports remain
+`UNVERIFIED` without invented names or knob links.
+
+The report validates the full two-entry bundle and patch-derived manifest
+before displaying anything. It never changes or upgrades the source archive.
+Legacy v1 shows a clear instruction to repack the original `.vcv` with
+`--format-version 2`; v2 with no direct Macro8 cables reports zero routes.
+Older unmarked or ClockedLFO-marked v2 interpretations stay conservative.
+
+The informational `routes` command exits **0** for any valid archive,
+including archives with unverified routes; **2** means a corrupt/invalid
+bundle or file read failure. For CI enforcement use the existing
+`check --require-verified-routes` command, which exits **1** if the
+source-only route gate fails. The opt-in strict check's output and the
+default `inspect`, `check`, and `pack` behavior are unchanged.
+
 ### Safety and limits
 
 - The source `.vcv` is parsed as strict JSON: duplicate keys, NaN/Inf,
