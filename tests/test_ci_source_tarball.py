@@ -160,6 +160,27 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
         "GNU tar/LZMA/Bash unavailable for archive smoke test",
     )
+    def test_validator_requires_new_manifest_module_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "checkout"
+            project.mkdir()
+            self._stage_source_members(project)
+            manifest_file = project / "plugins/ModularSynth/plugin.json"
+            manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+            manifest["modules"].append({"slug": "FutureUtility"})
+            manifest_file.write_text(json.dumps(manifest), encoding="utf-8")
+            # New module was declared but none of its three source files exist.
+            self._create_archives(project)
+            result = self._run(project, VERSION)
+            self.assertNotEqual(result.returncode, 0)
+            for name in ("src/FutureUtility.cpp", "src/FutureUtility.hpp",
+                         "res/FutureUtility.svg"):
+                self.assertIn(name, result.stderr)
+
+    @unittest.skipUnless(
+        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
+        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+    )
     def test_validator_rejects_stale_archive_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "checkout"
