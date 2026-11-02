@@ -79,8 +79,10 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                                                   "-I", "/pinned/rack/include"]),
                   mock.patch.object(gate.shutil, "which", return_value="c++"),
                   mock.patch.object(gate.subprocess, "run", side_effect=fake_run)):
-                result = gate.main(["--rack-root", str(rack),
-                                    "--dpf-root", str(Path(temp) / "dpf")])
+                # A mocked compiler must not print misleading real-SDK PASS lines.
+                with contextlib.redirect_stdout(io.StringIO()):
+                    result = gate.main(["--rack-root", str(rack),
+                                        "--dpf-root", str(Path(temp) / "dpf")])
             self.assertEqual(result, 0)
             self.assertEqual(len(calls), 2)
             self.assertTrue(calls[0][-1].endswith("/ForgeRealOsc/ForgeRealOsc.cpp"))
