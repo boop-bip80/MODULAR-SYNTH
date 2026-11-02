@@ -18,6 +18,13 @@ WORKFLOW = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
 MAKEFILE = (ROOT / "Makefile").read_text(encoding="utf-8")
 VERSION = re.search(r"(?m)^VERSION = (\S+)$", MAKEFILE).group(1)
 ARCHIVES = (f"cardinal-{VERSION}.tar.xz", f"cardinal+deps-{VERSION}.tar.xz")
+REQUIRED_FILES = (
+    "LICENSE",
+    "README.md",
+    "Makefile",
+    "plugins/ModularSynth/plugin.json",
+    "plugins/ModularSynth/src/MorphVCO.cpp",
+)
 
 
 def source_job() -> str:
@@ -51,6 +58,11 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             self.assertIn(suffix, checker)
         self.assertIn('[[ ! -s "$archive" ]]', checker)
         self.assertIn('tar --lzma -tf "$archive"', checker)
+        self.assertIn('root="cardinal-${version}"', checker)
+        for required in REQUIRED_FILES:
+            with self.subTest(required=required):
+                self.assertIn(f'required["{required}"]', checker)
+        self.assertIn("Archive member escapes versioned root", checker)
 
     def test_tagged_upload_and_release_fail_on_unmatched_files(self) -> None:
         job = source_job()
@@ -78,7 +90,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "checkout"
             project.mkdir()
-            (project / "payload.txt").write_text("A sample source entry", encoding="utf-8")
+            self._stage_source_members(project)
             self._create_archives(project)
             result = self._run(project, VERSION)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -91,7 +103,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "checkout"
             project.mkdir()
-            (project / "payload.txt").write_text("A sample source entry", encoding="utf-8")
+            self._stage_source_members(project)
             self._create_archives(project)
             with_deps = project.parent / ARCHIVES[1]
             with_deps.unlink()
@@ -102,6 +114,35 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
 
             with_deps.write_bytes(b"not a compressed tar archive")
             self.assertNotEqual(self._run(project, VERSION).returncode, 0)
+
+    @unittest.skipUnless(
+        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
+        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+    )
+    def test_validator_rejects_missing_first_party_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "checkout"
+            project.mkdir()
+            self._stage_source_members(project)
+            (project / "plugins/ModularSynth/src/MorphVCO.cpp").unlink()
+            self._create_archives(project)
+            result = self._run(project, VERSION)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing required member", result.stderr)
+
+    @unittest.skipUnless(
+        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
+        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+    )
+    def test_validator_rejects_wrong_archive_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "checkout"
+            project.mkdir()
+            self._stage_source_members(project)
+            self._create_archives(project, archive_root="cardinal-old")
+            result = self._run(project, VERSION)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("escapes versioned root", result.stderr)
 
     def test_validator_rejects_path_like_versions(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -120,12 +161,21 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _create_archives(project: Path) -> None:
+    def _stage_source_members(project: Path) -> None:
+        for name in REQUIRED_FILES:
+            destination = project / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(f"source placeholder: {name}", encoding="utf-8")
+
+    @staticmethod
+    def _create_archives(project: Path, archive_root: str | None = None) -> None:
+        prefix = archive_root or f"cardinal-{VERSION}"
         for archive in ARCHIVES:
             subprocess.run(
                 [
-                    "tar", "--lzma", "-cf", str(project.parent / archive),
-                    "-C", str(project), "payload.txt",
+                    "tar", "--lzma", f"--transform=s,^\\.,{prefix},",
+                    "-cf", str(project.parent / archive),
+                    "-C", str(project), ".",
                 ],
                 check=True,
                 capture_output=True,
