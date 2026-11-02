@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original MODULAR-SYNTH Fold Drive panel, 12 HP x 3U -->
+<!-- Copyright (C) 2026 boop-bip80 contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" width="60.96mm" height="128.5mm" viewBox="0 0 180 380">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#171c31"/>
+      <stop offset="1" stop-color="#111522"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#59ddc7"/>
+      <stop offset=".52" stop-color="#9a7bed"/>
+      <stop offset="1" stop-color="#ffb278"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="380" fill="url(#background)"/>
+  <rect width="180" height="3" fill="url(#accent)"/>
+  <path d="M12 47h156M12 126h156M12 212h156M12 303h156" stroke="#404864" stroke-width="1"/>
+  <circle cx="48" cy="100" r="29" fill="#232c41" stroke="#62a2a1" stroke-width="1.5"/>
+  <circle cx="132" cy="100" r="29" fill="#28213f" stroke="#bd8de5" stroke-width="1.5"/>
+  <circle cx="90" cy="177" r="29" fill="#322940" stroke="#dba878" stroke-width="1.5"/>
+  <path d="M17 241h146" stroke="#28596e" stroke-width="2"/>
+  <path d="M17 312h146" stroke="#735a98" stroke-width="2"/>
+  <rect y="377" width="180" height="3" fill="url(#accent)"/>
+</svg>

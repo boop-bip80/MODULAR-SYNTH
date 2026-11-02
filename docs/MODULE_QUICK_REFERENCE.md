@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Originals — musician's quick reference
 
-Five first-party Rack models are **statically registered in source** and expected
+Six first-party Rack models are **statically registered in source** and expected
 under **MODULAR-SYNTH Originals** in the module browser after a successful build.
 This page is a patching cheat sheet for the models actually
 declared in [the collection manifest](../plugins/ModularSynth/plugin.json)
@@ -14,6 +14,7 @@ measured audio or a verified DAW session.
 | --- | --- | --- | --- |
 | **Morph VCO** (`MorphVCO`) | Polyphonic sine → saw → pulse oscillator | **4 in / 2 out** | Octave 0; fine 0 cents; morph 0%; pulse width 50%; FM depth 0% |
 | **State Filter** (`StateFilter`) | Polyphonic multimode filter; simultaneous LP/BP/HP | **4 in / 3 out** | Cutoff 1 kHz; resonance 0%; drive 0% |
+| **Fold Drive** (`FoldDrive`) | 16-lane smooth sine-wavefolding timbre processor | **4 in / 1 out** | Drive 30%; asymmetry bias 0%; wet mix 65% |
 | **Macro8 Performance Macros** (`Macro8`) | Eight named performer CVs and four A–D scenes | **0 in / 8 out** | All eight macros 0%; unipolar 0 to +10 V; transition 0.25 s; RECALL |
 | **Stereo Echo** (`StereoEcho`) | Polyphonic stereo delay with wet/dry and ping-pong crossfeed | **5 in / 2 out** | Time 250 ms; feedback 35%; wet 40%; crossfeed 50% |
 | **Clocked LFO** (`ClockedLFO`) | Sixteen-lane free/externally clocked modulation; 5 wave/trigger outputs | **5 in / 5 out** | Free rate 0.5 Hz; clock ratio 1:1; phase 0%; width 50% |
@@ -40,6 +41,24 @@ measured audio or a verified DAW session.
 - **CV inputs:** FREQ adds **1 octave per volt** to the cutoff setting;
   RES and DRV each add **0.1 normalized units per volt** (10 V full span).
   The result is bounded by the filter DSP. Up to **16 polyphonic lanes**.
+
+### Fold Drive (`FoldDrive`)
+
+[Source/configuration](../plugins/ModularSynth/src/FoldDrive.cpp) ·
+[Fold curve and safety limits](FOLD_DRIVE.md)
+
+- **Audio:** IN is nominally **±5 V**; OUT is always bounded to **±10 V**.
+  The fold curve is a sine transfer, **not bandlimited or oversampled**;
+  higher drive/settings and upper harmonics may alias.
+- **Controls:** DRIVE **0…100%** (30% default) deepens repeated folding;
+  BIAS **−100…+100%** (0 default) makes the spectrum asymmetric; WET MIX
+  **0…100%** (65% default) crossfades the dry and folded signals. DRIVE=0
+  or MIX=0 returns the clipped-to-±10 V dry signal.
+- **CV inputs:** DRV, BIA and MIX each add **0.1 normalized units per volt**
+  to its knob. +10 V adds 100%; negative CV subtracts. The effective
+  controls are clamped, then slewed over approximately **3 ms** to prevent
+  instant CV jumps. The folded transfer subtracts its zero-input bias value,
+  so **0 V audio remains 0 V** with any BIAS setting. 16 poly lanes supported.
 
 ### Macro8 Performance Macros (`Macro8`)
 
@@ -100,7 +119,7 @@ measured audio or a verified DAW session.
   Clock acquisition, beat-time drift and audible modulation quality still
   require real-host validation.
 
-## Four suggested wiring recipes (host-unverified)
+## Five suggested wiring recipes (host-unverified)
 
 1. **Keyboard subtractive voice:** `Host MIDI pitch → Morph VCO PITCH`;
    `Morph VCO MORPH → State Filter IN → LP → VCA audio IN → Host Audio L/R`.
@@ -122,6 +141,12 @@ measured audio or a verified DAW session.
    **LFO SIN → Morph VCO MORPH CV**, **TRI → State Filter FREQ CV** and
    **PULSE → Stereo Echo MIX CV**. EOC can retrigger an ADSR while its
    MIDI gate is held. With transport stopped, free-rate modulation continues.
+5. **Cinematic moving folds:** `Morph VCO MORPH OUT → Fold Drive IN →
+   State Filter IN → LP → VCA audio IN → Host Audio L/R`; send MIDI
+   gate→ADSR→VCA CV. Use Clocked LFO TRI→Fold Drive DRV CV and SIN→BIA CV;
+   MIDI CC1/mod wheel can raise Fold Drive MIX CV. Set DRIVE near 58%,
+   BIAS 0%, MIX 48% and start monitoring quietly. The example uses free-running
+   0.25 Hz motion and does not synchronize to host BPM.
 
 For an actual prewired version of (1), start with **Morph VCO Performance**.
 For scenes, start with **Morphing State Pad**. For the stereo signal path,
@@ -133,11 +158,11 @@ oscillator morph. Those are saved signal/CV routes, not an audio audition.
 HostTime beat/reset routing and Clocked LFO modulation to VCO, filter,
 ADSR retrigger and Echo wet mix; it needs host transport for beat lock. **Cinematic Pulse Score** instead leaves HostTime/CLK disconnected, uses a free-running LFO PULSE to gate a second ADSR/VCA on its low-pass left path, and keeps high-pass right separate. Its four A–D Macro8 scenes are saved CV positions, not auditioned film-score audio.
 
-## Thirteen factory patches
+## Fourteen factory patches
 
-All thirteen links below are actual `.vcv` files under
+All fourteen links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
-existing plugin collection and does not require one of these five first-party
+existing plugin collection and does not require one of these six first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
 
 | Patch | Models | Play/try this |
@@ -155,6 +180,7 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Clocked Modulation Studio](../patches/examples/MODULAR_-_Clocked_Modulation_Studio.vcv) | Originals | Start host transport and play eight-voice MIDI; clocked sine/tri/pulse/EOC modulate VCO, filter, Echo and envelope |
 | [Cinematic Pulse Score](../patches/examples/MODULAR_-_Cinematic_Pulse_Score.vcv) | Originals | Play MIDI over a **free-running** 0.8 Hz pulse-gated LP left channel, direct HP right, and four Macro8 tension/echo scenes; no host BPM sync |
 | [Noir Expressive Lead](../patches/examples/MODULAR_-_Noir_Expressive_Lead.vcv) | Originals | Mono MIDI voice; aftertouch moves wave morph, mod wheel raises Echo wet and Macro8 A–D recall dark-to-tense scenes |
+| [Fold Drive Cinematic Motion](../patches/examples/MODULAR_-_Fold_Drive_Cinematic_Motion.vcv) | Originals | Eight MIDI lanes; 0.25 Hz free-running LFO modulates FoldDrive drive/bias and MIDI CC1 controls wet mix |
 
 If the examples folder is included in the build, open a patch through
 **File → Open demo / example project**; otherwise load its `.vcv` directly.
@@ -166,7 +192,7 @@ and [offline patch checks](PATCH_WORKFLOW.md) provide more context.
 
 ## What is—and is not—verified
 
-The manifest, module C++ metadata and all thirteen saved patch graphs can be
+The manifest, module C++ metadata and all fourteen saved patch graphs can be
 checked offline with:
 
 ```sh

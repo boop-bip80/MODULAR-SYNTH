@@ -38,8 +38,8 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertTrue(report["ok"], report["errors"])
         self.assertEqual(len(report["examples"]), len(coverage.EXAMPLES))
         self.assertTrue(all(patch["ok"] for patch in report["examples"]))
-        self.assertTrue({"MorphVCO", "StateFilter", "Macro8", "StereoEcho",
-                         "ClockedLFO"}.issubset(
+        self.assertTrue({"MorphVCO", "StateFilter", "FoldDrive", "Macro8",
+                         "StereoEcho", "ClockedLFO"}.issubset(
             report["model_coverage"]))
         self.assertTrue(all(report["model_coverage"].values()))
         self.assertTrue(any("Morphing_State_Pad.vcv" in name
@@ -48,6 +48,8 @@ class FactoryPatchCoverageTests(unittest.TestCase):
                       report["model_coverage"]["StereoEcho"])
         self.assertIn("MODULAR_-_Clocked_Modulation_Studio.vcv",
                       report["model_coverage"]["ClockedLFO"])
+        self.assertIn("MODULAR_-_Fold_Drive_Cinematic_Motion.vcv",
+                      report["model_coverage"]["FoldDrive"])
         self.assertEqual(report["sample_rate_status"],
                          "not asserted: no host runtime sample-rate execution")
         self.assertGreater(sum(patch["warning_count"]
@@ -66,7 +68,7 @@ class FactoryPatchCoverageTests(unittest.TestCase):
             if json_mode:
                 report = json.loads(proc.stdout)
                 self.assertTrue(report["ok"])
-                self.assertGreaterEqual(len(report["model_coverage"]), 5)
+                self.assertGreaterEqual(len(report["model_coverage"]), 6)
             else:
                 self.assertIn("PASS factory patch claims", proc.stdout)
                 self.assertIn("host execution not tested", proc.stdout)
@@ -109,6 +111,37 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertFalse(report["ok"])
         self.assertTrue(any("ModularSynth/Macro8: no first-party example" in err
                             for err in report["errors"]), report["errors"])
+
+    def test_fold_drive_patch_requires_midi_modwheel_wet_cv(self) -> None:
+        filename = "MODULAR_-_Fold_Drive_Cinematic_Motion.vcv"
+
+        def remove_wet_cv(patch: dict) -> None:
+            fold = next(m["id"] for m in patch["modules"]
+                        if m.get("plugin") == "ModularSynth"
+                        and m.get("model") == "FoldDrive")
+            patch["cables"] = [c for c in patch["cables"]
+                               if not (c["inputModuleId"] == fold and c["inputId"] == 3)]
+
+        self.mutate(filename, remove_wet_cv)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("missing advertised route: MIDI mod wheel changes FoldDrive wet mix"
+                            in error for error in report["errors"]), report["errors"])
+
+    def test_fold_drive_patch_must_remain_unsynchronized_free_running(self) -> None:
+        filename = "MODULAR_-_Fold_Drive_Cinematic_Motion.vcv"
+
+        def change_free_rate(patch: dict) -> None:
+            lfo = next(m for m in patch["modules"]
+                       if m.get("plugin") == "ModularSynth"
+                       and m.get("model") == "ClockedLFO")
+            lfo["params"][0]["value"] = 1.0
+
+        self.mutate(filename, change_free_rate)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("expected free-running LFO with saved rate 0.25 Hz"
+                            in error for error in report["errors"]), report["errors"])
 
     def test_invalid_first_party_cable_is_delegated_to_inspector(self) -> None:
         filename = "MODULAR_-_Morphing_State_Pad.vcv"

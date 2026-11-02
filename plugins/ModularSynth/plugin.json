@@ -28,6 +28,15 @@
       ]
     },
     {
+      "slug": "FoldDrive",
+      "name": "Fold Drive",
+      "description": "Original 16-lane sine wavefolder with asymmetric bias, drive and wet/dry CV, short control slew and bounded audio output. Not bandlimited.",
+      "tags": [
+        "Waveshaper",
+        "Polyphonic"
+      ]
+    },
+    {
       "slug": "Macro8",
       "name": "Macro8 Performance Macros",
       "description": "Eight named performance CV outputs with four recallable, smoothly morphing snapshots, and per-output unipolar or bipolar voltage modes.",

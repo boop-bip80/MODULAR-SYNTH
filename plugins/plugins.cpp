@@ -1229,6 +1229,7 @@ static void initStatic__ModularSynth()
     {
         p->addModel(modelMorphVCO);
         p->addModel(modelStateFilter);
+        p->addModel(modelFoldDrive);
         p->addModel(modelMacro8);
         p->addModel(modelStereoEcho);
         p->addModel(modelClockedLFO);

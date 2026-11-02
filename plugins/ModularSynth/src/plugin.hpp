@@ -12,6 +12,7 @@ using namespace rack;
 extern Plugin* pluginInstance;
 extern Model* modelMorphVCO;
 extern Model* modelStateFilter;
+extern Model* modelFoldDrive;
 extern Model* modelMacro8;
 extern Model* modelStereoEcho;
 extern Model* modelClockedLFO;
