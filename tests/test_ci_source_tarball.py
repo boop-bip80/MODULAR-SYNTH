@@ -63,6 +63,12 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             upload,
         )
         self.assertIn("fail_on_unmatched_files: true", release)
+        # action-gh-release checks each pattern separately. Three alternative
+        # /home/runner glob depths would make a successful release fail.
+        patterns = release.split("files: |", 1)[1].splitlines()
+        self.assertEqual([p.strip() for p in patterns if p.strip()], [
+            "../cardinal*.tar.xz",
+        ])
 
     @unittest.skipUnless(
         shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
