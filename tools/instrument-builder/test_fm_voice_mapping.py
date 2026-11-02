@@ -147,7 +147,6 @@ class FMVoiceMappingTests(unittest.TestCase):
                     "unverified" if marker is None else "cv")
                 # Reading never silently upgrades or rewrites historical bytes.
                 self.assertEqual(old, historical_bundle(patch, name, marker))
-                self.assertEqual(old, old)  # intact source input
                 with tempfile.TemporaryDirectory() as temporary:
                     bundle = Path(temporary) / "old.msinstrument"
                     bundle.write_bytes(old)
