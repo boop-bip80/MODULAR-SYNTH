@@ -68,5 +68,86 @@ class RealRackHeaderCheckTests(unittest.TestCase):
         self.assertNotIn("PASS: 7/7", result.stdout)
 
 
+    def test_module_sources_are_present_and_missing_wrapper_fails_closed(self) -> None:
+        sources = real_rack.module_sources()
+        self.assertEqual(len(sources), len(real_rack.MODULES))
+        self.assertTrue(all(source.is_file() for source in sources))
+        with self.assertRaisesRegex(real_rack.PreflightError, "Missing first-party wrapper"):
+            real_rack.module_sources(Path("/nonexistent/sdk/modules"), ("FMVoice",))
+
+    def test_registration_contract_rejects_missing_or_duplicate_wiring(self) -> None:
+        modules = ("MorphVCO", "FMVoice")
+        manifest = {"modules": [{"slug": name} for name in modules]}
+        makefile = "\n".join(
+            f"PLUGIN_FILES += ModularSynth/src/{name}.cpp" for name in modules
+        )
+        header = "\n".join(f"extern Model* model{name};" for name in modules)
+        loader = (
+            "static void initStatic__ModularSynth()\n{\n"
+            "  p->addModel(modelMorphVCO);\n"
+            "  p->addModel(modelFMVoice);\n}\n"
+            "void initStaticPlugins()\n{\n"
+            "  initStatic__ModularSynth();\n}\n"
+        )
+        real_rack.validate_registration_contract(
+            manifest, makefile, header, loader, modules,
+        )
+        with self.assertRaisesRegex(real_rack.PreflightError, "manifest mismatch"):
+            real_rack.validate_registration_contract(
+                {"modules": [{"slug": "MorphVCO"}]}, makefile, header, loader, modules,
+            )
+        with self.assertRaisesRegex(real_rack.PreflightError, "compiled-source registry mismatch"):
+            real_rack.validate_registration_contract(
+                manifest, makefile.replace("FMVoice.cpp", "MorphVCO.cpp"),
+                header, loader, modules,
+            )
+        with self.assertRaisesRegex(real_rack.PreflightError, "header declarations mismatch"):
+            real_rack.validate_registration_contract(
+                manifest, makefile, header.replace("modelFMVoice", "modelMorphVCO"),
+                loader, modules,
+            )
+        with self.assertRaisesRegex(real_rack.PreflightError, "loader registrations mismatch"):
+            real_rack.validate_registration_contract(
+                manifest, makefile, header,
+                loader.replace("p->addModel(modelFMVoice);", "p->addModel(modelMorphVCO);"),
+                modules,
+            )
+
+    def test_real_registration_snapshot_matches_the_seven_modules(self) -> None:
+        # This reads the real repository's production loader and Makefile,
+        # avoiding a link-smoke that succeeds while the host never registers it.
+        real_rack.check_registration_contract()
+
+    def test_link_symbol_gate_rejects_missing_duplicate_and_undefined_models(self) -> None:
+        modules = ("MorphVCO", "FMVoice")
+        good = "00000000 D modelMorphVCO\n00000008 D modelFMVoice\n"
+        host_import = "                 U _ZN4rack8hostCallEv\n"
+        real_rack.validate_linked_model_symbols(good, host_import, modules)
+        with self.assertRaisesRegex(real_rack.PreflightError, "Missing or duplicate"):
+            real_rack.validate_linked_model_symbols(
+                "00000000 D modelMorphVCO\n", host_import, modules,
+            )
+        with self.assertRaisesRegex(real_rack.PreflightError, "Missing or duplicate"):
+            real_rack.validate_linked_model_symbols(
+                good + "00000010 D modelFMVoice\n", host_import, modules,
+            )
+        with self.assertRaisesRegex(real_rack.PreflightError, "Unresolved first-party"):
+            real_rack.validate_linked_model_symbols(
+                good, host_import + "                 U modelFMVoice\n", modules,
+            )
+
+    def test_link_smoke_cli_fails_on_unavailable_real_sdk(self) -> None:
+        missing = real_rack.ROOT / "__no_rack_sdk_at_this_path__"
+        result = subprocess.run(
+            [
+                sys.executable, "-B", str(real_rack.ROOT / "tools/ci/check_real_rack_headers.py"),
+                "--rack-root", str(missing), "--link-smoke",
+            ], cwd=real_rack.ROOT, text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("Real Rack header preflight unavailable", result.stderr)
+        self.assertNotIn("PASS:", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -145,6 +145,48 @@ with a targeted setup message; source compilation failure exits 1. The
 SpeexDSP Linux type header is generated from the pinned upstream `.in`
 template in an automatically removed temporary directory—never vendored.
 
+### First-party linked-object smoke (additional gate)
+
+Run `python3 -B tools/ci/check_real_rack_headers.py --link-smoke` after
+initializing the same exact pinned SDK headers. This mode checks that the
+manifest, `plugins/Makefile`, shared model declarations and
+`initStatic__ModularSynth()` loader describe the **same seven originals**,
+then compiles every original HEADLESS Rack translation unit to a real
+position-independent object and links them into one **temporary Linux ELF
+shared object**. It uses `nm -D` to require exactly one defined
+`model<Module>` symbol for each original and to reject unresolved first-party
+model symbols. Missing translation units, duplicate model definitions or
+broken loader/source registration fail the gate. Offline negative fixtures
+exercise these failures.
+
+The smoke object is automatically deleted and deliberately permits unresolved
+**Rack/host imports**, which the full Cardinal integration must supply. It has
+no complete plugin entry point or linked host implementation. **It is not a
+loadable Cardinal, VST3, CLAP or LV2 binary**, nor proof of actual audio,
+DAW compatibility, symbol resolution at runtime, or a releasable artifact.
+The real-header Actions workflow now runs both syntax-only and this separate
+object/link gate when runners execute; neither should be marked green before
+an actual completed run.
+
+**Observed local evidence (2026-11-02; exact test commit
+[`1360387`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/136038722618e146873164f0abe8a99efe29398a)):**
+with GCC 13.3.0, exact pinned Rack/DPF plus six nested Gitlinks, and extracted
+Ubuntu 24.04 Jansson 2.14 headers, all seven real HEADLESS units passed the
+existing syntax checker, and `--link-smoke` separately **compiled 7/7 objects,
+linked 7/7 into a temporary ELF shared object, and found seven defined
+first-party model symbols**. The focused Python test file passed **10/10**
+cases, including missing-wrapper, registration-drift, duplicate/undefined-model
+negative fixtures. This is local pre-host evidence only; no production
+Cardinal binary or loadable DAW plugin was created.
+
+At the 2026-11-02 inspection, [full-build run 41386608744](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41386608744)
+had **20/20 queued jobs, zero executed steps**, and [real-header run
+41386608694](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41386608694)
+had **one queued job, zero steps**. This is a pre-execution scheduling
+condition, **not a measured compile failure**; repository code alone cannot
+establish the exact GitHub runner-side cause. A focused link gate cannot
+resolve runner availability, but can supply stronger evidence once scheduled.
+
 **Historical local evidence (2026-11-02, exact merged `3fbda096`, before FMVoice):** GCC 13.3.0 `-fsyntax-only` completed for
 **MorphVCO, StateFilter, FoldDrive, Macro8, StereoEcho and ClockedLFO (6/6)** against
 the exact Rack and DPF Gitlinks, exact six nested dependency Gitlinks,
