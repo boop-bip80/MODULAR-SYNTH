@@ -68,7 +68,7 @@ class ReadableRouteReportTests(unittest.TestCase):
         self.assertIn("Wave morph CV (10 V full span; adds to knob)", view)
         self.assertIn("source-related knob 2: Wave morph position", view)
         self.assertIn("not host automation", view)
-        self.assertIn("not a live Cardinal build", view.lower())
+        self.assertIn("not a live cardinal build", view.lower())
         self.assertEqual(saved.read_bytes(), before)
 
     def test_mixed_unknown_ports_are_described_not_promoted_to_verified(self) -> None:
