@@ -123,6 +123,35 @@ Rack/Cardinal ABI compatibility, plugin load, DAW playback, or audio quality.
 Real plugin variants still need the production build and host checks before
 shipping.
 
+### Fresh generated modules against pinned real Rack headers
+
+A separate Linux/HEADLESS compatibility gate generates both starter variants
+into a temporary directory, validates each output, and syntax-checks each
+actual `.cpp` against the **real pinned Rack/DPF/Jansson headers**. It shares
+the exact Gitlink/dependency preflight and Cardinal C++ definitions of
+`tools/ci/check_real_rack_headers.py`; it does **not** fall back to
+`tests/rack_stub` when dependencies are unavailable. No generated file is
+registered or installed in the repository.
+
+```bash
+sudo apt-get install -y libjansson-dev
+git submodule update --init --depth 1 src/Rack dpf
+git -C src/Rack submodule update --init --depth 1 \
+    dep/glfw dep/nanosvg dep/oui-blendish dep/pffft dep/simde dep/speexdsp
+python3 -B tools/module-forge/check_real_generated_headers.py
+```
+
+The dedicated
+[`Module Forge pinned Rack header syntax`](../.github/workflows/module-forge-real-headers.yml)
+workflow runs this gate and its fail-closed orchestration unit tests on relevant
+changes. A pass means **two generated HEADLESS translation units compile at
+the C++ syntax/API layer** against that pinned SDK. It does not link Cardinal,
+compile the non-HEADLESS UI widgets, validate GUI resources, instantiate a
+VST3/CLAP/LV2 host, or render or audition DAW audio. A missing submodule, a
+wrong pinned Gitlink or an absent system header is a gate failure rather than
+a reported pass. Full production plugin builds and host validation remain
+mandatory for release.
+
 ## Dry-run integration (explicit opt-in)
 
 The scaffolder now has a separate **safe integration command**. It previews
@@ -248,8 +277,9 @@ indexes are part of patch compatibility, so never silently reorder them.
 
 ## Next Module Forge milestones
 
-1. Add generated-module regular and HEADLESS Cardinal compilation plus host
-   smoke tests in CI, once the full toolchain is available.
+1. Extend the generated-module real-header **HEADLESS syntax-only** gate to
+   full linked Cardinal builds, non-HEADLESS UI compilation and host smoke
+   tests, once the production toolchain is available.
 2. Extend offline DSP tests with precise frequency-response, CPU/aliasing and
    CV/polyphony regression cases; the Rack-independent TPT core is the first
    example, not a shared DSP framework yet.

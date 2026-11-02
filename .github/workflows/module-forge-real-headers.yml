@@ -1,0 +1,57 @@
+name: Module Forge pinned Rack header syntax
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/module-forge/**'
+      - 'tools/ci/check_real_rack_headers.py'
+      - 'plugins/ModularSynth/src/plugin.hpp'
+      - 'src/Rack'
+      - 'dpf'
+      - '.github/workflows/module-forge-real-headers.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/module-forge/**'
+      - 'tools/ci/check_real_rack_headers.py'
+      - 'plugins/ModularSynth/src/plugin.hpp'
+      - 'src/Rack'
+      - 'dpf'
+      - '.github/workflows/module-forge-real-headers.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: module-forge-real-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generated-headless-syntax:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # Mirror the pinned original-header workflow's official SpeexDSP source.
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: url.https://github.com/xiph/speexdsp.git.insteadOf
+      GIT_CONFIG_VALUE_0: https://gitlab.xiph.org/xiph/speexdsp.git
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: Check generated-gate orchestration
+        run: python3 -B -m unittest discover -s tools/module-forge -p 'test_real_sdk_headers.py' -v
+
+      - name: Install pinned-gate system headers
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libjansson-dev
+
+      - name: Fetch exact Rack and DPF Gitlinks
+        run: |
+          git submodule update --init --depth 1 src/Rack dpf
+          git -C src/Rack submodule update --init --depth 1 dep/glfw dep/nanosvg dep/oui-blendish dep/pffft dep/simde dep/speexdsp
+
+      - name: Syntax-check oscillator and effect against real Rack headers
+        run: python3 -B tools/module-forge/check_real_generated_headers.py
