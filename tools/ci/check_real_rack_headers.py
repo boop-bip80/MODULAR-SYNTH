@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Syntax-check original modules against the *pinned, real* Rack C++ API.
+"""Check original modules against the *pinned, real* Rack C++ API.
 
-This is a Linux HEADLESS compilation check, NOT a Rack/Cardinal link, GUI
-build, plugin ABI check, audio-host test, or proof of a releasable binary.
+Default mode syntax-checks HEADLESS sources. Optional --link-smoke compiles
+real SDK translation units and links a temporary ELF with unresolved host
+imports; it is NOT a loadable Rack/Cardinal plugin, GUI/DAW/audio test or
+proof of a releasable binary.
 Dependencies are supplied as exact Gitlink checkouts; this tool never fetches
 submodules or installs packages. See docs/CI.md for narrow setup commands.
 """
@@ -10,6 +12,8 @@ submodules or installs packages. See docs/CI.md for narrow setup commands.
 from __future__ import annotations
 
 import argparse
+import collections
+import json
 import re
 import shutil
 import subprocess
@@ -154,13 +158,170 @@ def compiler_flags(rack: Path, dpf: Path, jansson: Path, temp_types: Path) -> li
     return flags
 
 
+
+def module_sources(source_dir: Path = MODULE_DIR, modules: tuple[str, ...] = MODULES) -> list[Path]:
+    """Collect exactly one source translation unit per registered model."""
+    paths = [source_dir / f"{module}.cpp" for module in modules]
+    missing = [str(path) for path in paths if not path.is_file()]
+    if missing:
+        raise PreflightError(f"Missing first-party wrapper translation units: {', '.join(missing)}")
+    return paths
+
+
+def validate_registration_contract(
+    manifest: dict, makefile: str, header: str, loader: str,
+    modules: tuple[str, ...] = MODULES,
+) -> None:
+    """Narrow first-party manifest, compiled-source and static-loader parity.
+
+    The existing repository unit tests additionally parse nested C++ source and
+    panels; this is a fail-fast check before compiling expensive SDK objects.
+    """
+    entries = manifest.get("modules")
+    if not isinstance(entries, list):
+        raise PreflightError("ModularSynth manifest has no module entries")
+    slugs = [entry.get("slug") if isinstance(entry, dict) else None for entry in entries]
+    if collections.Counter(slugs) != collections.Counter(modules):
+        raise PreflightError(f"First-party manifest mismatch: {slugs!r} versus {modules!r}")
+
+    compiled = re.findall(
+        r"(?m)^[ \t]*PLUGIN_FILES[ \t]*\+=[ \t]*ModularSynth/src/"
+        r"([A-Za-z][A-Za-z0-9]*)\.cpp[ \t]*$",
+        makefile,
+    )
+    if collections.Counter(compiled) != collections.Counter(modules):
+        raise PreflightError(f"First-party compiled-source registry mismatch: {compiled!r}")
+
+    declarations = re.findall(
+        r"(?m)^[ \t]*extern[ \t]+(?:rack::)?Model[ \t]*\*[ \t]*"
+        r"(model[A-Za-z][A-Za-z0-9]*)[ \t]*;",
+        header,
+    )
+    expected_symbols = [f"model{module}" for module in modules]
+    if collections.Counter(declarations) != collections.Counter(expected_symbols):
+        raise PreflightError("First-party model header declarations mismatch")
+
+    function = re.search(
+        r"(?ms)^static void initStatic__ModularSynth\(\)[ \t\r\n]*\{(.*?)^\}",
+        loader,
+    )
+    if function is None:
+        raise PreflightError("First-party static loader function unavailable")
+    registered = re.findall(
+        r"\bp[ \t]*->[ \t]*addModel[ \t]*\([ \t]*"
+        r"(model[A-Za-z][A-Za-z0-9]*)[ \t]*\)[ \t]*;",
+        function.group(1),
+    )
+    if collections.Counter(registered) != collections.Counter(expected_symbols):
+        raise PreflightError(f"First-party static loader registrations mismatch: {registered!r}")
+    if len(re.findall(r"(?m)^[ \t]*initStatic__ModularSynth\(\);[ \t]*$", loader)) != 1:
+        raise PreflightError("First-party loader invocation must occur exactly once")
+
+
+def check_registration_contract() -> None:
+    collection = ROOT / "plugins" / "ModularSynth"
+    try:
+        manifest = json.loads((collection / "plugin.json").read_text(encoding="utf-8"))
+        makefile = (ROOT / "plugins" / "Makefile").read_text(encoding="utf-8")
+        header = (MODULE_DIR / "plugin.hpp").read_text(encoding="utf-8")
+        loader = (ROOT / "plugins" / "plugins.cpp").read_text(encoding="utf-8")
+    except (OSError, ValueError, TypeError) as exc:
+        raise PreflightError(f"Cannot read first-party registration contract: {exc}") from exc
+    validate_registration_contract(manifest, makefile, header, loader)
+
+
+def validate_linked_model_symbols(
+    defined_output: str, undefined_output: str, modules: tuple[str, ...] = MODULES,
+) -> None:
+    """Require one exported strong model pointer per original, no unresolved models.
+
+    Other undefined C++ symbols are expected Rack/host imports in this narrow
+    smoke library and are intentionally NOT treated as plugin-link success.
+    """
+    defined = collections.Counter(
+        fields[-1] for line in defined_output.splitlines()
+        if (fields := line.split())
+    )
+    undefined = {
+        fields[-1] for line in undefined_output.splitlines()
+        if (fields := line.split())
+    }
+    expected = {f"model{module}" for module in modules}
+    invalid = {symbol: defined[symbol] for symbol in expected if defined[symbol] != 1}
+    if invalid:
+        raise PreflightError(f"Missing or duplicate linked first-party model definitions: {invalid!r}")
+    unresolved = sorted(expected & undefined)
+    if unresolved:
+        raise PreflightError(f"Unresolved first-party model symbols: {unresolved!r}")
+
+
+def run_link_smoke(compiler: str, flags: list[str], output_dir: Path) -> None:
+    """Compile genuine SDK wrappers and link a temporary ELF with host imports.
+
+    The result is NOT a loadable Cardinal/Rack plugin: no host library, entry
+    point, GUI, audio runtime, or ABI is linked. Nothing is published.
+    """
+    if sys.platform != "linux":
+        raise PreflightError("The first-party object-link smoke supports Linux only")
+    nm = shutil.which("nm")
+    if nm is None:
+        raise PreflightError("nm (binutils) is required to inspect linked model symbols")
+
+    object_flags = [flag for flag in flags if flag != "-fsyntax-only"]
+    object_flags.extend(("-fPIC", "-c"))
+    objects: list[Path] = []
+    for module, source in zip(MODULES, module_sources(), strict=True):
+        output = output_dir / f"{module}.o"
+        command = [compiler, *object_flags, str(source), "-o", str(output)]
+        result = subprocess.run(
+            command, cwd=ROOT, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, check=False,
+        )
+        if result.returncode or not output.is_file():
+            raise PreflightError(f"Cannot compile real-Rack object {module}:\n{result.stdout}")
+        objects.append(output)
+        print(f"PASS: compiled {module} real-Rack HEADLESS object")
+
+    library = output_dir / "libModularSynthFirstPartyLinkSmoke.so"
+    result = subprocess.run(
+        [compiler, "-shared", "-o", str(library), *(str(obj) for obj in objects)],
+        cwd=ROOT, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, check=False,
+    )
+    if result.returncode or not library.is_file() or library.stat().st_size < 4:
+        raise PreflightError(f"Cannot link first-party HEADLESS smoke ELF:\n{result.stdout}")
+    if library.read_bytes()[:4] != b"\x7fELF":
+        raise PreflightError("First-party link smoke did not produce an ELF file")
+
+    results = []
+    for selector in ("--defined-only", "--undefined-only"):
+        symbols = subprocess.run(
+            [nm, "-D", selector, str(library)], cwd=ROOT,
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        )
+        if symbols.returncode:
+            raise PreflightError(f"nm {selector} failed: {symbols.stderr}")
+        results.append(symbols.stdout)
+    validate_linked_model_symbols(*results)
+    print(
+        f"PASS: {len(objects)} pinned-Rack HEADLESS objects linked into one "
+        "temporary ELF, with seven defined first-party models; "
+        "Rack/host imports intentionally unresolved. NOT a Cardinal plugin."
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rack-root", type=Path, default=ROOT / "src" / "Rack")
     parser.add_argument("--dpf-root", type=Path, default=ROOT / "dpf")
     parser.add_argument("--jansson-include", type=Path, default=Path("/usr/include"))
     parser.add_argument("--compiler", default="c++")
-    parser.add_argument("--preflight-only", action="store_true", help="verify pinned SDK headers; skip C++ parsing")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--preflight-only", action="store_true", help="verify pinned SDK headers; skip C++ parsing")
+    mode.add_argument(
+        "--link-smoke", action="store_true",
+        help="compile seven real-Rack HEADLESS objects and link a temporary ELF (NOT a host plugin)",
+    )
     args = parser.parse_args()
 
     try:
@@ -179,6 +340,10 @@ def main() -> int:
             types = Path(temporary)
             (types / "speexdsp_config_types.h").write_text(render_linux_speex_types(template))
             flags = compiler_flags(rack, dpf, jansson, types)
+            if args.link_smoke:
+                check_registration_contract()
+                run_link_smoke(compiler, flags, types)
+                return 0
             for module in MODULES:
                 source = MODULE_DIR / f"{module}.cpp"
                 completed = subprocess.run(
