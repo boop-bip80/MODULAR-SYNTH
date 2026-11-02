@@ -211,7 +211,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             destination = project / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             if name == "plugins/ModularSynth/plugin.json":
-                destination.write_bytes(MANIFEST.read_bytes())
+                destination.write_bytes((ROOT / "plugins/ModularSynth/plugin.json").read_bytes())
             else:
                 destination.write_text(f"source placeholder: {name}", encoding="utf-8")
 
