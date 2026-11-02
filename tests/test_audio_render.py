@@ -143,6 +143,53 @@ class AudioRenderTest(unittest.TestCase):
         self.assertGreater(peak, 0.15)
         self.assertGreater(rms, 0.02)
 
+    def test_all_sixteen_notes_are_active_and_boundaries_click_safe(self) -> None:
+        # A healthy whole-file RMS alone could pass a renderer that goes
+        # silent halfway through the phrase. Check every original note.
+        for rate in RATES:
+            with self.subTest(sample_rate=rate):
+                output, _, _, _ = self.render(
+                    "normal", rate, f"note-windows-{rate}.wav")
+                with wave.open(str(output), "rb") as wav:
+                    samples = array.array("h", wav.readframes(wav.getnframes()))
+                if sys.byteorder != "little":
+                    samples.byteswap()
+                frames_per_note = rate // 4
+                note_rms = []
+                boundary_jumps = []
+                for note in range(16):
+                    start = 2 * note * frames_per_note
+                    end = 2 * (note + 1) * frames_per_note
+                    block = samples[start:end]
+                    energy = sum(float(value) * value for value in block)
+                    note_rms.append(math.sqrt(energy / len(block)) / 32768.0)
+                    if note:
+                        boundary_jumps.extend(
+                            abs(samples[start + channel] -
+                                samples[start + channel - 2]) / 32768.0
+                            for channel in (0, 1))
+                self.assertGreater(min(note_rms), 0.015)
+                self.assertLess(max(note_rms), 0.25)
+                self.assertGreater(max(note_rms) - min(note_rms), 0.01)
+                self.assertLess(max(boundary_jumps), 0.01)
+
+    def test_dangling_symlink_does_not_create_target(self) -> None:
+        # Without a file-entry check, an ifstream probe of a dangling
+        # symlink fails and the subsequent ofstream follows it.
+        target = self.directory / "should-never-be-created.wav"
+        link = self.directory / "dangling-output-link.wav"
+        try:
+            link.symlink_to(target)
+        except (NotImplementedError, OSError):
+            self.skipTest("test system does not allow creating symlinks")
+        result = subprocess.run(
+            [str(self.binaries["normal"]), "--output", str(link)],
+            capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("will not overwrite", result.stderr)
+        self.assertTrue(link.is_symlink())
+        self.assertFalse(target.exists())
+
     def test_help_validation_and_no_overwrite(self) -> None:
         binary = str(self.binaries["normal"])
         help_result = subprocess.run([binary, "--help"], capture_output=True,
