@@ -256,7 +256,9 @@ signal chains, the audit now distinguishes:
 
 - `source_verified_signal_routes`: a MorphVCO/FMVoice output reaches a
   HostAudio2 input directly or via **source-declared signal ports** on
-  StateFilter, FoldDrive and StereoEcho. Each record includes the host jack and
+  StateFilter, FoldDrive, StereoEcho and DualVCA. DualVCA A/B inputs
+  reach only their matching lane output and SUM output, never each other's
+  lane. Each record includes the host jack and
   deterministic `via_module_ids` path. Input/output enum identities and counts
   are checked against the pinned C++ sources; a changed contract becomes
   **unverified**, never silently accepted.
@@ -277,7 +279,8 @@ python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_FM_Voice_
 This FMVoice factory patch routes through a Fundamental/VCA-1 module whose
 input/output semantics are not source-verified by this checker; it can still be
 musically valid. Use the strict flag as a passing CI gate only on patches built
-entirely from the checked first-party audio-chain modules above.
+entirely from the checked first-party audio-chain modules above; after the
+  DualVCA patch is integrated, its matching A/B-to-output chain qualifies.
 
 The exit status is **1** if any source-verified first-party generator lacks
 the conservative signal-port chain or the HostAudio2 source contract cannot
