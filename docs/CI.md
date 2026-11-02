@@ -17,7 +17,9 @@ The [fast workflow](../.github/workflows/quality-baseline.yml) directly discover
 
 **Hosted-status snapshot (2026-11-02 00:23 UTC, exact `3fbda096`):** the [source-quality run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41366740187) had **one queued job and zero executed steps**; the [real Rack header run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41366740367) had **one queued job and zero executed steps**; and the [full-build run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41366740224) had **20 queued jobs and zero executed steps**. These exact-run observations are **pending, not passing**. No fork-owned release was listed at the same check. Prior superseded runs may be cancelled by concurrency policy; cancellation is not evidence of failed compilation. Recheck hosted jobs and release contents before any release decision.
 
-**Newer independent source snapshot ([`060a2a83`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/060a2a83b6803e61e63eabf9bcbf631eb488c5c2)):** 257 repository + 49 Forge + 85 Instrument Builder = **391/391 Python tests**, plus **48/48 standalone C++ DSP compile-and-execute profiles** (12 suites, including UBSan). The source audit also checked 15 example output routes, seven SVG panels and strict license metadata. Combined ASan+UBSan could not run under the local environment; this is **not** an AddressSanitizer result. The seven-wrapper real Rack-header workflow is configured, but the previous **6/6** pinned-header syntax pass remains historical and **FMVoice's seventh real-header check has not been independently executed**. These source results do not substitute for the queued full linked builds, plugin binaries or DAW host tests.
+**Latest integrated offline source snapshot ([`87d27f3`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/87d27f341b56e3229a7a98ac6b73bf5f63510aa3)):** **265 repository + 51 Module Forge + 93 Instrument Builder = 409/409 Python tests passed**, plus **48/48 compiled and executed standalone DSP profiles**, including UBSan. The opt-in HostAudio2 and directed first-party generator route audits passed all 15 factory examples; seven source-panel SVGs/97 conservative widget centers and the strict first-party provenance check passed. The local ASan+UBSan runtime probe failed under ptrace, so do not infer an ASan pass. At this exact code merge, the [source-quality run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41386608738), [seven-original real-header run](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41386608694) and [full build](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/41386608744) were all **queued, not completed**; these source passes do not establish linked binaries, host audio, DAW automation, plugin UI or a release. The previous genuine six-original pinned-header syntax pass remains historical, not a verified seventh-original pass.
+
+**Previous independent source snapshot ([`060a2a83`](https://github.com/boop-bip80/MODULAR-SYNTH/commit/060a2a83b6803e61e63eabf9bcbf631eb488c5c2)):** 257 repository + 49 Forge + 85 Instrument Builder = **391/391 Python tests**, plus **48/48 standalone C++ DSP compile-and-execute profiles** (12 suites, including UBSan). The source audit also checked 15 example output routes, seven SVG panels and strict license metadata. Combined ASan+UBSan could not run under the local environment; this is **not** an AddressSanitizer result. The seven-wrapper real Rack-header workflow is configured, but the previous **6/6** pinned-header syntax pass remains historical and **FMVoice's seventh real-header check has not been independently executed**. These source results do not substitute for the queued full linked builds, plugin binaries or DAW host tests.
 
 ## Cold-cache build and release-asset safeguards
 
@@ -61,6 +63,7 @@ required slug list with `plugins/ModularSynth/plugin.json` so a future
 registration change cannot silently bypass the gate. This catches
 valid-but-incomplete or mis-versioned archives; it is a narrow first-party
 source inventory, **not** a complete third-party-license audit.
+
 Tag artifact uploads now fail if no files match, and the GitHub Release step uses a **single**
 parent-relative file pattern and fails when it matches nothing. The one-pattern
 contract matters because `softprops/action-gh-release` rejects each unmatched
@@ -94,7 +97,7 @@ From a checkout with Python 3 and a C++17 compiler:
 
 ```sh
 python3 -B tools/ci/preflight_submodules.py
-python3 -m unittest discover -s tests -p 'test_*.py' -v
+python3 -B -m unittest discover -s tests -p 'test_*.py' -v
 python3 -m unittest discover -s tools/module-forge -p 'test_*.py' -v
 python3 -B -m unittest discover -s tools/instrument-builder -p 'test_*.py' -v
 python3 -B tests/run_dsp_tests.py --sanitize=auto
