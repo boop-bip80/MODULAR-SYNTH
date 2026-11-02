@@ -104,9 +104,13 @@ void writeWaveHeader(std::ostream& out, int sampleRate, std::uint32_t frames) {
     writeU32(out, bytes);
 }
 
-bool render(const std::string& output, int sampleRate, bool withEcho) {
+bool render(const std::string& output, int sampleRate, bool withEcho, int tailSeconds) {
     const int framesPerNote = sampleRate / 4;
-    const auto frames = static_cast<std::uint32_t>(sampleRate * kSeconds);
+    const auto musicFrames = static_cast<std::uint32_t>(sampleRate * kSeconds);
+    // Tail is opt-in and bounded to two seconds. Existing default PCM is
+    // bit-identical: no extra DSP calls occur during the four-second motif.
+    const auto frames = static_cast<std::uint32_t>(
+        sampleRate * (kSeconds + tailSeconds));
     std::ofstream stream(output, std::ios::binary | std::ios::trunc);
     if (!stream) {
         std::cerr << "Cannot create WAV: " << output << '\n';
@@ -126,6 +130,19 @@ bool render(const std::string& output, int sampleRate, bool withEcho) {
     Statistics stats;
 
     for (std::uint32_t frame = 0; frame < frames; ++frame) {
+        if (frame >= musicFrames) {
+            // Stop both oscillator/filter voices at the end of the phrase;
+            // feed silence into the *same* echo rings so their genuine
+            // feedback decays naturally. No tail synthesis is fabricated.
+            const auto tail = echo->process(0.0, 0.0, sampleRate,
+                kEchoDelayMs, kEchoFeedback, kEchoWet, kEchoCrossfeed);
+            if (!stats.writePcm16(stream, tail.left / 5.0)
+                    || !stats.writePcm16(stream, tail.right / 5.0)) {
+                std::cerr << "Audio tail failed: non-finite sample or I/O error\n";
+                return false;
+            }
+            continue;
+        }
         const auto step = static_cast<std::size_t>(frame / framesPerNote);
         const double within = static_cast<double>(frame % framesPerNote) / framesPerNote;
         const double seconds = static_cast<double>(frame) / sampleRate;
@@ -176,7 +193,8 @@ bool render(const std::string& output, int sampleRate, bool withEcho) {
     const double rms = std::sqrt(stats.squares / static_cast<double>(stats.samples));
     std::cout << "WAV " << output << " rate=" << sampleRate
               << " frames=" << frames << " channels=" << kChannels
-              << " echo=" << (withEcho ? "on" : "off") << " peak=" << std::fixed << std::setprecision(6) << stats.peak
+              << " echo=" << (withEcho ? "on" : "off")
+              << " tail_seconds=" << tailSeconds << " peak=" << std::fixed << std::setprecision(6) << stats.peak
               << " rms=" << rms << " pcm_fnv1a64=" << std::hex
               << std::setw(16) << std::setfill('0') << stats.hash << std::dec << '\n';
     return true;
@@ -184,7 +202,8 @@ bool render(const std::string& output, int sampleRate, bool withEcho) {
 
 void usage(std::ostream& output) {
     output << "Usage: morph_filter_render --output FILE.wav "
-              "[--sample-rate 44100|48000|96000] [--with-stereo-echo]\n";
+              "[--sample-rate 44100|48000|96000] [--with-stereo-echo] "
+              "[--tail-seconds 0|1|2 (requires echo)]\n";
 }
 
 } // namespace
@@ -193,6 +212,7 @@ int main(int argc, char** argv) {
     std::string output;
     int sampleRate = 48000;
     bool withEcho = false;
+    int tailSeconds = 0;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--help" || arg == "-h") {
@@ -203,10 +223,19 @@ int main(int argc, char** argv) {
             withEcho = true;
             continue;
         }
-        if ((arg == "--output" || arg == "--sample-rate") && i + 1 < argc) {
+        if ((arg == "--output" || arg == "--sample-rate"
+                || arg == "--tail-seconds") && i + 1 < argc) {
             const std::string value = argv[++i];
             if (arg == "--output") {
                 output = value;
+            } else if (arg == "--tail-seconds") {
+                if (value == "0" || value == "1" || value == "2") {
+                    tailSeconds = value == "0" ? 0 : (value == "1" ? 1 : 2);
+                } else {
+                    std::cerr << "Unsupported tail length: " << value << '\n';
+                    usage(std::cerr);
+                    return 2;
+                }
             } else if (value == "44100" || value == "48000" || value == "96000") {
                 sampleRate = value == "44100" ? 44100 : (value == "48000" ? 48000 : 96000);
             } else {
@@ -224,6 +253,10 @@ int main(int argc, char** argv) {
         usage(std::cerr);
         return 2;
     }
+    if (tailSeconds != 0 && !withEcho) {
+        std::cerr << "--tail-seconds requires --with-stereo-echo\n";
+        return 2;
+    }
     // Check *file entries* rather than opening an ifstream: a dangling
     // symlink also counts as an existing output and must not be followed.
     // This preflight is not an atomic O_EXCL guarantee against a concurrent
@@ -238,5 +271,5 @@ int main(int argc, char** argv) {
         std::cerr << "Output already exists (will not overwrite): " << output << '\n';
         return 2;
     }
-    return render(output, sampleRate, withEcho) ? 0 : 1;
+    return render(output, sampleRate, withEcho, tailSeconds) ? 0 : 1;
 }
