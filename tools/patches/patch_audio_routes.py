@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import sys
 
-from patch_inspector import ROOT, _source_bounds, _strict_json, inspect_patch
+from patch_inspector import ROOT, _enum_members, _source_bounds, _strict_json, inspect_patch
 
 
 # These models are designated as modulation/control sources in their checked-in
@@ -29,6 +29,105 @@ FIRST_PARTY_GENERATORS = frozenset({
     ("ModularSynth", "MorphVCO"),
     ("ModularSynth", "FMVoice"),
 })
+
+
+# These ordinal input/output names must match the pinned *source* exactly.
+# A first-party CV input never silently becomes an audio path just because a
+# cable graph connects its module to a HostAudio2 terminal. This is deliberately
+# narrower than arbitrary Rack DSP routing and is not an audibility guarantee.
+SIGNAL_PORT_CONTRACTS = {
+    "MorphVCO": (
+        ("PITCH_INPUT", "FM_INPUT", "MORPH_CV_INPUT", "PWM_CV_INPUT"),
+        ("MORPH_OUTPUT", "SINE_OUTPUT"), (), (0, 1),
+    ),
+    "FMVoice": (
+        ("PITCH_INPUT", "RATIO_CV_INPUT", "INDEX_CV_INPUT", "FEEDBACK_CV_INPUT"),
+        ("CARRIER_OUTPUT", "MODULATOR_OUTPUT"), (), (0, 1),
+    ),
+    "StateFilter": (
+        ("AUDIO_INPUT", "CUTOFF_CV_INPUT", "RESONANCE_CV_INPUT", "DRIVE_CV_INPUT"),
+        ("LOWPASS_OUTPUT", "BANDPASS_OUTPUT", "HIGHPASS_OUTPUT"), (0,), (0, 1, 2),
+    ),
+    "FoldDrive": (
+        ("AUDIO_INPUT", "DRIVE_CV_INPUT", "BIAS_CV_INPUT", "MIX_CV_INPUT"),
+        ("AUDIO_OUTPUT",), (0,), (0,),
+    ),
+    "StereoEcho": (
+        ("LEFT_INPUT", "RIGHT_INPUT", "TIME_CV_INPUT", "FEEDBACK_CV_INPUT",
+         "MIX_CV_INPUT"),
+        ("LEFT_OUTPUT", "RIGHT_OUTPUT"), (0, 1), (0, 1),
+    ),
+}
+
+
+def _verified_signal_ports(root: Path, model: str) -> tuple[tuple[int, ...], tuple[int, ...]] | None:
+    """Guard semantic port indices with the exact checked-in ordinal enums."""
+    contract = SIGNAL_PORT_CONTRACTS.get(model)
+    if contract is None:
+        return None
+    path = root / "plugins" / "ModularSynth" / "src" / f"{model}.cpp"
+    if not path.is_file():
+        return None
+    source = path.read_text(encoding="utf-8")
+    inputs, outputs, signal_inputs, signal_outputs = contract
+    if (_enum_members(source, "InputIds", "NUM_INPUTS") != list(inputs)
+            or _enum_members(source, "OutputIds", "NUM_OUTPUTS") != list(outputs)):
+        return None
+    bounds = _source_bounds(root, "ModularSynth", model)
+    if (bounds is None or bounds["inputs"] != len(inputs)
+            or bounds["outputs"] != len(outputs)):
+        return None
+    return signal_inputs, signal_outputs
+
+
+def _source_verified_signal_route(
+    root: Path, generator_id: int, modules: dict[int, dict],
+    outgoing: dict[int, list[dict]], wired_hosts: set[int],
+) -> dict | None:
+    """Find a conservative first-party signal-port chain (never infer sound).
+
+    Any third-party module, CV-only hop or drifted first-party source contract
+    breaks this strict path. The separate graph-level route remains available.
+    """
+    from collections import deque
+
+    model = modules[generator_id]["model"]
+    source_ports = _verified_signal_ports(root, model)
+    if source_ports is None:
+        return None
+    queue = deque((generator_id, port, (generator_id,))
+                  for port in source_ports[1])
+    visited: set[tuple[int, int]] = set()
+    while queue:
+        current, output_port, ancestry = queue.popleft()
+        if (current, output_port) in visited:
+            continue
+        visited.add((current, output_port))
+        edges = sorted(outgoing[current], key=lambda c: (
+            c["inputModuleId"], c["inputId"], c["id"]))
+        for edge in edges:
+            if edge["outputId"] != output_port:
+                continue
+            target_id, target_port = edge["inputModuleId"], edge["inputId"]
+            target = modules[target_id]
+            if (target["plugin"], target["model"]) == ("Cardinal", "HostAudio2"):
+                if target_id in wired_hosts and target_port in (0, 1):
+                    return {
+                        "module_id": generator_id,
+                        "model": f"ModularSynth/{model}",
+                        "host_module_id": target_id,
+                        "host_input_port": target_port,
+                        "via_module_ids": list(ancestry),
+                    }
+                continue
+            if target["plugin"] != "ModularSynth":
+                continue  # Opaque or control/host modules are not audio evidence.
+            signal_ports = _verified_signal_ports(root, target["model"])
+            if signal_ports is None or target_port not in signal_ports[0]:
+                continue
+            for next_port in signal_ports[1]:
+                queue.append((target_id, next_port, ancestry + (target_id,)))
+    return None
 
 
 def _source_verified_output(root: Path, key: tuple[str, str], port: int) -> bool:
@@ -54,6 +153,8 @@ def audit_output_routes(path: str | Path, root: str | Path = ROOT) -> dict:
         "sinks": [],
         "control_source_hints": [],
         "unrouted_first_party_generators": [],
+        "source_verified_signal_routes": [],
+        "unverified_first_party_signal_routes": [],
         "advisories": [],
     }
     if not inspection["ok"]:
@@ -184,9 +285,20 @@ def audit_output_routes(path: str | Path, root: str | Path = ROOT) -> dict:
                 if target not in seen:
                     seen.add(target)
                     stack.append(target)
-        if reaches_host:
-            continue
         item = {"module_id": module_id, "model": f"{key[0]}/{key[1]}"}
+        if reaches_host:
+            signal_route = _source_verified_signal_route(
+                root, module_id, modules, outgoing, wired_hosts)
+            if signal_route is not None:
+                result["source_verified_signal_routes"].append(signal_route)
+            else:
+                result["unverified_first_party_signal_routes"].append(item)
+                result["advisories"].append(
+                    f"{item['model']}[{module_id}] has a directed host cable "
+                    "route, but no source-verified signal-port chain. A CV-only "
+                    "or opaque third-party processing hop may be involved."
+                )
+            continue
         result["unrouted_first_party_generators"].append(item)
         result["advisories"].append(
             f"{item['model']}[{module_id}] has no directed cable-graph route "
@@ -213,6 +325,17 @@ def format_output_routes(result: dict) -> str:
         lines.append(
             f"    Upstream graph nodes: {len(sink['upstream_modules'])}"
             " (includes CV/gate paths; not proof of audio)"
+        )
+    if result["source_verified_signal_routes"]:
+        lines.append(
+            "  First-party voices with source-verified signal-port chains: "
+            f"{len(result['source_verified_signal_routes'])}"
+            " (not proof of audible output)"
+        )
+    if result["unverified_first_party_signal_routes"]:
+        lines.append(
+            "  First-party voices with host graph routes but no verified "
+            f"signal-port chains: {len(result['unverified_first_party_signal_routes'])}"
         )
     if result["unrouted_first_party_generators"]:
         lines.append(
@@ -244,6 +367,12 @@ def main(argv: list[str] | None = None) -> int:
              "a directed cable-graph path to a wired HostAudio2 input; "
              "does not verify sound or audio-rate processing",
     )
+    parser.add_argument(
+        "--require-source-verified-signal-route", action="store_true",
+        help="Exit 1 if a first-party MorphVCO/FMVoice lacks a conservative "
+             "source-verified signal-port chain to HostAudio2. Third-party "
+             "processors remain opaque; this is NOT an audible-audio test.",
+    )
     args = parser.parse_args(argv)
     reports = [audit_output_routes(path, args.repo_root) for path in args.patches]
     if args.json:
@@ -260,6 +389,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.require_generator_route and any(
         report["unrouted_first_party_generators"] for report in reports
+    ):
+        return 1
+    if args.require_source_verified_signal_route and any(
+        not report["host_contract_verified"]
+        or report["unrouted_first_party_generators"]
+        or report["unverified_first_party_signal_routes"]
+        for report in reports
     ):
         return 1
     return 0
