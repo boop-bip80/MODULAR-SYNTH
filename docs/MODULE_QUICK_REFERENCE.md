@@ -215,9 +215,9 @@ oscillator morph. Those are saved signal/CV routes, not an audio audition.
 HostTime beat/reset routing and Clocked LFO modulation to VCO, filter,
 ADSR retrigger and Echo wet mix; it needs host transport for beat lock. **Cinematic Pulse Score** instead leaves HostTime/CLK disconnected, uses a free-running LFO PULSE to gate a second ADSR/VCA on its low-pass left path, and keeps high-pass right separate. Its four A–D Macro8 scenes are saved CV positions, not auditioned film-score audio.
 
-## Sixteen factory patches
+## Seventeen factory patches
 
-All sixteen links below are actual `.vcv` files under
+All seventeen links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
 existing plugin collection and does not require one of these nine first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
@@ -230,6 +230,7 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Morph VCO Performance](../patches/examples/MODULAR_-_Morph_VCO_Performance.vcv) | Originals | Play MIDI notes; move wave morph and pulse width |
 | [FM Voice Performance](../patches/examples/MODULAR_-_FM_Voice_Performance.vcv) | Originals | Play MIDI notes; change ratio/index/feedback for evolving FM tones (watch aliasing) |
 | [Chance Hold FM Drift](../patches/examples/MODULAR_-_Chance_Hold_FM_Drift.vcv) | Originals | Play MIDI; Chance Hold smoothly randomizes FM index at a probabilistic 1 Hz free clock |
+| [Aurora Glass Bells](../patches/examples/MODULAR_-_Aurora_Glass_Bells.vcv) | Originals | Eight-voice FM bells: Chance Hold → DualVCA attenuated cutoff drift, four Macro8 scenes and LP/BP stereo echo |
 | [Morphing State Pad](../patches/examples/MODULAR_-_Morphing_State_Pad.vcv) | Originals | Hold notes; recall Macro8 A/B to modulate oscillator/filter |
 | [Cinematic Drift Pad](../patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv) | Originals | Long ADSR pad; alternate Macro8 A/B with slow transitions |
 | [Rhythmic Grit Bass](../patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv) | Originals | Short MIDI rhythms; rapid Macro8 scene transitions |

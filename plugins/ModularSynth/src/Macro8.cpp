@@ -67,7 +67,9 @@ struct ModularSynthMacro8 : Module {
 
     modular_synth::dsp::Macro8Smoother smoother;
     modular_synth::dsp::Macro8SnapshotBank snapshots;
-    std::array<dsp::SchmittTrigger, 4> slotTriggers{};
+    // Rack's SchmittTrigger is default-constructible but not value-initializable
+    // in the pinned SDK (its union constructor is inaccessible).
+    std::array<dsp::SchmittTrigger, 4> slotTriggers;
     dsp::SchmittTrigger liveTrigger;
     std::atomic<int> selectedSlot{-1}; // -1 = live performer knobs
     // Rack reset/patch-restore callbacks may run off the engine thread.
@@ -143,10 +145,10 @@ struct ModularSynthMacro8 : Module {
             smoother.reset();
             for (int slot = 0; slot < 4; ++slot) {
                 auto& trigger = slotTriggers[static_cast<std::size_t>(slot)];
-                trigger = dsp::SchmittTrigger{};
+                trigger.reset();
                 trigger.process(params[SLOT_A_PARAM + slot].getValue());
             }
-            liveTrigger = dsp::SchmittTrigger{};
+            liveTrigger.reset();
             liveTrigger.process(params[LIVE_PARAM].getValue());
         }
         const bool storing = params[STORE_MODE_PARAM].getValue() >= 0.5f;

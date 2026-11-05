@@ -192,6 +192,47 @@ PULSE_SOURCE_TEMPLATE = (SOURCE_TEMPLATE
              '            outputs[AUDIO_OUTPUT].setVoltage(5.f * corrected, voice);'))
 PULSE_PANEL_TEMPLATE = PANEL_TEMPLATE.replace("SINE OUT", "PULSE OUT")
 
+# Integrating the polyBLEP edge correction once produces a polynomial BLAMP
+# correction for the triangle's two *slope* discontinuities. The corners have
+# opposite slope jumps, so their corrections have opposite signs. This keeps
+# the same single phase accumulator and the exact default sine starter bytes.
+TRIANGLE_BLAMP_HELPER = r'''    // PolyBLAMP is the integral of the polyBLEP step correction.
+    // A triangle has slope kinks, not value jumps; the bump is O(dt).
+    // dt is bounded to (0, 0.45] by the inherited frequency clamp.
+    static float polyBlamp(float t, float dt) noexcept {
+        if (t < dt) {
+            const float u = 1.f - t / dt;
+            return (dt / 3.f) * u * u * u;
+        }
+        if (t > 1.f - dt) {
+            const float u = 1.f + (t - 1.f) / dt;
+            return (dt / 3.f) * u * u * u;
+        }
+        return 0.f;
+    }
+
+'''
+TRIANGLE_SOURCE_TEMPLATE = (SOURCE_TEMPLATE
+    .replace("// A conservative 16-channel sine oscillator starter, not a finished flagship DSP engine.",
+             "// A 16-channel polyBLAMP triangle starter, not a fully bandlimited flagship DSP engine.")
+    .replace("    MS@@SLUG@@Module() {",
+             TRIANGLE_BLAMP_HELPER + "    MS@@SLUG@@Module() {")
+    .replace('configOutput(AUDIO_OUTPUT, "Sine audio");',
+             'configOutput(AUDIO_OUTPUT, "polyBLAMP triangle audio");')
+    .replace('            outputs[AUDIO_OUTPUT].setVoltage(\n'
+             '                5.f * std::sin(6.28318530718f * phase[voice]), voice);',
+             '            const float dt = frequency / sampleRate;\n'
+             '            const float t = phase[voice];\n'
+             '            const float oppositeCorner = t < 0.5f ? t + 0.5f : t - 0.5f;\n'
+             '            const float rawTriangle = 1.f - 4.f * std::min(t, 1.f - t);\n'
+             '            // The wrap corner jumps from slope +4 to -4; the half-\n'
+             '            // cycle corner jumps from -4 to +4. Integrating the\n'
+             '            // polyBLEP step smooths both without oscillator state.\n'
+             '            const float corrected = rawTriangle - 4.f * polyBlamp(t, dt)\n'
+             '                + 4.f * polyBlamp(oppositeCorner, dt);\n'
+             '            outputs[AUDIO_OUTPUT].setVoltage(5.f * corrected, voice);'))
+TRIANGLE_PANEL_TEMPLATE = PANEL_TEMPLATE.replace("SINE OUT", "TRI OUT")
+
 INTEGRATION_TEMPLATE = '''# Integrating @@SLUG@@ into the ModularSynth collection
 
 Generated outputs are a reviewed starting point, not automatically installed modules.
@@ -491,8 +532,8 @@ def validate_kind(kind: str) -> None:
 
 
 def validate_waveform(kind: str, waveform: str) -> None:
-    if waveform not in ("sine", "saw", "pulse"):
-        raise ValueError("oscillator waveform must be sine, saw or pulse")
+    if waveform not in ("sine", "saw", "pulse", "triangle"):
+        raise ValueError("oscillator waveform must be sine, saw, pulse or triangle")
     if kind == "effect" and waveform != "sine":
         raise ValueError("non-sine --waveform is only supported for oscillator starters")
 
@@ -515,6 +556,8 @@ def manifest_for(slug: str, name: str, kind: str = "oscillator",
                         if waveform == "saw"
                         else "Original Module Forge polyBLEP pulse oscillator starter"
                         if waveform == "pulse"
+                        else "Original Module Forge polyBLAMP triangle oscillator starter"
+                        if waveform == "triangle"
                         else "Original Module Forge sine oscillator starter"),
         "tags": ["Oscillator", "Polyphonic"],
     }
@@ -547,6 +590,15 @@ def render_files(slug: str, name: str, kind: str = "oscillator",
             "a 5 V nominal peak and limits its frequency below Nyquist. "
             "Both edges are corrected; polyBLEP reduces, but does not "
             "eliminate, aliases.")
+    elif waveform == "triangle":
+        source = TRIANGLE_SOURCE_TEMPLATE
+        panel = TRIANGLE_PANEL_TEMPLATE
+        integration = INTEGRATION_TEMPLATE.replace(
+            "The starter emits a 5 V peak sine and limits its frequency below Nyquist.",
+            "The starter emits a polyBLAMP-corrected triangle with a 5 V "
+            "nominal peak and limits frequency below Nyquist. Its two "
+            "opposite slope corners are corrected; BLAMP reduces, but does "
+            "not eliminate, aliases. High-frequency amplitude rolls off.")
     else:
         source = SOURCE_TEMPLATE
         panel = PANEL_TEMPLATE
@@ -654,8 +706,9 @@ def main(argv: list[str] | None = None) -> int:
     new.add_argument("--name", required=True, help="human-readable module name")
     new.add_argument("--kind", choices=("oscillator", "effect"),
                      default="oscillator", help="starter variant (default: oscillator)")
-    new.add_argument("--waveform", choices=("sine", "saw", "pulse"), default="sine",
-                     help="oscillator waveform (default sine; saw/pulse use polyBLEP)")
+    new.add_argument("--waveform", choices=("sine", "saw", "pulse", "triangle"),
+                     default="sine", help="oscillator waveform (saw/pulse: polyBLEP; "
+                     "triangle: polyBLAMP; default sine)")
     new.add_argument("--out", type=Path, default=Path("module-forge-output"),
                      help="parent directory for generated module folder")
     check = subparsers.add_parser("check", help="validate a generated skeleton")

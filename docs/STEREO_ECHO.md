@@ -22,7 +22,7 @@ Up to **16 independent polyphonic stereo lanes** are supported. A polyphonic CV 
 
 ### Time modulation and sample-rate changes
 
-Each delay read tap uses **linear interpolation** for fractional samples. For ordinary **continuous or small** delay-time modulation, the tap still follows a one-pole slew that reaches about **99.9% of the new sample position in 25 ms**; intentional sweeps can pitch-bend and smear transients.
+Each delay read tap uses **four-point cubic Lagrange interpolation** for fractional samples, with a bounded linear fallback at the ring-buffer age boundaries. This preserves more high-frequency content than two-tap linear interpolation (a 12 kHz sine at 48 kHz with a half-sample delay retains approximately **0.884×** amplitude instead of **0.707×**). Its small impulse pre-/post-ringing is an intentional tradeoff: a fractional-delay impulse can produce a weak sample before and after the two central taps. For ordinary **continuous or small** delay-time modulation, the tap still follows a one-pole slew that reaches about **99.9% of the new sample position in 25 ms**; intentional sweeps can pitch-bend and smear transients.
 
 For a **discontinuous time-setting jump of at least 20 ms from the preceding target**, the DSP instead blends two **fixed** delay read heads over **25 ms** with a linear crossfade. Left/right share the exact crossfade weight, and the two weights sum to one (preserving the feedback loop's ≤90% gain bound). New requests during an active fade are deferred and re-evaluated after the fade completes; a sustained new target is not lost. This mitigates the extreme frequency sweep/skipped-read artifact of abrupt automation without any additional ring allocation or saved-state change. The tradeoff is a brief **mixture of old and new echoes**, potentially causing momentary comb coloration or a level dip for phase-opposed signals. This is not arbitrary click-proofing, beat synchronization, dual-head time-stretching, or pitch preservation for continuous sweeps.
 
@@ -59,7 +59,7 @@ Stereo Echo reserves all delay memory **once when the module is constructed**. I
 - Memory per stereo voice: **1,536,016 bytes** (approximately **1.465 MiB**).
 - 16-lane maximum: **24,576,256 bytes**, approximately **23.44 MiB**, *plus small C++ objects, vector metadata, and Rack UI memory*.
 - This memory is reserved even when using just one mono/stereo pair. Several Stereo Echo instances can meaningfully increase host RAM consumption.
-- Each active lane/sample performs four interpolated-history ring reads, two sample writes, feedback/dry-wet arithmetic and finite bounds. Cost scales as **O(active polyphonic lanes × sample rate)**; the exponential smoothing coefficient is recalculated only when sample rate changes.
+- Each active lane/sample performs eight interpolated-history ring reads (four per channel), two sample writes, feedback/dry-wet arithmetic and finite bounds; during abrupt-time crossfades, two read heads per channel double the tap reads. Cost scales as **O(active polyphonic lanes × sample rate)**; the exponential smoothing coefficient is recalculated only when sample rate changes.
 
 An earlier isolated x86-64 GCC 13.3 C++17 -O3 -ffast-math *pre-denormal-floor* benchmark exercising 16 lanes for one simulated second measured:
 
@@ -99,8 +99,8 @@ ASAN_OPTIONS=detect_leaks=0 /tmp/stereo-echo-stress-sanitized
 
 The standalone tests cover:
 
-- Exact left/right impulse timing at 44.1/48/96/192 kHz, no early or extra echoes.
-- 48.5-sample fractional-delay interpolation over precisely two adjacent samples.
+- Exact left/right integer-delay impulse timing at 44.1/48/96/192 kHz, no early or extra echoes at integer offsets.
+- 48.5-sample four-point cubic fractional-delay interpolation, including its expected low-level pre-/post-ring and measured 12 kHz retention.
 - Dry, 50% mix and fully wet behavior; 50% ping-pong feedback decay across four echoes.
 - 25 ms delay-time smoothing, history invalidation across host sample-rate changes, and 16 independent lane states.
 - 25 ms stereo-coherent, gain-convex crossfade for abrupt ≥20 ms time jumps, with a quantitative before/after 48/384 kHz step-discontinuity regression.
@@ -111,7 +111,7 @@ The standalone tests cover:
 - Five-second impulse feedback decay at 90% and 1 ms, including exact tail extinction after 21,648 frames and zero subnormal samples under strict and aggressive compiler modes.
 - Dry-path subnormal and tiny normal input rejection, output cancellation-residue floor, exact zero output under sustained microscopic input across wet settings, and preservation of ordinary low-level signals under strict/fast-math profiles.
 
-**Actually executed (2026-11-01):** The repository's **8 standalone DSP tests × 3 compiler profiles (24 executions) passed** including the new StereoEcho long-run stress. The new test also compiled and ran with `-O2 -pedantic -Wall -Wextra -Werror` and combined AddressSanitizer/UndefinedBehaviorSanitizer, with LeakSanitizer disabled only because this sandbox denies /proc inspection. Baseline tests, strict `-O3 -ffast-math` and production `-fno-finite-math-only` all passed. The Rack plugin wrapper has **not** been successfully built or auditioned inside Cardinal.
+**Actually executed (2026-11-05):** The repository's **15 standalone DSP tests × 3 compiler profiles (45 executions) passed**, including the cubic fractional-delay impulse/12 kHz response checks and StereoEcho long-run stress. Earlier standalone runs also used `-O2 -pedantic -Wall -Wextra -Werror` and combined AddressSanitizer/UndefinedBehaviorSanitizer, with LeakSanitizer disabled because that sandbox denied /proc inspection; those sanitizer results have **not** been revalidated for the cubic interpolation change. Strict `-O2`, production `-O3 -ffast-math -fno-finite-math-only`, and aggressive `-O3 -ffast-math` passed. The Rack plugin wrapper has **not** been successfully built or auditioned inside Cardinal.
 
 ## Exact module indices and suggested factory routing
 

@@ -176,6 +176,7 @@ template <class M, class W> Model* createModel(const char*) {
 namespace dsp {
 struct SchmittTrigger {
     bool high = false;
+    void reset() { high = false; }
     bool process(float value) {
         if (high) {
             if (value <= 0.1f) high = false;

@@ -24,6 +24,21 @@ WRAPPER_SOURCES = (
 
 
 class RackWrapperSmokeTests(unittest.TestCase):
+    def test_macro8_trigger_initialization_matches_pinned_rack_contract(self) -> None:
+        """Guard the braced value-init that broke hosted Rack compilation.
+
+        The shim compiler test below tests reset behavior; these checks ensure
+        it cannot mask the pinned real SDK's inaccessible union constructor.
+        """
+        macro8 = (ROOT / "plugins/ModularSynth/src/Macro8.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("std::array<dsp::SchmittTrigger, 4> slotTriggers;", macro8)
+        self.assertNotIn("slotTriggers{}", macro8)
+        self.assertNotIn("dsp::SchmittTrigger{}", macro8)
+        self.assertIn("trigger.reset();", macro8)
+        self.assertIn("liveTrigger.reset();", macro8)
+
     @unittest.skipUnless(shutil.which("c++"), "C++17 compiler not installed")
     def test_seven_first_party_headless_wrappers_compile_and_process(self) -> None:
         with tempfile.TemporaryDirectory(prefix="modular-synth-wrapper-smoke-") as temp:

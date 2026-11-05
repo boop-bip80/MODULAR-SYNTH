@@ -21,6 +21,8 @@ FOLD_DRIVE_CONTRACT = "modular-synth-v2-folddrive-inputs-v1"
 FM_VOICE_CONTRACT = "modular-synth-v2-fmvoice-inputs-v1"
 # A new eighth-model contract extends all preceding verified source ports.
 CHANCE_HOLD_CONTRACT = "modular-synth-v2-chancehold-inputs-v1"
+# This additive marker includes every older v2 first-party port contract.
+DUAL_VCA_CONTRACT = "modular-synth-v2-dualvca-inputs-v1"
 
 
 class InputSpec(NamedTuple):
@@ -106,6 +108,14 @@ FIRST_PARTY_INPUTS: dict[str, tuple[InputSpec, ...]] = {
         InputSpec("GLIDE_CV_INPUT", "Glide duration CV (+10 V adds 2 seconds)",
                   "cv", (2, "Glide time (99% settling)")),
     ),
+    "DualVCA": (
+        InputSpec("AUDIO_A_INPUT", "A audio (nominal +/-5 V)", "audio"),
+        InputSpec("CV_A_INPUT", "A gain envelope (0 to +10 V; unpatched is unity)",
+                  "cv"),
+        InputSpec("AUDIO_B_INPUT", "B audio (nominal +/-5 V)", "audio"),
+        InputSpec("CV_B_INPUT", "B gain envelope (0 to +10 V; unpatched is unity)",
+                  "cv"),
+    ),
 }
 
 
@@ -113,7 +123,8 @@ def _destination(module: dict, input_id: int, *,
                  clocked_lfo_known: bool,
                  fold_drive_known: bool,
                  fm_voice_known: bool,
-                 chance_hold_known: bool) -> dict:
+                 chance_hold_known: bool,
+                 dual_vca_known: bool) -> dict:
     plugin, model = module["plugin"], module["model"]
     result = {
         "moduleId": module["id"],
@@ -128,7 +139,8 @@ def _destination(module: dict, input_id: int, *,
             or (model == "ClockedLFO" and not clocked_lfo_known)
             or (model == "FoldDrive" and not fold_drive_known)
             or (model == "FMVoice" and not fm_voice_known)
-            or (model == "ChanceHold" and not chance_hold_known)):
+            or (model == "ChanceHold" and not chance_hold_known)
+            or (model == "DualVCA" and not dual_vca_known)):
         return result
     ports = FIRST_PARTY_INPUTS[model]
     if input_id >= len(ports):
@@ -148,7 +160,8 @@ def derive_control_mappings(patch: dict, macro8: list[dict], *,
                             clocked_lfo_known: bool = True,
                             fold_drive_known: bool = True,
                             fm_voice_known: bool = True,
-                            chance_hold_known: bool = True) -> list[dict]:
+                            chance_hold_known: bool = True,
+                            dual_vca_known: bool = True) -> list[dict]:
     """Map only direct saved Macro8 output cables to input ports.
 
     Call after the patch/module/cable graph and Macro8 state are validated.
@@ -186,7 +199,8 @@ def derive_control_mappings(patch: dict, macro8: list[dict], *,
                 clocked_lfo_known=clocked_lfo_known,
                 fold_drive_known=fold_drive_known,
                 fm_voice_known=fm_voice_known,
-                chance_hold_known=chance_hold_known),
+                chance_hold_known=chance_hold_known,
+                dual_vca_known=dual_vca_known),
         })
     routes.sort(key=lambda route: (
         route["source"]["moduleId"], route["source"]["outputId"],

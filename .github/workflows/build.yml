@@ -699,7 +699,14 @@ jobs:
       - name: Verify source release archives
         shell: bash
         run: |
-          bash .github/workflows/scripts/verify-source-tarballs.sh "$(make -s version)"
+          # 'make version' evaluates the host OpenGL prerequisite even though
+          # the source archives have no OpenGL dependency.
+          source_version="$(awk '$1 == "VERSION" && $2 == "=" { print $3; exit }' Makefile)"
+          if [[ ! "$source_version" =~ ^[0-9]+([.][0-9]+)*$ ]]; then
+            echo "Invalid VERSION assignment in Makefile: '$source_version'" >&2
+            exit 1
+          fi
+          bash .github/workflows/scripts/verify-source-tarballs.sh "$source_version"
       - name: Set sha8 (non-release)
         if: startsWith(github.ref, 'refs/tags/') != true
         run: echo "SHA8=$(echo ${{ github.sha }} | cut -c1-8)" >> $GITHUB_ENV

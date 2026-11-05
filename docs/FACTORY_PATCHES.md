@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Factory Patches — original examples
 
-These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `Macro8`, `StereoEcho`, `ClockedLFO`, `FMVoice` and `ChanceHold` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
+These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `DualVCA`, `Macro8`, `StereoEcho`, `ClockedLFO`, `FMVoice` and `ChanceHold` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
 
 | Patch | Purpose | Interaction |
 | --- | --- | --- |
@@ -10,6 +10,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_Morph_VCO_Performance.vcv` | MIDI-controlled first-party Morph VCO with Fundamental ADSR and original Dual VCA stereo outputs | Play notes; adjust wave morph and Dual VCA curve |
 | `MODULAR_-_FM_Voice_Performance.vcv` | MIDI-controlled two-operator FM Voice with ADSR/VCA | Play notes; move ratio, index and feedback; avoid extreme high-frequency aliasing |
 | `MODULAR_-_Chance_Hold_FM_Drift.vcv` | Seeded probabilistic random CV glides the FM Voice modulation index during MIDI performance | Play MIDI with the 1 Hz, 75% Chance Hold source; adjust chance, glide and quantize to vary timbre |
+| `MODULAR_-_Aurora_Glass_Bells.vcv` | Eight-voice FM bell patch with envelope-gated notes, attenuated random filter drift, LP/BP spectral stereo split and five Macro8 scene controls | Hold MIDI chords; recall Dawn/Prism/Halo/Dusk A–D scenes; Chance Hold wanders freely without DAW transport |
 | `MODULAR_-_Morphing_State_Pad.vcv` | First-party Morph VCO → StateFilter, with three Macro8 CV routes | Recall A/B macro snapshots while holding a note |
 | `MODULAR_-_Cinematic_Drift_Pad.vcv` | Long ADSR performance pad and four macros including bipolar cutoff CV | Alternate 4-second Macro8 A/B transitions |
 | `MODULAR_-_Rhythmic_Grit_Bass.vcv` | Tightly gated bass with Macro8 cutoff modulation | Play short external MIDI rhythms; recall 0.20-second transitions |
@@ -25,14 +26,14 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 
 1. Use a recent MODULAR-SYNTH/Cardinal **main** or **Synth** build with its packaged modules and example patches.
 2. If the examples folder is packaged, choose **File → Open demo / example project** and select the `MODULAR_-` patch; otherwise load the `.vcv` directly from `patches/examples/`.
-3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad and Clocked Modulation Studio save eight MIDI channels.
+3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad, Clocked Modulation Studio, Fold Drive Cinematic Motion and Aurora Glass Bells save eight MIDI channels.
 4. For Clockwork Pulses, start the DAW transport; it uses **Host Time** without live MIDI notes. For Clocked Modulation Studio, use transport **and MIDI** if testing external beat lock (the LFO free-runs without transport). Cinematic Pulse Score needs **MIDI only**: its LFO CLOCK/RESET jacks are unplugged and it does not follow BPM. Noir Expressive Lead also needs MIDI notes; MIDI channel pressure and CC1 mod wheel are optional expressive controls, subject to the keyboard/DAW's MIDI routing.
 5. Begin with low speaker or headphone volume. The output gain is intentionally conservative, but patch signal levels are not yet perceptually validated.
 
 ## Scope and compatibility
 
 - These are **patch examples**, not new DSP modules or a finished preset management system.
-- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, FoldDrive, Macro8, StereoEcho, ClockedLFO, FMVoice and ChanceHold).
+- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, FoldDrive, DualVCA, Macro8, StereoEcho, ClockedLFO, FMVoice and ChanceHold).
 - MIDI/transport mapping and sample-rate behavior are inherited from the built-in modules and host.
 - The examples target `Cardinal/HostAudio2`. Some use two saved input routes; others feed a single host input. Polyphonic Motion Pad sends the same summed voice signal to both channels, **not** an independently panned stereo image. They are not standalone VST3 exports.
 - They use plain-text VCV Rack 2.x patch JSON for reproducibility.
@@ -57,6 +58,7 @@ The original three patches were initially parsed as JSON and checked for:
 - Clockwork Pulses: host play/stop behavior follows the DAW transport; its sequence sounds through both outputs.
 - Morph VCO Performance: keyboard pitch and note gate control the Morph VCO through Fundamental ADSR and original Dual VCA A/B envelope channels, with separate saved stereo host cables.
 - FM Voice Performance: MIDI pitch drives the two-operator FMVoice while a bundled ADSR/VCA handles note-on/off amplitude. Check 1/8/16 voices, ratio/index/feedback changes, high-register aliasing and low-level output before signing off; **host listening is not yet done**.
+- Aurora Glass Bells: hold 1/2/4/8 notes and check individual ADSR gate/retrigger/release, the DualVCA A attenuator scaling of Chance Hold's free-running filter-cutoff drift, LP-versus-BP stereo output, four A–D scenes (Dawn, Prism, Halo, Dusk), and note-off echo tails. Ensure an empty DAW transport does **not** stop random cutoff motion; audition gain and eight simultaneous echo lanes before any performance claim.
 - Morphing State Pad: macro Shape/Resonance/Drive controls and A/B snapshots affect timbre without unexpected gain jumps.
 - Cinematic Drift Pad and Rhythmic Grit Bass: confirm bipolar cutoff CV, four macro routes and documented 4.0/0.20-second snapshot morph settings.
 - Polyphonic Motion Pad: hold 2, 4 and 8 simultaneous MIDI notes; check each pitch follows its own channel, releases independently and filter cutoff keytracks each note. Check four Macro8 A-D recalls, output gain, and audible clipping.
@@ -198,6 +200,38 @@ python3 -m unittest discover -s tests -p 'test_noir_expressive_lead.py' -v
 ```
 
 For real acceptance, use a fork-built plugin with a controller that sends channel aftertouch and mod wheel; confirm note/release, responsive wave CV and echo wetness, both host channels, sensible levels, A–D/LIVE recall and DAW reopen at several sample rates. Source checks do not assert any of those outcomes.
+
+## Aurora Glass Bells — polyphonic FM and bounded generative drift
+
+[Open the source preset](../patches/examples/MODULAR_-_Aurora_Glass_Bells.vcv). This **11-module, 17-cable** arrangement uses six original `ModularSynth` models: FMVoice, ChanceHold, DualVCA, Macro8, StateFilter and StereoEcho; plus bundled HostMIDI/HostAudio2, Fundamental ADSR/VCA-1 and an explanatory text module. It needs no external sample or DAW transport. The checked-in graph has eight HostMIDI Reuse lanes (channel count 8, polyMode 1), and saves discrete MIDI pitch, gate and retrigger cables to FMVoice and ADSR.
+
+The intended musical arc is a chord-friendly, slowly evolving glass-bell spectrum:
+
+1. Per-note `FMVoice` carrier output 0 → `Fundamental/VCA-1` audio input 1, with MIDI-gated `ADSR` output 0 → VCA CV input 0. A 0.22 saved VCA level limits the starting amplitude before `StateFilter` audio input 0.
+2. `ChanceHold` free-runs at **0.25 Hz** with **65% probability** of sampling on a clock and **1.4-second glide**, with its external CLOCK and RESET disconnected. Its smooth ±5 V output goes to `DualVCA` A input 0. The A CV input is deliberately unplugged (source-normalled unity) with A gain **0.24**, so the static CV gain stage limits nominal filter-cutoff modulation to ±1.2 V, or ±1.2 octaves at `StateFilter` cutoff input 1. The DualVCA B section is unused.
+3. `StateFilter` low-pass output 0 and band-pass output 1 independently feed `StereoEcho` left and right inputs. Echo L/R outputs connect to the two distinct `HostAudio2` input jacks. This is an *intentional saved spectral stereo split*; actual host width and summing have not been measured.
+
+Macro8 has **five unipolar CV routes** and complete version-1 A–D snapshots with 1.6-second settling. Its source-bound CV scales imply the following *nominal static* scene targets (before random filter drift):
+
+| Scene | FM index | Resonance | Echo wet | Echo time | Echo feedback |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A — Dawn | 1.39 rad | 16% | 23% | 290 ms | 24% |
+| B — Prism | 1.95 rad | 19% | 29% | 420 ms | 29% |
+| C — Halo | 2.51 rad | 24% | 37% | 580 ms | 36% |
+| D — Dusk | 1.71 rad | 27% | 30% | 350 ms | 26% |
+
+Those values follow Macro8 output 0 → FM index CV 2 (0.8 rad/V), output 1 → filter resonance CV 2 (0.1 normalized/V), outputs 2/3/4 → Echo wet/time/feedback CV 4/2/3 (0.1 normalized/V, 100 ms/V, 0.1 normalized/V). The base Echo time is 210 ms, base feedback 20%, base wet 18%, and crossfeed 70%. The final HostAudio2 level is saved at **0.16**. These source values are not headroom measurements.
+
+Reproduce source-only tests:
+
+```sh
+python3 tools/patches/patch_inspector.py validate patches/examples/MODULAR_-_Aurora_Glass_Bells.vcv
+python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Aurora_Glass_Bells.vcv --require-host-input --require-generator-route
+python3 tools/patches/factory_patch_coverage.py
+python3 -m unittest discover -s tests -p 'test_aurora_glass_bells.py' -v
+```
+
+No one has yet verified this patch's MIDI voice allocation, perceived musicality, 1/2/4/8-voice CPU/memory load, audio headroom, echo tails, host plugin loading or DAW save/reopen. Audition at low volume in a fork-built host before calling it performance-ready, including aftertouch/pedal transitions where supported and sample rates 44.1/48/96 kHz.
 
 ## Future work
 

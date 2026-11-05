@@ -215,21 +215,24 @@ void testChangingSampleRateInvalidatesHistory() {
     constexpr int rates[] = {44100, 96000, 384000, 192000, 48000};
     for (const int rate : rates) {
         const int minDelayFrames = rate / 1000;
-        // A genuine impulse arrives exactly at its configured delay.
+        // A cubic fractional-delay kernel has one intentional, small
+        // pre-ring sample and one post-ring sample around the nominal echo.
+        const double fractional = rate / 1000.0 - minDelayFrames;
+        const double cubicWeights[] = {
+            -fractional * (fractional - 1.0) * (fractional - 2.0) / 6.0,
+            (fractional + 1.0) * (fractional - 1.0) * (fractional - 2.0) / 2.0,
+            -(fractional + 1.0) * fractional * (fractional - 2.0) / 2.0,
+            (fractional + 1.0) * fractional * (fractional - 1.0) / 6.0
+        };
         for (int i = 0; i < minDelayFrames + 3; ++i) {
             const auto sample = echo.process(i == 0 ? 2.0 : 0.0, 0.0,
                                              rate, 1.0, 0.80, 1.0, 1.0);
-            if (i < minDelayFrames)
-                expect(sample.left == 0.0f && sample.right == 0.0f,
-                       "sample-rate switch must invalidate all prior echo history");
-            if (i == minDelayFrames || i == minDelayFrames + 1) {
-                const double fractional = rate / 1000.0 - minDelayFrames;
-                const double expected = 2.0 * (i == minDelayFrames
-                    ? 1.0 - fractional : fractional);
-                expect(std::abs(sample.left - expected) < 1e-5
-                       && sample.right == 0.0f,
-                       "first echo must respect fractional 1 ms delay at each rate");
-            }
+            const int tap = i - minDelayFrames + 1;
+            const double expected = tap >= 0 && tap < 4
+                ? 2.0 * cubicWeights[tap] : 0.0;
+            expect(std::abs(sample.left - expected) < 1e-5
+                   && sample.right == 0.0f,
+                   "sample-rate change must invalidate history and retain four-tap fractional echo timing");
         }
     }
     // Invalid rates must discard pending state and recover on next valid call.

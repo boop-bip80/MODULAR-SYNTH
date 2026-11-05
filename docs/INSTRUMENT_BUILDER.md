@@ -173,13 +173,13 @@ mapping annotations. A matching `modulatesParameter` describes a **known CV
 input's effect on a first-party knob**, not a cable to that Rack parameter,
 automation assignment, or a promise that the host applies a particular value.
 
-Eight first-party modules are now registered, and all eight have **current
+Nine first-party modules are now registered, and all nine have **current
 source-backed input contracts** for opt-in v2 Macro8 routing: Macro8 (zero
 inputs), MorphVCO, StateFilter, StereoEcho, ClockedLFO, FoldDrive, FMVoice,
-and ChanceHold. Descriptors derive from exact `InputIds`, `configInput` and
+ChanceHold and DualVCA. Descriptors derive from exact `InputIds`, `configInput` and
 related `configParam` declarations in `plugins/ModularSynth/src/*.cpp`;
 regression tests keep source port contracts synchronized. The newer FMVoice
-and ChanceHold descriptors are only available in source bundles bearing
+ChanceHold and DualVCA descriptors are only available in source bundles bearing
 their respective additive v2 mapping contract markers; earlier archive
 contracts must retain their original `unverified` destinations. These saved
 descriptors are not evidence of live host CV behavior.
@@ -260,33 +260,52 @@ Clock, reset, probability and glide controls are source-described CV inputs;
 they do not constitute DAW automation. Source-backed cable labels cannot
 prove timing, audio quality, or host compatibility.
 
+### DualVCA's four saved audio and envelope inputs
+
+`plugins/ModularSynth/src/DualVCA.cpp` declares the exact input indices:
+
+| Input ID | Source-declared input label | Input kind | Related Rack knob |
+| --- | --- | --- | --- |
+| 0 | A audio (nominal +/-5 V) | `audio` | None |
+| 1 | A gain envelope (0 to +10 V; unpatched is unity) | `cv` | None |
+| 2 | B audio (nominal +/-5 V) | `audio` | None |
+| 3 | B gain envelope (0 to +10 V; unpatched is unity) | `cv` | None |
+
+The two envelope inputs influence channel gains but are **not** modulation of
+a single named Rack parameter: `modulatesParameter` remains `null`. Macro8
+connections to audio inputs are saved graph facts, not claims of useful audio
+or validated playback. Use v2 `routes`, `check --require-verified-routes`, or
+`preview --show-routes` for source-only cable reports.
+
 ### Immutable v2 source port contracts and old bundle compatibility
 
-Version 2 has five deliberately distinct, cumulative port interpretations:
+Version 2 has six deliberately distinct, cumulative port interpretations:
 
-| Saved v2 contract marker | Verified first-party destinations | ChanceHold routes in that archive |
+| Saved v2 contract marker | Verified first-party destinations | DualVCA routes in that archive |
 | --- | --- | --- |
 | Absent (original v2) | Macro8 (zero inputs), MorphVCO, StateFilter, StereoEcho | `unverified` |
 | `modular-synth-v2-clockedlfo-inputs-v1` | Above plus ClockedLFO | `unverified` |
 | `modular-synth-v2-folddrive-inputs-v1` | Above plus ClockedLFO and FoldDrive | `unverified` |
 | `modular-synth-v2-fmvoice-inputs-v1` | Above plus ClockedLFO, FoldDrive and FMVoice | `unverified` |
-| `modular-synth-v2-chancehold-inputs-v1` | Above plus ClockedLFO, FoldDrive, FMVoice and ChanceHold | Source-verified input labels/kinds |
+| `modular-synth-v2-chancehold-inputs-v1` | Above plus ClockedLFO, FoldDrive, FMVoice and ChanceHold | `unverified` |
+| `modular-synth-v2-dualvca-inputs-v1` | All previous models plus DualVCA | Source-verified input labels/kinds |
 
-New v2 bundles with a direct Macro8 → ChanceHold route use the latest
-`performance.controlMappingContract = "modular-synth-v2-chancehold-inputs-v1"`,
-even if their patch also maps Macro8 to FMVoice, FoldDrive or ClockedLFO.
-Without a ChanceHold route, the previous FMVoice → FoldDrive → ClockedLFO
-marker precedence remains unchanged. Patches without a direct Macro8 route
-to any of those newer models retain the original unmarked v2 bytes.
+New v2 bundles with a direct Macro8 → DualVCA route use
+`performance.controlMappingContract = "modular-synth-v2-dualvca-inputs-v1"`,
+even if the patch also routes to ChanceHold, FMVoice, FoldDrive or ClockedLFO.
+Without a DualVCA route, the previous ChanceHold → FMVoice → FoldDrive →
+ClockedLFO marker precedence remains unchanged. Patches without any direct
+Macro8 route to those newer models retain the original unmarked v2 bytes.
 
-Readers preserve the meaning of **every older marker**. In older unmarked,
-ClockedLFO-, FoldDrive- and FMVoice-marked archives, a saved
-Macro8 → ChanceHold cable remains `unverified`; in older marker variants,
-newer FMVoice, FoldDrive and ClockedLFO ports retain their earlier semantics.
+Readers preserve the meaning of **every older marker**. In all five earlier
+contract variants, a saved Macro8 → DualVCA cable remains `unverified`. In
+older unmarked, ClockedLFO-, FoldDrive- and FMVoice-marked archives,
+ChanceHold remains `unverified`, and the older models retain their prior
+source-verified semantics according to the saved contract marker.
 The reader independently re-derives all mappings using the exact saved marker
 and rejects spoofed, unsupported, replaced or missing markers and route rows.
 It never silently upgrades a bundle. Repack a **trusted original .vcv** with
-`--format-version 2` to opt into ChanceHold source descriptions.
+`--format-version 2` to opt into DualVCA source descriptions.
 
 The v1 default is unchanged. These additive source-contract revisions inside
 v2 do **not** prove a linked Cardinal plugin, installed modules, DAW routing,

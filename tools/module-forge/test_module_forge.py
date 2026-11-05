@@ -164,7 +164,7 @@ class ModuleForgeTests(unittest.TestCase):
                          kind="effect", waveform="saw")
             with self.assertRaisesRegex(ValueError, "waveform"):
                 generate("InvalidMode", "Invalid Mode", parent,
-                         waveform="triangle")
+                         waveform="wavetable")
             self.assertEqual(list(parent.iterdir()), [])
 
     def test_effect_generation_validation_and_port_metadata(self):

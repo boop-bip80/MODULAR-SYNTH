@@ -70,22 +70,42 @@ void testImpulseTiming(int sampleRate, double delayMs) {
     }
 }
 
-void testFractionalLinearInterpolation() {
+void testFractionalCubicInterpolation() {
     StereoEchoDSP delay;
     // At 48 kHz, 48.5 samples is 1.010416... ms (above the 1 ms minimum).
     constexpr double milliseconds = 48.5 / 48.0;
     for (int i = 0; i <= 51; ++i) {
         const auto s = delay.process(i == 0 ? 4.0 : 0.0, 0.0,
                                      48000.0, milliseconds, 0.0, 1.0, 0.0);
-        if (i == 48 || i == 49)
-            expect(std::abs(s.left - 2.0f) < 0.0002f,
-                   "fractional delay must interpolate impulse across two frames");
-        else
-            expect(s.left == 0.0f,
-                   "fractional delay must not emit extra impulse samples");
+        // A half-sample, four-tap Lagrange impulse response has symmetrical
+        // -1/16, 9/16, 9/16, -1/16 weights (the input impulse is 4 volts).
+        const float expected = (i == 47 || i == 50) ? -0.25f
+                             : (i == 48 || i == 49) ? 2.25f : 0.0f;
+        expect(std::abs(s.left - expected) < 0.0002f,
+               "fractional delay must use four-tap cubic interpolation");
         expect(s.right == 0.0f,
                "fractional delay must not cross into the silent right channel");
     }
+}
+
+void testFractionalHighFrequencyResponse() {
+    StereoEchoDSP delay;
+    constexpr double rate = 48000.0;
+    constexpr double pi = 3.14159265358979323846;
+    double inputPower = 0.0;
+    double outputPower = 0.0;
+    for (int i = 0; i < 4096; ++i) {
+        const double input = std::sin(2.0 * pi * 12000.0 * i / rate);
+        const auto s = delay.process(input, 0.0, rate,
+                                     48.5 / 48.0, 0.0, 1.0, 0.0);
+        if (i >= 256) {
+            inputPower += input * input;
+            outputPower += static_cast<double>(s.left) * s.left;
+        }
+    }
+    const double gain = std::sqrt(outputPower / inputPower);
+    expect(gain > 0.86 && gain < 0.91,
+           "12 kHz fractional delay amplitude should exceed linear interpolation");
 }
 
 void testMaximumBufferBoundary() {
@@ -258,7 +278,8 @@ int main() {
     testMemoryAndDryWet();
     for (int rate : {44100, 48000, 96000, 192000})
         testImpulseTiming(rate, 10.0);
-    testFractionalLinearInterpolation();
+    testFractionalCubicInterpolation();
+    testFractionalHighFrequencyResponse();
     testMaximumBufferBoundary();
     testPingPongDecay();
     testTimeSlewAndSampleRateReset();

@@ -244,8 +244,22 @@ private:
                                double samplesAgo) const noexcept {
         const auto whole = static_cast<std::size_t>(samplesAgo);
         const double fraction = samplesAgo - whole;
-        return (1.0 - fraction) * readAge(ring, whole)
-             + fraction * readAge(ring, whole + 1u);
+        // A four-tap Lagrange kernel preserves more treble than linear
+        // interpolation when the delay is set between sample boundaries.
+        // At the circular-buffer edge retain the bounded two-tap fallback.
+        if (whole < 2u || whole + 2u >= kCapacityFrames) {
+            return (1.0 - fraction) * readAge(ring, whole)
+                 + fraction * readAge(ring, whole + 1u);
+        }
+        const double t = fraction;
+        const double w0 = -t * (t - 1.0) * (t - 2.0) / 6.0;
+        const double w1 = (t + 1.0) * (t - 1.0) * (t - 2.0) / 2.0;
+        const double w2 = -(t + 1.0) * t * (t - 2.0) / 2.0;
+        const double w3 = (t + 1.0) * t * (t - 1.0) / 6.0;
+        return w0 * readAge(ring, whole - 1u)
+             + w1 * readAge(ring, whole)
+             + w2 * readAge(ring, whole + 1u)
+             + w3 * readAge(ring, whole + 2u);
     }
 
     static float ringVoltage(double value) noexcept {

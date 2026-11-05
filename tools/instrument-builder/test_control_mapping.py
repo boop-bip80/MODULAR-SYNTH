@@ -72,7 +72,7 @@ class FirstPartyPortContractTests(unittest.TestCase):
         self.assertEqual(
             set(FIRST_PARTY_INPUTS),
             {"Macro8", "MorphVCO", "StateFilter", "StereoEcho",
-             "ClockedLFO", "FoldDrive", "FMVoice", "ChanceHold"})
+             "ClockedLFO", "FoldDrive", "FMVoice", "ChanceHold", "DualVCA"})
         for model, ports in FIRST_PARTY_INPUTS.items():
             with self.subTest(model=model):
                 cpp = (ROOT / "plugins/ModularSynth/src" / f"{model}.cpp").read_text()

@@ -59,9 +59,14 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         self.assertLess(create, verify)
         self.assertLess(verify, upload)
         self.assertIn(
-            'bash .github/workflows/scripts/verify-source-tarballs.sh "$(make -s version)"',
+            "source_version=\"$(awk '$1 == \"VERSION\" && $2 == \"=\" { print $3; exit }' Makefile)\"",
             job,
         )
+        self.assertIn(
+            'bash .github/workflows/scripts/verify-source-tarballs.sh "$source_version"',
+            job,
+        )
+        self.assertNotIn("make -s version", job)
         checker = SCRIPT.read_text(encoding="utf-8")
         for suffix in ("cardinal-${version}.tar.xz", "cardinal+deps-${version}.tar.xz"):
             self.assertIn(suffix, checker)

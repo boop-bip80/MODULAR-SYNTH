@@ -194,7 +194,8 @@ class PanelContrastTests(unittest.TestCase):
     def test_current_decorative_outlines_meet_advisory(self) -> None:
         result = self.run_cli(REPO)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("SVG OUTLINE #61768F vs fill #20243B: 3.27:1 (x3", result.stdout)
+        self.assertIn("SVG OUTLINE #9AACCC vs fill #20243B: 6.64:1 (x3", result.stdout)
+        self.assertIn("SVG OUTLINE #BB96F0 vs fill #261F41: 6.45:1 (x2", result.stdout)
         self.assertIn("SVG OUTLINE #8169AA vs fill #27213F: 3.30:1 (x5", result.stdout)
         self.assertIn("SVG OUTLINE #8267B5 vs fill #29233C: 3.25:1 (x1", result.stdout)
         self.assertIn("0 low outline swatches", result.stdout)
