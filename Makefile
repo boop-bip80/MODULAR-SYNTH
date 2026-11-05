@@ -459,11 +459,11 @@ download:
 tarball:
 	$(MAKE) clean -C deps
 	rm -f ../cardinal-$(VERSION).tar.xz
-	tar -c --lzma $(TAR_ARGS) -f ../cardinal-$(VERSION).tar.xz .
+	tar -c --xz $(TAR_ARGS) -f ../cardinal-$(VERSION).tar.xz .
 
 tarball+deps: download
 	rm -f ../cardinal+deps-$(VERSION).tar.xz
-	tar -c --lzma $(TAR_ARGS) -f ../cardinal+deps-$(VERSION).tar.xz .
+	tar -c --xz $(TAR_ARGS) -f ../cardinal+deps-$(VERSION).tar.xz .
 
 version:
 	@echo $(VERSION)

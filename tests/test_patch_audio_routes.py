@@ -270,7 +270,114 @@ class AudioRoutesTests(unittest.TestCase):
             "via_module_ids": [1],
         }])
         self.assertEqual(result["unverified_first_party_signal_routes"], [])
+        self.assertEqual(result["source_verified_host_inputs"], [
+            result["source_verified_signal_routes"][0],
+        ])
+        self.assertEqual(result["unverified_wired_host_inputs"], [])
+        self.assertIn("1/1", format_output_routes(result))
         self.assertIn("not proof of audible output", format_output_routes(result))
+
+    def test_second_wired_host_input_is_not_verified_by_first_voice_route(self) -> None:
+        # A valid cable to Left cannot certify separately wired Right. The
+        # old all-generator gate remains true even when Right is Macro8 CV.
+        self.patch["modules"].append(module(3, "ModularSynth", "Macro8"))
+        self.patch["cables"].append(wire(4, 3, 2, 0, 1))
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(len(result["source_verified_signal_routes"]), 1)
+        self.assertEqual([route["host_input_port"]
+                          for route in result["source_verified_host_inputs"]], [0])
+        self.assertEqual(result["unverified_wired_host_inputs"], [{
+            "host_module_id": 2,
+            "host_input_port": 1,
+            "source_module_id": 3,
+            "source_model": "ModularSynth/Macro8",
+            "source_output_port": 0,
+        }])
+        self.assertIn("1/2", format_output_routes(result))
+        self.assertTrue(any("HostAudio2[2] input 1 is wired" in note
+                            for note in result["advisories"]))
+
+    def test_new_terminal_gate_is_strict_and_separate_from_voice_gate(self) -> None:
+        script = ROOT / "tools" / "patches" / "patch_audio_routes.py"
+
+        def call(*flags: str) -> subprocess.CompletedProcess[str]:
+            self.path.write_text(json.dumps(self.patch), encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, str(script), str(self.path), *flags],
+                cwd=ROOT, capture_output=True, text=True, check=False,
+            )
+
+        flag = "--require-source-verified-host-inputs"
+        self.assertEqual(call(flag).returncode, 0)
+        self.patch["modules"].append(module(3, "ModularSynth", "Macro8"))
+        self.patch["cables"].append(wire(4, 3, 2, 0, 1))
+        self.assertEqual(call("--require-source-verified-signal-route").returncode, 0)
+        self.assertEqual(call(flag).returncode, 1)
+        serialized = json.loads(call("--json").stdout)[0]
+        self.assertEqual(len(serialized["unverified_wired_host_inputs"]), 1)
+
+        # With a second actual MorphVCO output rather than control CV, both
+        # terminals have a typed first-party signal path. This is still not a
+        # listening test or proof of stereo width.
+        self.patch["cables"][-1]["outputModuleId"] = 1
+        self.patch["cables"][-1]["outputId"] = 1
+        self.assertEqual(call(flag).returncode, 0)
+        result = self.audit()
+        self.assertEqual([r["host_input_port"] for r in
+                          result["source_verified_host_inputs"]], [0, 1])
+
+        # No wired terminal is not vacuously accepted under the new gate.
+        self.patch["cables"] = []
+        self.assertEqual(call(flag).returncode, 1)
+
+    def test_distinct_host_sinks_are_scored_per_exact_terminal(self) -> None:
+        self.patch["modules"].extend([
+            module(3, "Cardinal", "HostAudio2"),
+            module(4, "ThirdParty", "UnknownEffect"),
+        ])
+        self.patch["cables"] = [
+            wire(10, 1, 2, 0, 1),  # First host Right, first-party signal.
+            wire(11, 1, 4, 0, 0),
+            wire(12, 4, 3, 0, 0),  # Second host Left, opaque processor.
+        ]
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual([(r["host_module_id"], r["host_input_port"])
+                          for r in result["source_verified_host_inputs"]], [(2, 1)])
+        self.assertEqual([(r["host_module_id"], r["host_input_port"])
+                          for r in result["unverified_wired_host_inputs"]], [(3, 0)])
+
+    def test_cv_only_chain_to_other_host_input_does_not_certify_stereo(self) -> None:
+        self.patch["modules"].append(module(3, "ModularSynth", "StateFilter"))
+        self.patch["cables"] = [
+            wire(10, 1, 2, 0, 0),  # Source-verified direct Left.
+            wire(11, 1, 3, 0, 1),  # VCO drives CUTOFF CV, not filter audio.
+            wire(12, 3, 2, 0, 1),
+        ]
+        result = self.audit()
+        self.assertTrue(result["ok"], result["errors"])
+        self.assertEqual(len(result["source_verified_host_inputs"]), 1)
+        self.assertEqual(result["source_verified_host_inputs"][0]["host_input_port"], 0)
+        self.assertEqual(result["unverified_wired_host_inputs"][0]["host_input_port"], 1)
+
+    def test_real_factory_patches_distinguish_original_vca_from_opaque_vca(self) -> None:
+        folder = ROOT / "patches" / "examples"
+        source_verified = audit_output_routes(
+            folder / "MODULAR_-_Morph_VCO_Performance.vcv", ROOT)
+        self.assertTrue(source_verified["ok"], source_verified["errors"])
+        self.assertEqual(len(source_verified["source_verified_host_inputs"]), 2)
+        self.assertEqual(source_verified["unverified_wired_host_inputs"], [])
+
+        # Aurora's Fundamental VCA-1 is a legitimate saved processor, but its
+        # internal transfer relationship is outside this *first-party* proof.
+        # Therefore we classify the host cables as wired but not source-
+        # verified, without calling the actual preset broken or silent.
+        opaque = audit_output_routes(
+            folder / "MODULAR_-_Aurora_Glass_Bells.vcv", ROOT)
+        self.assertTrue(opaque["ok"], opaque["errors"])
+        self.assertEqual(opaque["source_verified_host_inputs"], [])
+        self.assertEqual(len(opaque["unverified_wired_host_inputs"]), 2)
 
     def test_cv_only_first_party_hop_is_not_a_verified_signal_route(self) -> None:
         # Module reachability alone once misrepresented this as a complete

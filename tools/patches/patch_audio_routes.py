@@ -98,6 +98,7 @@ def _verified_signal_ports(root: Path, model: str) -> tuple[tuple[int, ...], tup
 def _source_verified_signal_route(
     root: Path, generator_id: int, modules: dict[int, dict],
     outgoing: dict[int, list[dict]], wired_hosts: set[int],
+    target_terminal: tuple[int, int] | None = None,
 ) -> dict | None:
     """Find a conservative first-party signal-port chain (never infer sound).
 
@@ -126,7 +127,9 @@ def _source_verified_signal_route(
             target_id, target_port = edge["inputModuleId"], edge["inputId"]
             target = modules[target_id]
             if (target["plugin"], target["model"]) == ("Cardinal", "HostAudio2"):
-                if target_id in wired_hosts and target_port in (0, 1):
+                if (target_id in wired_hosts and target_port in (0, 1)
+                        and (target_terminal is None
+                             or (target_id, target_port) == target_terminal)):
                     return {
                         "module_id": generator_id,
                         "model": f"ModularSynth/{model}",
@@ -173,6 +176,11 @@ def audit_output_routes(path: str | Path, root: str | Path = ROOT) -> dict:
         "unrouted_first_party_generators": [],
         "source_verified_signal_routes": [],
         "unverified_first_party_signal_routes": [],
+        # A voice reaching *one* host jack says nothing about other wired
+        # jacks. Terminal-level evidence is tracked separately to avoid a
+        # misleading stereo/complete-output interpretation.
+        "source_verified_host_inputs": [],
+        "unverified_wired_host_inputs": [],
         "advisories": [],
     }
     if not inspection["ok"]:
@@ -322,6 +330,41 @@ def audit_output_routes(path: str | Path, root: str | Path = ROOT) -> dict:
             f"{item['model']}[{module_id}] has no directed cable-graph route "
             "to a wired HostAudio2 terminal; this may be intentional."
         )
+
+    # Classify every *wired* terminal independently. A generator's verified
+    # path to HostAudio2 Left must not be reused as proof for a separate Right
+    # cable that may carry CV, unknown bundled DSP or only opaque third-party
+    # processing. We require a complete typed source-to-exact-terminal chain.
+    generators = [mid for mid, generator in sorted(modules.items())
+                  if (generator["plugin"], generator["model"])
+                  in FIRST_PARTY_GENERATORS]
+    for host_id in hosts:
+        for cable in sorted(incoming[host_id], key=lambda c: c["inputId"]):
+            terminal = (host_id, cable["inputId"])
+            verified = None
+            for generator_id in generators:
+                verified = _source_verified_signal_route(
+                    root, generator_id, modules, outgoing, wired_hosts,
+                    target_terminal=terminal)
+                if verified is not None:
+                    break
+            if verified is not None:
+                result["source_verified_host_inputs"].append(verified)
+                continue
+            source = modules[cable["outputModuleId"]]
+            result["unverified_wired_host_inputs"].append({
+                "host_module_id": host_id,
+                "host_input_port": cable["inputId"],
+                "source_module_id": cable["outputModuleId"],
+                "source_model": f"{source['plugin']}/{source['model']}",
+                "source_output_port": cable["outputId"],
+            })
+            result["advisories"].append(
+                f"HostAudio2[{host_id}] input {cable['inputId']} is wired "
+                "but has no source-verified first-party signal-port chain; "
+                "CV-only paths and opaque third-party processing remain "
+                "unverified."
+            )
     return result
 
 
@@ -349,6 +392,14 @@ def format_output_routes(result: dict) -> str:
             "  First-party voices with source-verified signal-port chains: "
             f"{len(result['source_verified_signal_routes'])}"
             " (not proof of audible output)"
+        )
+    if result["sinks"]:
+        wired = sum(len(sink["connected_ports"]) for sink in result["sinks"])
+        lines.append(
+            "  Wired HostAudio2 inputs with a source-verified first-party "
+            "signal chain: "
+            f"{len(result['source_verified_host_inputs'])}/{wired}"
+            " (not proof of audio or stereo width)"
         )
     if result["unverified_first_party_signal_routes"]:
         lines.append(
@@ -391,6 +442,13 @@ def main(argv: list[str] | None = None) -> int:
              "source-verified signal-port chain to HostAudio2. Third-party "
              "processors remain opaque; this is NOT an audible-audio test.",
     )
+    parser.add_argument(
+        "--require-source-verified-host-inputs", action="store_true",
+        help="Exit 1 unless at least one HostAudio2 jack is wired and every "
+             "wired HostAudio2 jack has a first-party source-verified "
+             "signal-port chain. This is not an audible-audio test; "
+             "third-party-only routes remain unverified.",
+    )
     args = parser.parse_args(argv)
     reports = [audit_output_routes(path, args.repo_root) for path in args.patches]
     if args.json:
@@ -413,6 +471,13 @@ def main(argv: list[str] | None = None) -> int:
         not report["host_contract_verified"]
         or report["unrouted_first_party_generators"]
         or report["unverified_first_party_signal_routes"]
+        for report in reports
+    ):
+        return 1
+    if args.require_source_verified_host_inputs and any(
+        not report["host_contract_verified"]
+        or not report["has_wired_host_input"]
+        or report["unverified_wired_host_inputs"]
         for report in reports
     ):
         return 1

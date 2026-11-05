@@ -1,8 +1,9 @@
 # MODULAR-SYNTH — Manual UI and DAW State QA
 
 **Status: NOT EXECUTED.** This is a checklist for human verification of
-the seven first-party modules, including the introductory Morph VCO, State Filter
-and Macro8 voice as well as FMVoice. No desktop/DAW UI run is claimed. All checkboxes intentionally remain unchecked.
+the nine first-party modules, including the introductory Morph VCO, State Filter
+and Macro8 voice as well as FMVoice, Chance Hold and Dual VCA. No desktop/DAW
+UI run is claimed. All checkboxes intentionally remain unchecked.
 
 | Record before running | Value |
 | --- | --- |
@@ -22,8 +23,9 @@ each supported host/plugin format.
   missing SVG warning, or host rescan error.
 - [ ] Module browser offers exactly one each of **Morph VCO**,
   **State Filter**, **Fold Drive**, **Macro8 Performance Macros**,
-  **Stereo Echo**, **Clocked LFO** and **FM Voice** in the **MODULAR-SYNTH Originals**
-  collection. Search resolves all seven.
+  **Stereo Echo**, **Clocked LFO**, **FM Voice**, **Chance Hold** and
+  **Dual VCA** in the **MODULAR-SYNTH Originals** collection.
+  Search resolves all nine.
 - [ ] Inspect each SVG panel, ports, labels, controls and lights at normal
   and HiDPI scaling; zoom, close/reopen the editor and check alignment.
 - [ ] Confirm the release package actually contains
@@ -32,8 +34,10 @@ each supported host/plugin format.
   `ModularSynth/res/FoldDrive.svg`,
   `ModularSynth/res/Macro8.svg`,
   `ModularSynth/res/StereoEcho.svg`,
-  `ModularSynth/res/ClockedLFO.svg` and
-  `ModularSynth/res/FMVoice.svg`.
+  `ModularSynth/res/ClockedLFO.svg`,
+  `ModularSynth/res/FMVoice.svg`,
+  `ModularSynth/res/ChanceHold.svg` and
+  `ModularSynth/res/DualVCA.svg`.
 
 - [ ] With Fold Drive between Morph VCO and State Filter, verify dry
   transparency at zero DRIVE, audible fold changes with increasing DRIVE,
@@ -152,12 +156,13 @@ python3 tools/ui-check/validate_panels.py
 python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
 ```
 
-The standard-library-only checker validates seven first-party source panels
-(Morph VCO, State Filter, FoldDrive, Macro8, StereoEcho, ClockedLFO, FMVoice) as parseable SVGs
-with an SVG namespace and expected **12/14/12/20/16/16/12 HP** widths, standard
-**3U height** and Rack viewBoxes of **15 px/HP × 380 px**. The first five
-panels and FMVoice specify 128.5 mm physical height; ClockedLFO declares equivalent
-380 px dimensions. It cross-checks the exact `setPanel()` asset paths in C++ and
+The standard-library-only checker validates nine first-party source panels
+(Morph VCO, State Filter, FoldDrive, Macro8, StereoEcho, ClockedLFO,
+FMVoice, ChanceHold, DualVCA) as parseable SVGs with an SVG namespace
+and expected **12/14/12/20/16/16/12/16/12 HP** widths, standard
+**3U height** and Rack viewBoxes of **15 px/HP × 380 px**. Seven panels
+specify 128.5 mm physical height; ClockedLFO and ChanceHold declare
+equivalent 380 px dimensions. It cross-checks exact `setPanel()` asset paths in C++ and
 checks statically resolvable centered knobs, ports, switches and lights
 against panel coordinate bounds. It conservatively expands simple constant
 arrays and conditional positions; non-constant expressions are reported as
@@ -174,20 +179,24 @@ is documented.
 ```sh
 python3 tools/ui-check/contrast_audit.py
 python3 -m unittest discover -s tests -p 'test_panel_contrast.py' -v
+python3 -m unittest discover -s tests -p 'test_panel_focus_contrast.py' -v
 ```
 
 The audit derives **actual text foreground colors** from NanoVG
-`nvgRGB()` / `nvgText()` calls in all seven module widgets, and reads SVG
+`nvgRGB()` / `nvgText()` calls in all nine module widgets, and reads SVG
 panel fill and decorative control-outline colors. It computes standard
 sRGB relative luminance and contrast ratios and flags measured swatches
 below **4.5:1** for small text and **3:1** for SVG control outlines as
 **advisory warnings**. Use `--fail-on-low-contrast` to turn those measured
 warnings into exit status 2; the default is report-only.
 
-For the original panel SVGs, the source-swatches of the three Morph VCO
-knob surrounds, five Macro8 snapshot-button rings, and Macro8 store-mode
-switch rim were adjusted to approximately **3.27:1**, **3.30:1** and
-**3.25:1**, respectively, against their adjacent flat circle/rect fills.
+The original panel SVGs now retain **6.45–6.64:1** decorative dial-ring
+contrast on Morph VCO, **6.17:1** for Macro8's nine knob surrounds,
+**6.07:1** for its eight output-jack surrounds, **6.35:1** for its five
+snapshot-button surrounds, and **6.24:1** for its store-mode rim.
+FM Voice's five dial rings measure **6.35–6.64:1**. These changes preserve
+all corresponding circle/rect geometry. Dedicated tests pin the Macro8/FM
+Voice control centers and verify the source-color ratios stay at least **6:1**.
 The source-level check should now complete successfully in strict mode:
 
 ```sh
@@ -209,11 +218,11 @@ not account for decorative circles, lines, shadows, Rack knobs, NanoVG
 antialiasing or an actual font glyph pixel; it is **not a measured local
 label contrast or a WCAG pass**.
 
-Across the six dark-gradient panels, the source palette bounds
+Across the dark-gradient panels, the source palette bounds
 remain comfortably above the 4.5:1 text advisory. ClockedLFO has a
-separately inspected flat/layered SVG background; all **84 local source-label
-contrasts across the seven panels remain UNKNOWN**, including Macro8's
-dynamic labels. The base-only bounds can be evaluated for 67 sites but
+separately inspected flat/layered SVG background; all **112 local source-label
+contrasts across the nine panels remain UNKNOWN**, including Macro8's
+dynamic labels. The base-only bounds can be evaluated for 80 sites but
 never establish the actual local pixel background. An
 invalid/missing stop, transparency, stylesheet or unsupported paint construct
 withholds the bound; a weak lower bound is **inconclusive**, not automatic

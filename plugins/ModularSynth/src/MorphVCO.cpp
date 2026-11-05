@@ -7,6 +7,7 @@
 #include "MorphVCO.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <memory>
 
@@ -38,6 +39,8 @@ struct ModularSynthMorphVCO : Module {
     // Rack uses at most 16 polyphony lanes per jack.
     modular_synth::dsp::MorphOscillator voices[16];
     int previousChannels = 0;
+    // Rack reset may arrive on a UI/host thread; only audio owns DSP state.
+    std::atomic<bool> pendingReset{false};
 
     ModularSynthMorphVCO() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -59,12 +62,21 @@ struct ModularSynthMorphVCO : Module {
     }
 
     void onReset() override {
-        for (auto& voice : voices)
-            voice.reset();
-        previousChannels = 0;
+        pendingReset.store(true, std::memory_order_release);
+    }
+
+    void onReset(const ResetEvent& event) override {
+        Module::onReset(event);
+        pendingReset.store(true, std::memory_order_release);
     }
 
     void process(const ProcessArgs& args) override {
+        if (pendingReset.load(std::memory_order_acquire) &&
+                pendingReset.exchange(false, std::memory_order_acq_rel)) {
+            for (auto& voice : voices)
+                voice.reset();
+            previousChannels = 0;
+        }
         int channels = std::max(1, inputs[PITCH_INPUT].getChannels());
         channels = std::max(channels, inputs[FM_INPUT].getChannels());
         channels = std::max(channels, inputs[MORPH_CV_INPUT].getChannels());

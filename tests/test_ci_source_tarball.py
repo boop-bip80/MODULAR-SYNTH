@@ -48,7 +48,8 @@ def source_job() -> str:
 
 class SourceReleaseWorkflowTests(unittest.TestCase):
     def test_makefile_contract_and_explicit_archive_gate(self) -> None:
-        self.assertIn("tar -c --lzma", MAKEFILE)
+        self.assertIn("tar -c --xz", MAKEFILE)
+        self.assertNotIn("tar -c --lzma", MAKEFILE)
         self.assertIn("../cardinal-$(VERSION).tar.xz", MAKEFILE)
         self.assertIn("../cardinal+deps-$(VERSION).tar.xz", MAKEFILE)
 
@@ -71,7 +72,10 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         for suffix in ("cardinal-${version}.tar.xz", "cardinal+deps-${version}.tar.xz"):
             self.assertIn(suffix, checker)
         self.assertIn('[[ ! -s "$archive" ]]', checker)
-        self.assertIn('tar --lzma -tf "$archive"', checker)
+        self.assertIn("fd377a585a00", checker)
+        self.assertIn("Source release archive is not an XZ container", checker)
+        self.assertIn('tar --xz -tf "$archive"', checker)
+        self.assertNotIn("tar --lzma", checker)
         self.assertIn('root="cardinal-${version}"', checker)
         self.assertIn('required["plugins/ModularSynth/src/plugin.hpp"]', checker)
         self.assertGreaterEqual(len(MODULE_SLUGS), 8)
@@ -106,8 +110,8 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         ])
 
     @unittest.skipUnless(
-        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
-        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+        shutil.which("tar") and shutil.which("xz") and shutil.which("bash"),
+        "GNU tar/XZ/Bash unavailable for archive smoke test",
     )
     def test_validator_accepts_both_valid_archives(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -118,9 +122,54 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             result = self._run(project, VERSION)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+            for archive in ARCHIVES:
+                path = project.parent / archive
+                with self.subTest(archive=archive):
+                    self.assertEqual(path.read_bytes()[:6], b"\xfd7zXZ\x00")
+                    self.assertEqual(
+                        subprocess.run(["xz", "-t", str(path)], capture_output=True).returncode,
+                        0,
+                    )
+                    self.assertEqual(
+                        subprocess.run(["tar", "-tJf", str(path)], capture_output=True).returncode,
+                        0,
+                    )
+
     @unittest.skipUnless(
-        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
-        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+        shutil.which("tar") and shutil.which("xz") and shutil.which("bash"),
+        "GNU tar/XZ/Bash unavailable for codec-compatibility test",
+    )
+    def test_validator_rejects_legacy_lzma_stream_with_xz_filename(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "checkout"
+            project.mkdir()
+            self._stage_source_members(project)
+            self._create_archives(project)
+            wrong_codec = project.parent / ARCHIVES[1]
+            # GNU tar's --lzma invocation may still select XZ on modern
+            # hosts. Build the legacy LZMA-alone stream explicitly with xz.
+            plain_tar = subprocess.run(
+                ["tar", f"--transform=s,^\\.,cardinal-{VERSION},",
+                 "-cf", "-", "-C", str(project), "."],
+                check=True, capture_output=True,
+            ).stdout
+            legacy_lzma = subprocess.run(
+                ["xz", "--format=lzma", "-c"],
+                input=plain_tar, check=True, capture_output=True,
+            ).stdout
+            wrong_codec.write_bytes(legacy_lzma)
+            self.assertNotEqual(wrong_codec.read_bytes()[:6], b"\xfd7zXZ\x00")
+            self.assertNotEqual(
+                subprocess.run(["xz", "-t", "--format=xz", str(wrong_codec)], capture_output=True).returncode,
+                0,
+            )
+            result = self._run(project, VERSION)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("not an XZ container", result.stderr)
+
+    @unittest.skipUnless(
+        shutil.which("tar") and shutil.which("xz") and shutil.which("bash"),
+        "GNU tar/XZ/Bash unavailable for archive smoke test",
     )
     def test_validator_rejects_missing_empty_and_corrupt_archives(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -139,8 +188,8 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             self.assertNotEqual(self._run(project, VERSION).returncode, 0)
 
     @unittest.skipUnless(
-        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
-        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+        shutil.which("tar") and shutil.which("xz") and shutil.which("bash"),
+        "GNU tar/XZ/Bash unavailable for archive smoke test",
     )
     def test_validator_rejects_missing_first_party_source(self) -> None:
         missing_cases = (
@@ -162,8 +211,8 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
                     self.assertIn(missing, result.stderr)
 
     @unittest.skipUnless(
-        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
-        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+        shutil.which("tar") and shutil.which("xz") and shutil.which("bash"),
+        "GNU tar/XZ/Bash unavailable for archive smoke test",
     )
     def test_validator_requires_new_manifest_module_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -183,8 +232,8 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
                 self.assertIn(name, result.stderr)
 
     @unittest.skipUnless(
-        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
-        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+        shutil.which("tar") and shutil.which("xz") and shutil.which("bash"),
+        "GNU tar/XZ/Bash unavailable for archive smoke test",
     )
     def test_validator_rejects_stale_archive_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -202,8 +251,8 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             self.assertIn("manifest differs", result.stderr)
 
     @unittest.skipUnless(
-        shutil.which("tar") and shutil.which("lzma") and shutil.which("bash"),
-        "GNU tar/LZMA/Bash unavailable for archive smoke test",
+        shutil.which("tar") and shutil.which("xz") and shutil.which("bash"),
+        "GNU tar/XZ/Bash unavailable for archive smoke test",
     )
     def test_validator_rejects_wrong_archive_root(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -247,7 +296,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         for archive in ARCHIVES:
             subprocess.run(
                 [
-                    "tar", "--lzma", f"--transform=s,^\\.,{prefix},",
+                    "tar", "--xz", f"--transform=s,^\\.,{prefix},",
                     "-cf", str(project.parent / archive),
                     "-C", str(project), ".",
                 ],

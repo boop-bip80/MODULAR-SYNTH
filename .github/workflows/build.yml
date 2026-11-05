@@ -545,7 +545,16 @@ jobs:
     strategy:
       matrix:
         target: [win32, win64]
-    runs-on: ubuntu-latest
+    # Temporary host-runner pin for the Wine-based Windows cross-build.
+    # ubuntu-latest moved to Ubuntu 26.04 with Docker 29.4.2; that version's
+    # default seccomp profile breaks 32-bit Wine socketcall, causing
+    # `wine: socket : Function not implemented` during required LV2 TTL
+    # generation. Ubuntu 24.04 currently provides Docker 28.0.4 instead.
+    # Keep the default seccomp isolation and the real metadata-generation gate.
+    # Revisit when the Ubuntu 26.04 runner upgrades to a fixed Docker engine.
+    # https://docs.docker.com/engine/release-notes/29/#2942
+    # https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
+    runs-on: ubuntu-24.04
     container:
       image: ubuntu:22.04
     steps:

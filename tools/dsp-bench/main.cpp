@@ -1,0 +1,304 @@
+/*
+ * MODULAR-SYNTH standalone DSP microbenchmark (not a Cardinal/DAW benchmark).
+ * Copyright (C) 2026 boop-bip80 contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Four source DSP cores, deterministic control/audio stimuli, no host/Rack.
+ * Time is informational; functional and allocation checks are acceptance gates.
+ */
+
+#include "../../plugins/ModularSynth/src/MorphVCO.hpp"
+#include "../../plugins/ModularSynth/src/StateFilter.hpp"
+#include "../../plugins/ModularSynth/src/FMVoice.hpp"
+#include "../../plugins/ModularSynth/src/StereoEcho.hpp"
+
+#include <array>
+#include <atomic>
+#include <cerrno>
+#include <chrono>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <new>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace {
+std::atomic<bool> gTrackNew(false);
+std::atomic<std::uint64_t> gNewCalls(0);
+}
+
+// The measurement counts C++ new/new[] calls in the sample loop. It does not
+// intercept malloc, aligned allocators, or allocations in a real audio host.
+void* operator new(std::size_t bytes) {
+    if (gTrackNew.load(std::memory_order_relaxed))
+        gNewCalls.fetch_add(1u, std::memory_order_relaxed);
+    if (void* memory = std::malloc(bytes == 0 ? 1u : bytes))
+        return memory;
+    throw std::bad_alloc();
+}
+
+void* operator new[](std::size_t bytes) {
+    return ::operator new(bytes);
+}
+
+void operator delete(void* memory) noexcept { std::free(memory); }
+void operator delete[](void* memory) noexcept { ::operator delete(memory); }
+#if __cplusplus >= 201402L
+void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
+void operator delete[](void* memory, std::size_t) noexcept { ::operator delete(memory); }
+#endif
+
+namespace {
+namespace dsp = modular_synth::dsp;
+
+static constexpr double kTwoPi = 6.283185307179586476925286766559;
+static constexpr std::size_t kSignalPeriod = 1024;
+
+bool finiteBits(double value) noexcept {
+    std::uint64_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return (bits & UINT64_C(0x7ff0000000000000)) != UINT64_C(0x7ff0000000000000);
+}
+
+const std::array<float, kSignalPeriod>& inputTable() {
+    static const std::array<float, kSignalPeriod> table = [] {
+        std::array<float, kSignalPeriod> values = {};
+        for (std::size_t n = 0; n < values.size(); ++n) {
+            const double phase = kTwoPi * static_cast<double>(n) / values.size();
+            values[n] = static_cast<float>(0.5 * std::sin(phase)
+                                         + 0.16 * std::sin(3.0 * phase));
+        }
+        return values;
+    }();
+    return table;
+}
+
+struct MorphStep {
+    double operator()(dsp::MorphOscillator& engine, int frame, int voice,
+                      double rate, float) const noexcept {
+        const float morph = (frame & 2047) < 1024 ? 0.23f : 0.76f;
+        const dsp::MorphOscillator::Sample sample = engine.process(
+            110.0 + 19.0 * voice, rate, morph, 0.32f + voice * 0.006f);
+        return static_cast<double>(sample.sine) * sample.sine
+             + static_cast<double>(sample.morph) * sample.morph;
+    }
+};
+
+struct FilterStep {
+    double operator()(dsp::StateFilter& engine, int frame, int voice,
+                      double rate, float signal) const noexcept {
+        const double cutoff = 400.0 + voice * 100.0
+                            + ((frame & 4095) < 2048 ? 900.0 : 1800.0);
+        const dsp::StateFilter::Sample sample = engine.process(
+            5.0 * signal, rate, cutoff, 0.48, 0.35);
+        return static_cast<double>(sample.low) * sample.low
+             + static_cast<double>(sample.band) * sample.band
+             + static_cast<double>(sample.high) * sample.high;
+    }
+};
+
+struct FMStep {
+    double operator()(dsp::FMVoice& engine, int frame, int voice,
+                      double rate, float) const noexcept {
+        const double index = (frame & 4095) < 2048 ? 2.5 : 3.75;
+        const dsp::FMVoice::Input input(
+            140.0 + voice * 17.0, rate, 2.0, index, -0.24);
+        const dsp::FMVoice::Output sample = engine.process(input);
+        return static_cast<double>(sample.carrier) * sample.carrier
+             + static_cast<double>(sample.modulator) * sample.modulator;
+    }
+};
+
+struct EchoStep {
+    double operator()(dsp::StereoEchoDSP& engine, int frame, int voice,
+                      double rate, float signal) const noexcept {
+        const double left = static_cast<double>(signal) * 5.0;
+        const double right = static_cast<double>(inputTable()[
+            (static_cast<std::size_t>(frame) + 139u) % kSignalPeriod]) * 5.0;
+        const double delayMs = 55.0 + voice * 1.2;
+        const dsp::StereoEchoDSP::Sample sample = engine.process(
+            left, right, rate, delayMs, 0.4, 0.65, 0.2);
+        return static_cast<double>(sample.left) * sample.left
+             + static_cast<double>(sample.right) * sample.right;
+    }
+};
+
+struct Measurement {
+    const char* engine;
+    int voices;
+    int sampleRate;
+    int frames;
+    double elapsedMs;
+    double nsPerVoiceSample;
+    double realtimeFactor;
+    double meanEnergy;
+    std::uint64_t newCalls;
+    std::size_t preparedBytesHint;
+};
+
+template <typename Engine, typename Step>
+Measurement measure(const char* name, int voices, int sampleRate, int frames,
+                    std::size_t extraBytesPerVoice = 0u) {
+    // Important: 16 StereoEcho voices allocate ~23.4 MiB, but all constructors,
+    // table initialization and warmup execute before timing/heap tracking.
+    std::vector<Engine> state(static_cast<std::size_t>(voices));
+    const std::array<float, kSignalPeriod>& signal = inputTable();
+    const Step step;
+    const int warmupFrames = sampleRate / 12; // 83 ms: primes the 55-73 ms delay.
+    for (int frame = 0; frame < warmupFrames; ++frame)
+        for (int voice = 0; voice < voices; ++voice)
+            step(state[static_cast<std::size_t>(voice)], frame, voice,
+                 static_cast<double>(sampleRate),
+                 signal[static_cast<std::size_t>(frame) % kSignalPeriod]);
+
+    double energy = 0.0;
+    bool finite = true;
+    gNewCalls.store(0u, std::memory_order_relaxed);
+    const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    gTrackNew.store(true, std::memory_order_relaxed);
+    for (int frame = 0; frame < frames; ++frame) {
+        // Continue the input/control timeline after warmup. Restarting it at
+        // frame zero would introduce an artificial discontinuity at timing.
+        const int absoluteFrame = frame + warmupFrames;
+        const float signalValue = signal[static_cast<std::size_t>(absoluteFrame)
+                                         % kSignalPeriod];
+        for (int voice = 0; voice < voices; ++voice) {
+            const double sampleEnergy = step(state[static_cast<std::size_t>(voice)],
+                                             absoluteFrame, voice,
+                                             static_cast<double>(sampleRate),
+                                             signalValue);
+            if (!finiteBits(sampleEnergy) || sampleEnergy < 0.0)
+                finite = false;
+            energy += sampleEnergy;
+        }
+    }
+    gTrackNew.store(false, std::memory_order_relaxed);
+    const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    const std::uint64_t allocations = gNewCalls.load(std::memory_order_relaxed);
+    const double elapsedNs = std::chrono::duration<double, std::nano>(end - start).count();
+    const double voiceSamples = static_cast<double>(voices) * frames;
+    const double averageEnergy = energy / voiceSamples;
+    if (!finite || !finiteBits(averageEnergy) || averageEnergy <= 0.0 || allocations != 0u)
+        throw std::runtime_error(std::string(name)
+            + ": non-finite/zero output energy or C++ allocation inside sample loop");
+
+    Measurement result = {};
+    result.engine = name;
+    result.voices = voices;
+    result.sampleRate = sampleRate;
+    result.frames = frames;
+    result.elapsedMs = elapsedNs / 1.0e6;
+    result.nsPerVoiceSample = elapsedNs / voiceSamples;
+    result.realtimeFactor = (elapsedNs / 1.0e9) / (frames / static_cast<double>(sampleRate));
+    result.meanEnergy = averageEnergy;
+    result.newCalls = allocations;
+    result.preparedBytesHint = static_cast<std::size_t>(voices)
+                             * (sizeof(Engine) + extraBytesPerVoice);
+    return result;
+}
+
+void printCsv(const std::vector<Measurement>& rows) {
+    std::cout << "engine,voices,sample_rate_hz,frames,elapsed_ms,ns_per_voice_sample,"
+                 "realtime_factor,mean_output_energy,cpp_new_calls,prepared_bytes_hint\n";
+    std::cout << std::setprecision(9);
+    for (std::size_t n = 0; n < rows.size(); ++n) {
+        const Measurement& r = rows[n];
+        std::cout << r.engine << ',' << r.voices << ',' << r.sampleRate << ','
+                  << r.frames << ',' << r.elapsedMs << ',' << r.nsPerVoiceSample
+                  << ',' << r.realtimeFactor << ',' << r.meanEnergy << ','
+                  << r.newCalls << ',' << r.preparedBytesHint << '\n';
+    }
+}
+
+void printJson(const std::vector<Measurement>& rows) {
+    std::cout << "[\n" << std::setprecision(9);
+    for (std::size_t n = 0; n < rows.size(); ++n) {
+        const Measurement& r = rows[n];
+        std::cout << "  {\"engine\":\"" << r.engine << "\",\"voices\":" << r.voices
+                  << ",\"sample_rate_hz\":" << r.sampleRate
+                  << ",\"frames\":" << r.frames
+                  << ",\"elapsed_ms\":" << r.elapsedMs
+                  << ",\"ns_per_voice_sample\":" << r.nsPerVoiceSample
+                  << ",\"realtime_factor\":" << r.realtimeFactor
+                  << ",\"mean_output_energy\":" << r.meanEnergy
+                  << ",\"cpp_new_calls\":" << r.newCalls
+                  << ",\"prepared_bytes_hint\":" << r.preparedBytesHint << '}';
+        if (n + 1u != rows.size())
+            std::cout << ',';
+        std::cout << '\n';
+    }
+    std::cout << "]\n";
+}
+
+int parseFrames(const char* text) {
+    errno = 0;
+    char* end = NULL;
+    const long value = std::strtol(text, &end, 10);
+    if (errno != 0 || text == end || *end != '\0' || value < 256L || value > 1000000L)
+        throw std::invalid_argument("--frames must be an integer 256..1000000");
+    return static_cast<int>(value);
+}
+
+void usage(const char* command) {
+    std::cout << "Usage: " << command << " [--frames 32768] [--json]\n"
+              << "Runs MorphVCO, StateFilter, FMVoice and StereoEcho at 48/96 kHz, "
+                 "1/8/16 voices.\n"
+              << "Source DSP timing only: no Cardinal, UI, drivers, host, or audio I/O.\n";
+}
+} // namespace
+
+int main(int argc, char** argv) {
+    try {
+        int frames = 32768;
+        bool json = false;
+        for (int n = 1; n < argc; ++n) {
+            if (std::strcmp(argv[n], "--frames") == 0) {
+                if (n + 1 == argc)
+                    throw std::invalid_argument("--frames needs a value");
+                frames = parseFrames(argv[++n]);
+            } else if (std::strcmp(argv[n], "--json") == 0) {
+                json = true;
+            } else if (std::strcmp(argv[n], "--help") == 0) {
+                usage(argv[0]);
+                return 0;
+            } else {
+                throw std::invalid_argument(std::string("unknown argument: ") + argv[n]);
+            }
+        }
+
+        std::vector<Measurement> rows;
+        const int rates[] = {48000, 96000};
+        const int voices[] = {1, 8, 16};
+        for (std::size_t rate = 0; rate < 2u; ++rate) {
+            for (std::size_t voice = 0; voice < 3u; ++voice) {
+                const int sr = rates[rate];
+                const int count = voices[voice];
+                rows.push_back(measure<dsp::MorphOscillator, MorphStep>(
+                    "MorphVCO", count, sr, frames));
+                rows.push_back(measure<dsp::StateFilter, FilterStep>(
+                    "StateFilter", count, sr, frames));
+                rows.push_back(measure<dsp::FMVoice, FMStep>(
+                    "FMVoice", count, sr, frames));
+                rows.push_back(measure<dsp::StereoEchoDSP, EchoStep>(
+                    "StereoEcho", count, sr, frames,
+                    dsp::StereoEchoDSP::reservedBytesPerVoice()));
+            }
+        }
+        if (json)
+            printJson(rows);
+        else
+            printCsv(rows);
+    } catch (const std::exception& problem) {
+        std::fprintf(stderr, "DSP benchmark: %s\n", problem.what());
+        return 1;
+    }
+    return 0;
+}

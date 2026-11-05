@@ -10,7 +10,9 @@ collection.
 
 ## What is available
 
-`tools/module-forge/module_forge.py` supports two Rack-compatible C++17 starters:
+`tools/module-forge/module_forge.py` supports oscillator and effect starters
+written for Cardinal's baseline GNU C++11 plugin compiler dialect (also
+checked under C++17). Generation alone does not establish host compatibility:
 
 - **`--kind oscillator` (default, unchanged):** a four-file, 16-voice sine
   oscillator with one 1 V/oct pitch input, continuous phase, reset, and
@@ -142,7 +144,7 @@ harmonic (3, 5, 7, 9) energy than an uncorrected 9.28 kHz square wave using
 the same oscillator phase. These are isolated source and spectral tests, not
 measurements from a loadable plugin, and they do not prove alias-free audio.
 `test_generated_triangle.py` runs the *actual generated* polyBLAMP triangle
-under the same three C++17 optimization profiles. At a coherent 9.28 kHz
+under GNU C++11 and C++17 optimization profiles. At a coherent 9.28 kHz
 fundamental, it requires at least 8 dB lower aggregate alias power in odd
 harmonics 3, 5, 7 and 9 than an uncorrected triangle using the **same phase**.
 It also checks low-frequency bipolar amplitude/DC centering, port counts,
@@ -150,11 +152,12 @@ polyphony retirement, invalid host rates and nonfinite CV. This does not
 establish full-range spectrum quality, alias-free output or DAW audio.
 
 When a C++ compiler is available, `test_effect_core.py` also builds and
-executes a standalone C++17 probe against the generated Rack-free filter header:
+executes standalone GNU C++11/C++17 probes against the generated Rack-free filter header:
 DC convergence, reset, impulse decay, 44.1/48/96 kHz, and IEEE-bitwise
 NaN/Inf input, coefficient, cutoff and sample-rate behavior. Each probe is
 compiled and executed with ordinary `-O2`, production-style
-`-O2 -ffast-math -fno-finite-math-only`, and strict `-O2 -ffast-math`.
+`-O2 -ffast-math -fno-finite-math-only`, and strict `-O2 -ffast-math`,
+including the actual GNU C++11 plugin dialect.
 The nonfinite checks inspect raw float exponent bits so strict fast-math
 cannot silently fold the test assertions away. This does **not** compile or
 load the Rack/Cardinal module.
@@ -170,7 +173,7 @@ python3 -m unittest discover -s tools/module-forge \
     -p "test_generated_wrappers.py" -v
 ```
 
-With a C++17 compiler, the test compiles each complete wrapper as its own
+With a C++ compiler, the test compiles each complete wrapper as its own
 translation unit using `-DHEADLESS`, the first-party plugin header, the
 `pluginInstance__ModularSynth` compile namespace, and `tests/rack_stub`.
 It also compiles and executes a program including both generated wrappers and
@@ -179,8 +182,9 @@ parameter and CV/audio port cardinality, sample processing, two-voice 1 V/oct
 pitch tracking, stereo right-input normalled from left, independent stereo
 inputs, polyphony contraction/expansion with retired oscillator/filter state,
 resets, nonfinite audio/CV and invalid sample-rate fallback.
-The C++ probe runs under ordinary `-O2`, production-style
-`-O2 -ffast-math -fno-finite-math-only`, and strict `-O2 -ffast-math`;
+The C++ probe runs under GNU C++11 and C++17, including ordinary `-O2`,
+production-style `-O2 -ffast-math -fno-finite-math-only`, and strict
+`-O2 -ffast-math` variants;
 the oscillator uses the same IEEE-754 bitwise finite guard as the effect core.
 
 The test also asks the **dry-run** integrator to plan changes against the
@@ -208,7 +212,8 @@ A separate Linux/HEADLESS compatibility gate generates five oscillator
 waveform/effect variants (sine, opt-in polyBLEP saw, opt-in polyBLEP pulse,
 opt-in polyBLAMP triangle and stereo TPT low-pass)
 into a temporary directory, validates each output, and syntax-checks each
-actual `.cpp` against the **real pinned Rack/DPF/Jansson headers**. It shares
+actual `.cpp` against the **real pinned Rack/DPF/Jansson headers** in both
+GNU C++11 and GNU C++17 modes (five modules × two dialects). It shares
 the exact Gitlink/dependency preflight and Cardinal C++ definitions of
 `tools/ci/check_real_rack_headers.py`; it does **not** fall back to
 `tests/rack_stub` when dependencies are unavailable. No generated file is
@@ -364,8 +369,11 @@ The stereo effect demonstrates:
 Keep these constraints when replacing the starters with custom oscillators,
 filters or effects. Also add tests for pitch tracking, bounded levels, host
 sample rates and block sizes, reset, state serialization, CV extremes, NaN/Inf,
-16-channel behavior, and patch restore. The repository's `Makefile.base.mk` requests GNU C++17; the generated source
-uses C++17 `std::clamp`. The HEADLESS fallback mirrors upstream Cardinal's
+16-channel behavior, and patch restore. Cardinal's default `BUILD_CXX_FLAGS`
+uses GNU C++11 for these first-party plugin wrappers; newer C++17 is not a
+safe assumed minimum. Generated pitch, cutoff, audio and coefficient bounds
+therefore use finite-guarded C++11 `std::min`/`std::max`, not C++17
+`std::clamp`. The HEADLESS fallback mirrors upstream Cardinal's
 minimal `ModuleWidget` port registration pattern (for example, `HostTime.cpp`).
 Still compile-check both regular and headless variants in CI before release.
 

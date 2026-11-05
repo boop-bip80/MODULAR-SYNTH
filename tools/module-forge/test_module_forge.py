@@ -35,7 +35,8 @@ class ModuleForgeTests(unittest.TestCase):
             self.assertEqual(manifest["slug"], "OrbitSine")
             self.assertIn("Oscillator", manifest["tags"])
             source = (destination / "OrbitSine.cpp").read_text()
-            self.assertIn("std::clamp(pitch", source)
+            self.assertIn("std::max(-8.f, std::min(8.f, pitch))", source)
+            self.assertNotIn("std::clamp(pitch", source)
             self.assertIn("setChannels(voices)", source)
             self.assertIn("phase[voice]", source)
 

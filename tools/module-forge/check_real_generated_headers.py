@@ -67,6 +67,21 @@ def syntax_commands(compiler: str, flags: list[str], sources: list[Path]) -> lis
     ]
 
 
+def dialect_flags(flags: list[str], dialect: str) -> list[str]:
+    """Select one generated-module dialect from exactly one known SDK standard.
+
+    The shared genuine-Rack checker may default to Cardinal's C++11 or
+    C++17. Reject missing, duplicate, or unknown standards; otherwise swap
+    only that single -std option, retaining every pinned include/definition.
+    """
+    if dialect not in ("gnu++11", "gnu++17"):
+        raise sdk.PreflightError(f"unsupported generated module dialect: {dialect}")
+    standards = [flag for flag in flags if flag.startswith("-std=")]
+    if len(standards) != 1 or standards[0] not in ("-std=gnu++11", "-std=gnu++17"):
+        raise sdk.PreflightError(f"unexpected shared SDK dialect flags: {standards}")
+    return [f"-std={dialect}" if flag == standards[0] else flag for flag in flags]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rack-root", type=Path, default=ROOT / "src" / "Rack")
@@ -99,19 +114,22 @@ def main(argv: list[str] | None = None) -> int:
             )
             sources = generate_starters(output)
             flags = sdk.compiler_flags(rack, dpf, jansson, types)
-            for source, command in zip(sources, syntax_commands(compiler, flags, sources)):
-                result = subprocess.run(
-                    command, cwd=ROOT, text=True, stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT, check=False, timeout=120,
-                )
-                if result.returncode:
-                    print(f"FAIL: generated {source.stem} against pinned real Rack headers\n"
-                          f"{result.stdout}", file=sys.stderr)
-                    return 1
-                print(f"PASS: generated {source.stem} (real pinned Rack headers)")
+            for dialect in ("gnu++11", "gnu++17"):
+                commands = syntax_commands(compiler, dialect_flags(flags, dialect), sources)
+                for source, command in zip(sources, commands):
+                    result = subprocess.run(
+                        command, cwd=ROOT, text=True, stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT, check=False, timeout=120,
+                    )
+                    if result.returncode:
+                        print(f"FAIL: generated {source.stem} ({dialect}) against "
+                              f"pinned real Rack headers\n{result.stdout}", file=sys.stderr)
+                        return 1
+                    print(f"PASS: generated {source.stem} ({dialect}, real pinned Rack headers)")
 
-        print(f"PASS: {len(STARTERS)}/{len(STARTERS)} generated HEADLESS translation units; "
-              "syntax-only, no link/GUI/host audio")
+        print(f"PASS: {len(STARTERS) * 2}/{len(STARTERS) * 2} generated HEADLESS "
+              "translation units across C++11/C++17; syntax-only, "
+              "no link/GUI/host audio")
         return 0
     except (sdk.PreflightError, OSError, subprocess.TimeoutExpired) as exc:
         print(f"Generated real Rack header preflight unavailable: {exc}\n\n"

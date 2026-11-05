@@ -6,10 +6,13 @@ compilation itself runs separately in check_real_rack_headers.py.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools.ci import check_real_rack_headers as real_rack
 
@@ -46,6 +49,8 @@ class RealRackHeaderCheckTests(unittest.TestCase):
             Path("/temporary/speex-types"),
         )
         self.assertIn("-DpluginInstance=pluginInstance__ModularSynth", flags)
+        self.assertIn("-std=gnu++11", flags)
+        self.assertNotIn("-std=gnu++17", flags)
         self.assertIn("-DHEADLESS", flags)
         self.assertIn("/sdk/rack/include", flags)
         self.assertIn("/sdk/dpf/distrho", flags)
@@ -55,6 +60,89 @@ class RealRackHeaderCheckTests(unittest.TestCase):
         self.assertIn("FMVoice", real_rack.MODULES)
         self.assertIn("ChanceHold", real_rack.MODULES)
         self.assertIn("DualVCA", real_rack.MODULES)
+
+    def test_production_and_newer_dialects_reject_unexpected_std(self) -> None:
+        self.assertEqual(real_rack.CXX_STANDARDS, ("gnu++11", "gnu++17"))
+        for dialect in real_rack.CXX_STANDARDS:
+            flags = real_rack.compiler_flags(
+                Path("/sdk/rack"), Path("/sdk/dpf"),
+                Path("/sdk/jansson"), Path("/temporary/speex-types"), dialect,
+            )
+            self.assertEqual([flag for flag in flags if flag.startswith("-std=")],
+                             [f"-std={dialect}"])
+            self.assertIn("-fsyntax-only", flags)
+            self.assertNotIn(str(real_rack.ROOT / "tests/rack_stub"), flags)
+        with self.assertRaisesRegex(real_rack.PreflightError, "Unsupported real-Rack"):
+            real_rack.compiler_flags(
+                Path("/sdk/rack"), Path("/sdk/dpf"),
+                Path("/sdk/jansson"), Path("/temporary/speex-types"), "gnu++20",
+            )
+        with self.assertRaisesRegex(real_rack.PreflightError, "dialect/flags mismatch"):
+            real_rack.run_link_smoke(
+                "/usr/bin/c++", ["-std=gnu++17"], Path("/unused"), "gnu++11",
+            )
+
+    @staticmethod
+    def _mocked_main(argv: list[str], *, fake_run=None, fake_link=None) -> tuple[int, str, str]:
+        """Exercise C++ orchestration offline, not an SDK or host load."""
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with (mock.patch.object(sys, "argv", ["check_real_rack_headers.py", *argv]),
+              mock.patch.object(real_rack, "check_dependencies"),
+              mock.patch.object(real_rack, "render_linux_speex_types", return_value="/* test */"),
+              mock.patch.object(Path, "read_text", return_value="/* pinned Speex type template */"),
+              mock.patch.object(real_rack.shutil, "which", return_value="/usr/bin/c++"),
+              mock.patch.object(real_rack.subprocess, "run", side_effect=fake_run),
+              mock.patch.object(real_rack, "check_registration_contract"),
+              mock.patch.object(real_rack, "run_link_smoke", side_effect=fake_link),
+              contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr)):
+            status = real_rack.main()
+        return status, stdout.getvalue(), stderr.getvalue()
+
+    def test_syntax_orchestration_checks_each_real_wrapper_under_both_dialects(self) -> None:
+        commands: list[list[str]] = []
+
+        def fake_compile(command, **kwargs):
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout="")
+
+        status, output, errors = self._mocked_main([], fake_run=fake_compile)
+        self.assertEqual(status, 0, errors)
+        self.assertEqual(len(commands), len(real_rack.MODULES) * 2)
+        for index, dialect in enumerate(real_rack.CXX_STANDARDS):
+            for module, command in zip(real_rack.MODULES,
+                                       commands[index * len(real_rack.MODULES):(index + 1) * len(real_rack.MODULES)]):
+                self.assertIn(f"-std={dialect}", command)
+                self.assertIn("-DHEADLESS", command)
+                self.assertIn("-DpluginInstance=pluginInstance__ModularSynth", command)
+                self.assertNotIn("rack_stub", " ".join(command))
+                self.assertEqual(Path(command[-1]).name, f"{module}.cpp")
+        self.assertIn("both gnu++11, gnu++17", output)
+
+        def fail_cpp11_fmvoice(command, **kwargs):
+            if "-std=gnu++11" in command and command[-1].endswith("FMVoice.cpp"):
+                return subprocess.CompletedProcess(command, 1, stdout="deliberate C++11 error")
+            return subprocess.CompletedProcess(command, 0, stdout="")
+
+        status, output, errors = self._mocked_main([], fake_run=fail_cpp11_fmvoice)
+        self.assertEqual(status, 1)
+        self.assertIn("FMVoice (gnu++11", errors)
+        self.assertIn("deliberate C++11 error", errors)
+        self.assertNotIn("both gnu++11, gnu++17", output)
+
+    def test_link_smoke_separates_two_real_sdk_object_sets(self) -> None:
+        calls = []
+
+        def fake_link(compiler, flags, output_dir, standard):
+            self.assertTrue(output_dir.is_dir())
+            self.assertIn(f"-std={standard}", flags)
+            self.assertNotIn("rack_stub", " ".join(flags))
+            calls.append((standard, output_dir))
+
+        status, output, errors = self._mocked_main(["--link-smoke"], fake_link=fake_link)
+        self.assertEqual(status, 0, errors)
+        self.assertEqual([item[0] for item in calls], list(real_rack.CXX_STANDARDS))
+        self.assertNotEqual(calls[0][1], calls[1][1])
+        self.assertIn("temporary ELF only, not a host plugin", output)
 
     def test_unavailable_sdk_fails_clearly_without_network_or_auto_install(self) -> None:
         missing = real_rack.ROOT / "__no_rack_sdk_at_this_path__"

@@ -163,7 +163,7 @@ public:
         }
 
         const double hz = clockLocked_
-            ? std::min(kMaxFrequencyHz, ratio / clockPeriodSeconds_) : freeHz;
+            ? std::min(static_cast<double>(kMaxFrequencyHz), ratio / clockPeriodSeconds_) : freeHz;
         const double offset = bounded(input.phaseOffset, 0.0, 0.0, 1.0)
                               + 0.1 * bounded(input.phaseCvVolts, 0.0, -20.0, 20.0);
         const double width = bounded(bounded(input.pulseWidth, 0.5, 0.05, 0.95)

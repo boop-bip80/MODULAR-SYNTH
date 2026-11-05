@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <memory>
 
 struct ModularSynthStereoEcho : Module {
@@ -25,6 +26,7 @@ struct ModularSynthStereoEcho : Module {
 
     std::array<modular_synth::dsp::StereoEchoDSP, 16> voices;
     int previousChannels = 0;
+    std::atomic<bool> pendingReset{false};
 
     ModularSynthStereoEcho() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -47,12 +49,21 @@ struct ModularSynthStereoEcho : Module {
     }
 
     void onReset() override {
-        for (auto& voice : voices)
-            voice.reset();
-        previousChannels = 0;
+        pendingReset.store(true, std::memory_order_release);
+    }
+
+    void onReset(const ResetEvent& event) override {
+        Module::onReset(event);
+        pendingReset.store(true, std::memory_order_release);
     }
 
     void process(const ProcessArgs& args) override {
+        if (pendingReset.load(std::memory_order_acquire) &&
+                pendingReset.exchange(false, std::memory_order_acq_rel)) {
+            for (auto& voice : voices)
+                voice.reset();
+            previousChannels = 0;
+        }
         int channels = std::max(1, inputs[LEFT_INPUT].getChannels());
         channels = std::max(channels, inputs[RIGHT_INPUT].getChannels());
         channels = std::max(channels, inputs[TIME_CV_INPUT].getChannels());

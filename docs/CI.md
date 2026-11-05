@@ -68,14 +68,16 @@ The full matrix ignores pushes that change only Markdown/documentation files, to
 
 The inherited source-tarball job builds two archives in the checkout's parent
 directory: `cardinal-<version>.tar.xz` and `cardinal+deps-<version>.tar.xz`,
-where `<version>` comes from `make -s version`. A new pre-upload check
-requires **both** files to be nonempty and verifies that GNU tar can list their
-contents using the Makefile's existing `--lzma` encoder. It also checks that
+where `<version>` is read directly from the `VERSION =` Makefile assignment
+(avoiding host graphics dependencies). Both archives now use genuine **XZ**
+compression (`tar --xz`), so normal `xz -t` and `tar -tJf` work on the delivered
+`.tar.xz` files. The pre-upload check requires **both** files to be nonempty
+and verifies their contents using the same XZ decoder. It also checks that
 every listed member is inside the expected `cardinal-<version>/` archive
 root, rejects `..` traversal components, and requires the license, README,
-Makefile, original-module manifest, shared plugin header, and the **seven
-registered original modules' C++ wrappers, DSP headers, and SVG panels**
-(including FMVoice) in **both** archives. The offline test compares the
+Makefile, original-module manifest, shared plugin header, and **all modules'
+registered C++ wrappers, DSP headers, and SVG panels** in **both** archives.
+The offline test compares the
 required slug list with `plugins/ModularSynth/plugin.json` so a future
 registration change cannot silently bypass the gate. This catches
 valid-but-incomplete or mis-versioned archives; it is a narrow first-party
@@ -86,15 +88,16 @@ parent-relative file pattern and fails when it matches nothing. The one-pattern
 contract matters because `softprops/action-gh-release` rejects each unmatched
 pattern individually; the old three alternative `/home/runner` path depths
 would cause false failures if used with strict matching. [Offline release-gate tests](../tests/test_ci_source_tarball.py)
-exercise successful archive validation and rejection of missing, empty, corrupt,
-mis-rooted, incomplete and unsafe-version inputs.
+exercise successful archive validation and rejection of missing, empty,
+corrupt, mis-rooted, incomplete, unsafe-version and **legacy LZMA-encoded
+`.tar.xz`** inputs.
 
-**Caveat:** The upstream Makefile uses GNU tar `--lzma` despite the
-`.tar.xz` filename extension; the guard deliberately tests the *current
-encoding*, not a claim of standard xz encoding. A later archive-format
-migration needs its own compatibility review. These safeguards are source
-and offline-test evidence only: no latest-main full build, published tarball,
-download validation or fork-owned Release is established by them.
+**Format compatibility:** Historical Cardinal archives whose filenames end
+in `.tar.xz` may actually contain an LZMA-alone stream because the inherited
+Makefile used `tar --lzma`. Those old artifacts are not silently rewritten;
+extract a confirmed historical LZMA archive with `tar --lzma -xf`. All newly
+generated fork archives use actual XZ. A successful local fixture does not
+establish a completed hosted source build, tested download, or fork release.
 
 ## Linked Linux first-party inventory gate
 
@@ -150,13 +153,20 @@ python3 -B tests/run_dsp_tests.py --sanitize=auto
 
 [`tools/ci/check_real_rack_headers.py`](../tools/ci/check_real_rack_headers.py)
 adds a **separate, narrower Linux source compatibility signal** beyond the
-`tests/rack_stub` test double. It parses the actual eight
+`tests/rack_stub` test double. It parses the actual nine
 `plugins/ModularSynth/src/*.cpp` translation units individually with the
 production `pluginInstance` alias, `HEADLESS` and `USING_CARDINAL_NOT_RACK`
 definitions, actual pinned Rack/DPF API headers, and authentic dependency
 headers. It checks **exact Gitlink revisions** of Rack, DPF and all six
 required nested Rack submodules before compiling. It never fetches sources,
 installs packages, or checks in generated dependency headers itself.
+
+The syntax gate now compiles all **nine wrappers twice**, under `gnu++11`
+(used by several Cardinal production plugin targets) and `gnu++17`. Neither
+compiler mode is allowed to stand in for the other. The first failing module
+and dialect stop the gate; a modern-dialect-only pass cannot conceal a C++11
+constructor, static-data-member, or other compatibility defect. This is a
+Linux `HEADLESS` source check, **not** an ABI/DAW host certification.
 
 From a Linux source checkout, without cloning all other plugin submodules:
 
@@ -195,14 +205,16 @@ initializing the same exact pinned SDK headers. This mode checks that the
 manifest, `plugins/Makefile`, shared model declarations and
 `initStatic__ModularSynth()` loader describe the **same eight originals**,
 then compiles every original HEADLESS Rack translation unit to a real
-position-independent object and links them into one **temporary Linux ELF
-shared object**. It uses `nm -D` to require exactly one defined
+position-independent object **under each of those two C++ dialects**. The
+object sets are linked separately into two **temporary Linux ELF shared
+objects**, with no mixed-standard object dependencies. It uses `nm -D` to
+require exactly one defined
 `model<Module>` symbol for each original and to reject unresolved first-party
 model symbols. Missing translation units, duplicate model definitions or
 broken loader/source registration fail the gate. Offline negative fixtures
 exercise these failures.
 
-The smoke object is automatically deleted and deliberately permits unresolved
+Both smoke objects are automatically deleted and deliberately permit unresolved
 **Rack/host imports**, which the full Cardinal integration must supply. It has
 no complete plugin entry point or linked host implementation. **It is not a
 loadable Cardinal, VST3, CLAP or LV2 binary**, nor proof of actual audio,

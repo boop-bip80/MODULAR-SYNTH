@@ -153,3 +153,83 @@ generated WAV files are committed. FMVoice's bandwidth guard is not an ideal
 bandlimiter; the tests do **not** certify alias-free output, accurate analog
 emulation, real-time CPU, linked Cardinal audio, UI behavior, listening
 quality or DAW project roundtrips.
+
+---
+
+## FM Voice → Dual VCA → Stereo Echo bell phrase
+
+The new `fm_vca_echo_render.cpp` is a **separate opt-in executable**. Existing
+`fm_voice_render` and `morph_filter_render` source, CLI and baseline WAV bytes
+remain untouched. From the repository root:
+
+```sh
+c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -I . \
+  tools/audio-render/fm_vca_echo_render.cpp -o /tmp/fm_vca_echo_render
+
+# Original four-second, sixteen-note C-minor bell motif, plus one second of
+# true StereoEcho feedback decay (stereo, little-endian 16-bit PCM):
+/tmp/fm_vca_echo_render --sample-rate 48000 \
+  --output /tmp/fm-vca-echo-48k.wav
+
+# Extended two-second tail at 96 kHz:
+/tmp/fm_vca_echo_render --sample-rate 96000 --tail-seconds 2 \
+  --output /tmp/fm-vca-echo-96k.wav
+
+# Compare the same FMVoice and DualVCA signal without echo:
+/tmp/fm_vca_echo_render --dry-reference --tail-seconds 0 \
+  --output /tmp/fm-vca-dry-48k.wav
+```
+
+Existing output paths, including symlinks, are rejected by a preflight rather
+than overwritten. This check is not atomic against a concurrent process
+replacing the path; use fresh names in a private directory. The program prints
+the sample rate, exact PCM frame count,
+peak, RMS and an FNV-1a checksum of the output PCM (not of the WAV header).
+The renderer is deterministic across repeated runs on the same compiler,
+build profile and platform. **Cross-platform/fast-math hashes are not promised
+to match**: different legitimate floating-point optimizations can alter the
+last few quantized samples.
+
+### Actual source signal chain
+
+1. Two independent `FMVoice` DSP instances generate slightly detuned left
+   and right two-operator phase-modulation oscillators, with a four-ratio
+   progression and gentle index/feedback motion.
+2. The voice outputs are converted to nominal Rack-like ±5 V audio and fed
+   into two actual `DualVCA::process()` instances. A fixed original
+   attack/decay/release envelope controls the **CV input in volts**; the DSP's
+   2 ms gain smoothing and cubic/linear curve blend remain active.
+3. The two VCA outputs feed the real `StereoEchoDSP` at 187.5 ms, 34% feedback,
+   35% wet and 72% stereo crossfeed. Audio-voltage output converts back to
+   normalized PCM amplitude with deliberately conservative final gain.
+4. At the four-second phrase boundary, both oscillator/VCA signals stop. For
+   `--tail-seconds 1|2`, real zeros are fed to the same echo state so the
+   feedback ring naturally decays. No extra notes or fabricated tails occur.
+
+`--dry-reference` bypasses only the echo and requires `--tail-seconds 0`.
+The first 160 ms of a wet render are approximately 65% of the corresponding
+dry PCM signal, before the first 187.5 ms delay tap arrives. Past the tap,
+the wet signal measurably differs from scaled dry output. This property is
+enforced by tests rather than inferred from a filename.
+
+Both `DualVCA` and `FMVoice` process sample-by-sample without allocating
+buffers. The echo allocates its two fixed-size rings **before** the sample
+loop; no DSP processing call allocates memory, takes a lock or performs disk
+I/O. The *offline WAV writer* deliberately performs file I/O per frame; it
+is **not** an audio-thread implementation or a host CPU benchmark.
+
+### Verification
+
+```sh
+python3 -m unittest discover -s tests \
+  -p 'test_fm_vca_echo_audio_render.py' -v
+```
+
+The test compiles the actual three DSP classes under ordinary and aggressive
+fast-math optimization. It verifies 48/96 kHz RIFF/PCM structure, repeatable
+hashes and bytes, 16 active note windows, evolving stereo output, bounded
+headroom and note transitions, measurable delayed audio, exact extension
+prefixes for 0/1/2-second tails, decaying feedback and safe CLI/no-overwrite
+behavior. The test does **not** model hearing preference, validate a real
+saved Rack patch, or prove host latency, automation, MIDI, GUI or plugin
+installation. Live Cardinal/DAW audition remains an open release gate.

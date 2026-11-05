@@ -90,6 +90,9 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic \
 # CI auto-discovers both tests (strict O2, production and aggressive fastmath):
 python3 tests/run_dsp_tests.py
 
+# Cardinal's C++11 link ABI, including an unoptimized debug link:
+python3 -B -m unittest discover -s tests -p 'test_stereo_echo_cpp11.py' -v
+
 # Optional sanitizer run; disable LeakSanitizer only if /proc is restricted:
 c++ -std=c++17 -O1 -g -fno-omit-frame-pointer \
   -fsanitize=address,undefined -fno-sanitize-recover=all \
@@ -99,6 +102,7 @@ ASAN_OPTIONS=detect_leaks=0 /tmp/stereo-echo-stress-sanitized
 
 The standalone tests cover:
 
+- Actual C++11 compile, **link**, and execution of the StereoEcho DSP test under both `-O0` debug and `-O3 -ffast-math` production settings. This guards against C++11 ODR-use of a floating-point `static constexpr` constant (a link failure hidden by optimized builds), rather than merely checking that the header parses.
 - Exact left/right integer-delay impulse timing at 44.1/48/96/192 kHz, no early or extra echoes at integer offsets.
 - 48.5-sample four-point cubic fractional-delay interpolation, including its expected low-level pre-/post-ring and measured 12 kHz retention.
 - Dry, 50% mix and fully wet behavior; 50% ping-pong feedback decay across four echoes.
@@ -111,7 +115,7 @@ The standalone tests cover:
 - Five-second impulse feedback decay at 90% and 1 ms, including exact tail extinction after 21,648 frames and zero subnormal samples under strict and aggressive compiler modes.
 - Dry-path subnormal and tiny normal input rejection, output cancellation-residue floor, exact zero output under sustained microscopic input across wet settings, and preservation of ordinary low-level signals under strict/fast-math profiles.
 
-**Actually executed (2026-11-05):** The repository's **15 standalone DSP tests × 3 compiler profiles (45 executions) passed**, including the cubic fractional-delay impulse/12 kHz response checks and StereoEcho long-run stress. Earlier standalone runs also used `-O2 -pedantic -Wall -Wextra -Werror` and combined AddressSanitizer/UndefinedBehaviorSanitizer, with LeakSanitizer disabled because that sandbox denied /proc inspection; those sanitizer results have **not** been revalidated for the cubic interpolation change. Strict `-O2`, production `-O3 -ffast-math -fno-finite-math-only`, and aggressive `-O3 -ffast-math` passed. The Rack plugin wrapper has **not** been successfully built or auditioned inside Cardinal.
+**Actually executed (2026-11-05 follow-on):** The repository's **15 standalone DSP tests × 4 compiler profiles (60 executions) passed**, including strict `-O2`, production `-O3 -ffast-math -fno-finite-math-only`, aggressive `-O3 -ffast-math`, and UBSan. The combined ASan+UBSan runtime probe failed in this ptrace-restricted environment; **no current ASan pass is claimed**. The new `test_stereo_echo_cpp11.py` successfully linked and executed the complete StereoEcho DSP suite at `-std=gnu++11` under both `-O0` and production fast-math, and all **307 repository Python tests** passed. This fixes a real C++11 debug-link portability defect but does **not** prove the full Rack plugin loads or sounds correct inside Cardinal.
 
 ## Exact module indices and suggested factory routing
 

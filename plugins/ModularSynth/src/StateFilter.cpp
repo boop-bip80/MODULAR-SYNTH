@@ -7,6 +7,7 @@
 #include "StateFilter.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <memory>
 
@@ -36,6 +37,7 @@ struct ModularSynthStateFilter : Module {
 
     modular_synth::dsp::StateFilter voices[16];
     int previousChannels = 0;
+    std::atomic<bool> pendingReset{false};
 
     ModularSynthStateFilter() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -56,12 +58,21 @@ struct ModularSynthStateFilter : Module {
     }
 
     void onReset() override {
-        for (auto& voice : voices)
-            voice.reset();
-        previousChannels = 0;
+        pendingReset.store(true, std::memory_order_release);
+    }
+
+    void onReset(const ResetEvent& event) override {
+        Module::onReset(event);
+        pendingReset.store(true, std::memory_order_release);
     }
 
     void process(const ProcessArgs& args) override {
+        if (pendingReset.load(std::memory_order_acquire) &&
+                pendingReset.exchange(false, std::memory_order_acq_rel)) {
+            for (auto& voice : voices)
+                voice.reset();
+            previousChannels = 0;
+        }
         int channels = std::max(1, inputs[AUDIO_INPUT].getChannels());
         channels = std::max(channels, inputs[CUTOFF_CV_INPUT].getChannels());
         channels = std::max(channels, inputs[RESONANCE_CV_INPUT].getChannels());

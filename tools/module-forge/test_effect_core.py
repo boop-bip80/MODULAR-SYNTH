@@ -1,4 +1,4 @@
-"""Standalone C++17 numerical contract tests for Module Forge effect DSP."""
+"""Standalone C++11/C++17 numerical contract tests for Module Forge effect DSP."""
 import shutil
 import subprocess
 import tempfile
@@ -122,7 +122,7 @@ class EffectCoreTests(unittest.TestCase):
     def test_generated_standalone_core_compiles_and_handles_audio(self):
         compiler = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
         if compiler is None:
-            self.skipTest("C++17 compiler not available")
+            self.skipTest("C++ compiler not available")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             header = root / "StereoTPT.dsp.hpp"
@@ -133,16 +133,18 @@ class EffectCoreTests(unittest.TestCase):
             probe = root / "probe.cpp"
             probe.write_text(PROBE, encoding="utf-8")
             modes = (
-                ("o2", ()),
-                ("production_fast_math",
-                 ("-ffast-math", "-fno-finite-math-only")),
-                ("strict_fast_math", ("-ffast-math",)),
+                ("cxx11_o2", ("-std=gnu++11",)),
+                ("cxx11_strict_fast_math", ("-std=gnu++11", "-ffast-math")),
+                ("cxx17_o2", ("-std=gnu++17",)),
+                ("cxx17_production_fast_math",
+                 ("-std=gnu++17", "-ffast-math", "-fno-finite-math-only")),
+                ("cxx17_strict_fast_math", ("-std=gnu++17", "-ffast-math")),
             )
             for label, flags in modes:
                 with self.subTest(mode=label):
                     binary = root / f"effect_core_{label}"
                     compile_result = subprocess.run(
-                        [compiler, "-std=c++17", "-O2", *flags,
+                        [compiler, "-O2", *flags,
                          "-Wall", "-Wextra", "-Werror", "-pedantic",
                          str(probe), "-o", str(binary)],
                         capture_output=True, text=True, timeout=60, check=False)
