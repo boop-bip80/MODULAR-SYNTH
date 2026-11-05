@@ -68,19 +68,18 @@ def syntax_commands(compiler: str, flags: list[str], sources: list[Path]) -> lis
 
 
 def dialect_flags(flags: list[str], dialect: str) -> list[str]:
-    """Check generated modules in Cardinal's C++11 plugin dialect as well as C++17.
+    """Select one generated-module dialect from exactly one known SDK standard.
 
-    The shared SDK preflight deliberately requests C++17 for its existing
-    first-party gate. Replace exactly that standard once; silent duplicate
-    or unexpected -std flags could otherwise hide the production ABI mismatch.
+    The shared genuine-Rack checker may default to Cardinal's C++11 or
+    C++17. Reject missing, duplicate, or unknown standards; otherwise swap
+    only that single -std option, retaining every pinned include/definition.
     """
     if dialect not in ("gnu++11", "gnu++17"):
         raise sdk.PreflightError(f"unsupported generated module dialect: {dialect}")
     standards = [flag for flag in flags if flag.startswith("-std=")]
-    if standards != ["-std=gnu++17"]:
+    if len(standards) != 1 or standards[0] not in ("-std=gnu++11", "-std=gnu++17"):
         raise sdk.PreflightError(f"unexpected shared SDK dialect flags: {standards}")
-    return [f"-std={dialect}" if flag == "-std=gnu++17" else flag
-            for flag in flags]
+    return [f"-std={dialect}" if flag == standards[0] else flag for flag in flags]
 
 
 def main(argv: list[str] | None = None) -> int:

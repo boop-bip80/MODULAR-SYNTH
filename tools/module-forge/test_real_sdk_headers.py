@@ -85,17 +85,24 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                 gate.syntax_commands("c++", bad, paths)
 
     def test_generated_dialects_include_cardinal_cpp11_without_duplicate_standard(self) -> None:
-        flags = ["-std=gnu++17", "-DHEADLESS", "-fsyntax-only"]
-        self.assertEqual(gate.dialect_flags(flags, "gnu++11"),
-                         ["-std=gnu++11", "-DHEADLESS", "-fsyntax-only"])
-        self.assertEqual(gate.dialect_flags(flags, "gnu++17"), flags)
-        for bad_flags in ([], ["-std=gnu++11"],
-                          ["-std=gnu++17", "-std=gnu++11"]):
+        # The shared real-header checker switched its default to C++11.
+        # Module Forge must work with either legitimate SDK input dialect.
+        for source_dialect in ("gnu++11", "gnu++17"):
+            flags = [f"-std={source_dialect}", "-DHEADLESS", "-fsyntax-only"]
+            for target_dialect in ("gnu++11", "gnu++17"):
+                with self.subTest(source=source_dialect, target=target_dialect):
+                    self.assertEqual(
+                        gate.dialect_flags(flags, target_dialect),
+                        [f"-std={target_dialect}", "-DHEADLESS", "-fsyntax-only"],
+                    )
+        for bad_flags in ([], ["-std=gnu++20"],
+                          ["-std=gnu++17", "-std=gnu++11"],
+                          ["-std=gnu++11", "-std=gnu++11"]):
             with self.subTest(bad_flags=bad_flags), self.assertRaises(
                     gate.sdk.PreflightError):
                 gate.dialect_flags(bad_flags, "gnu++11")
         with self.assertRaises(gate.sdk.PreflightError):
-            gate.dialect_flags(flags, "gnu++20")
+            gate.dialect_flags(["-std=gnu++11"], "gnu++20")
 
     @unittest.skipUnless(shutil.which("c++"), "C++ compiler unavailable")
     def test_quote_header_priority_over_rack_i_path(self) -> None:
@@ -148,7 +155,7 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                   mock.patch.object(gate.sdk, "render_linux_speex_types",
                                     return_value="#pragma once\n"),
                   mock.patch.object(gate.sdk, "compiler_flags",
-                                    return_value=["-std=gnu++17", "-DHEADLESS", "-fsyntax-only",
+                                    return_value=["-std=gnu++11", "-DHEADLESS", "-fsyntax-only",
                                                   "-I", "/pinned/rack/include"]),
                   mock.patch.object(gate.shutil, "which", return_value="c++"),
                   mock.patch.object(gate.subprocess, "run", side_effect=fake_run)):
