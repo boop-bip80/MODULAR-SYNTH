@@ -33,11 +33,25 @@ public:
         double ratio = 1.0;
         double indexRadians = 0.0;
         double feedback = 0.0;
+
+        // Cardinal builds plugin wrappers as GNU C++11.  In C++11 a struct
+        // with default member initializers is not an aggregate, so the
+        // five-field brace initialization in FMVoice.cpp needs a constructor.
+        Input() noexcept = default;
+        Input(double frequency, double sampleRate, double ratioValue,
+              double index, double feedbackValue) noexcept
+            : frequencyHz(frequency), sampleRateHz(sampleRate),
+              ratio(ratioValue), indexRadians(index),
+              feedback(feedbackValue) {}
     };
 
     struct Output {
         float carrier = 0.0f;
         float modulator = 0.0f;
+
+        Output() noexcept = default;
+        Output(float carrierValue, float modulatorValue) noexcept
+            : carrier(carrierValue), modulator(modulatorValue) {}
     };
 
     static_assert(sizeof(double) == 8 && sizeof(float) == 4

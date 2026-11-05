@@ -107,7 +107,8 @@ struct Port {
     std::array<float, 16> values{};
     int getChannels() const { return connected ? channels : 0; }
     bool isConnected() const { return connected; }
-    void setChannels(int n) { channels = std::clamp(n, 0, 16); connected = true; }
+    // Keep the test double usable with Cardinal's production GNU C++11 mode.
+    void setChannels(int n) { channels = std::min(16, std::max(0, n)); connected = true; }
     void setVoltage(float value, int channel = 0) {
         if (channel >= 0 && channel < 16)
             values[static_cast<std::size_t>(channel)] = value;
