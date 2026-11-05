@@ -195,6 +195,60 @@ PULSE_SOURCE_TEMPLATE = (SOURCE_TEMPLATE
              '            outputs[AUDIO_OUTPUT].setVoltage(5.f * corrected, voice);'))
 PULSE_PANEL_TEMPLATE = PANEL_TEMPLATE.replace("SINE OUT", "PULSE OUT")
 
+# A separate PWM variant leaves the older fixed-width pulse starter and its
+# patch-facing one-knob/one-input layout untouched. Both edges receive the
+# same polyBLEP correction, but the falling edge follows a user-controlled
+# duty cycle. A full 10 V of PW CV spans the entire normalized width range;
+# the 5%-95% clamp prevents vanishing impulses at the edge of the period.
+PWM_SOURCE_TEMPLATE = (PULSE_SOURCE_TEMPLATE
+    .replace("// A 16-channel polyBLEP pulse starter, not a fully bandlimited flagship DSP engine.",
+             "// A 16-channel polyBLEP PWM starter; rapid PW modulation may still alias.")
+    .replace("enum ParamIds { COARSE_PARAM, NUM_PARAMS };",
+             "enum ParamIds { COARSE_PARAM, WIDTH_PARAM, NUM_PARAMS };")
+    .replace("enum InputIds { PITCH_INPUT, NUM_INPUTS };",
+             "enum InputIds { PITCH_INPUT, WIDTH_CV_INPUT, NUM_INPUTS };")
+    .replace('configParam(COARSE_PARAM, -4.f, 4.f, 0.f, "Coarse frequency", " oct");',
+             'configParam(COARSE_PARAM, -4.f, 4.f, 0.f, "Coarse frequency", " oct");\n'
+             '        configParam(WIDTH_PARAM, 0.05f, 0.95f, 0.5f, "Pulse width");')
+    .replace('configInput(PITCH_INPUT, "1 V/oct pitch");',
+             'configInput(PITCH_INPUT, "1 V/oct pitch");\n'
+             '        configInput(WIDTH_CV_INPUT, "Pulse width CV (10 V full scale)");')
+    .replace('configOutput(AUDIO_OUTPUT, "polyBLEP pulse audio");',
+             'configOutput(AUDIO_OUTPUT, "polyBLEP PWM audio");')
+    .replace('            const float oppositeEdge = t < 0.5f ? t + 0.5f : t - 0.5f;\n'
+             '            const float rawPulse = t < 0.5f ? 1.f : -1.f;',
+             '            float width = params[WIDTH_PARAM].getValue()\n'
+             '                + 0.1f * inputs[WIDTH_CV_INPUT].getNormalPolyVoltage(0.f, voice);\n'
+             '            if (!finite(width))\n'
+             '                width = 0.5f;\n'
+             '            width = std::max(0.05f, std::min(0.95f, width));\n'
+             '            // Shift the second discontinuity by the selected duty.\n'
+             '            // A moving edge is not fully bandlimited at audio-rate PWM.\n'
+             '            const float oppositeEdge = t < width ? t + (1.f - width) : t - width;\n'
+             '            const float rawPulse = t < width ? 1.f : -1.f;')
+    .replace('mm2px(Vec(25.4f, 36.f)), module, MS@@SLUG@@Module::COARSE_PARAM));',
+             'mm2px(Vec(14.f, 36.f)), module, MS@@SLUG@@Module::COARSE_PARAM));\n'
+             '        addParam(createParamCentered<RoundBlackKnob>(\n'
+             '            mm2px(Vec(36.8f, 36.f)), module, MS@@SLUG@@Module::WIDTH_PARAM));')
+    .replace('mm2px(Vec(25.4f, 70.f)), module, MS@@SLUG@@Module::PITCH_INPUT));',
+             'mm2px(Vec(14.f, 70.f)), module, MS@@SLUG@@Module::PITCH_INPUT));\n'
+             '        addInput(createInputCentered<PJ301MPort>(\n'
+             '            mm2px(Vec(36.8f, 70.f)), module, MS@@SLUG@@Module::WIDTH_CV_INPUT));'))
+PWM_PANEL_TEMPLATE = (PANEL_TEMPLATE
+    .replace('<text x="25.4" y="48" fill="#e2eaf0" font-size="3.4" text-anchor="middle"\n'
+             '        font-family="sans-serif">COARSE</text>',
+             '<text x="14" y="48" fill="#e2eaf0" font-size="3.2" text-anchor="middle"\n'
+             '        font-family="sans-serif">PITCH</text>\n'
+             '  <text x="36.8" y="48" fill="#e2eaf0" font-size="3.2" text-anchor="middle"\n'
+             '        font-family="sans-serif">WIDTH</text>')
+    .replace('<text x="25.4" y="82" fill="#e2eaf0" font-size="3.4" text-anchor="middle"\n'
+             '        font-family="sans-serif">V/OCT</text>',
+             '<text x="14" y="82" fill="#e2eaf0" font-size="3" text-anchor="middle"\n'
+             '        font-family="sans-serif">V/OCT</text>\n'
+             '  <text x="36.8" y="82" fill="#e2eaf0" font-size="3" text-anchor="middle"\n'
+             '        font-family="sans-serif">PW CV</text>')
+    .replace('SINE OUT', 'PWM OUT'))
+
 # Integrating the polyBLEP edge correction once produces a polynomial BLAMP
 # correction for the triangle's two *slope* discontinuities. The corners have
 # opposite slope jumps, so their corrections have opposite signs. This keeps
@@ -534,8 +588,8 @@ def validate_kind(kind: str) -> None:
 
 
 def validate_waveform(kind: str, waveform: str) -> None:
-    if waveform not in ("sine", "saw", "pulse", "triangle"):
-        raise ValueError("oscillator waveform must be sine, saw, pulse or triangle")
+    if waveform not in ("sine", "saw", "pulse", "pwm", "triangle"):
+        raise ValueError("oscillator waveform must be sine, saw, pulse, pwm or triangle")
     if kind == "effect" and waveform != "sine":
         raise ValueError("non-sine --waveform is only supported for oscillator starters")
 
@@ -558,6 +612,8 @@ def manifest_for(slug: str, name: str, kind: str = "oscillator",
                         if waveform == "saw"
                         else "Original Module Forge polyBLEP pulse oscillator starter"
                         if waveform == "pulse"
+                        else "Original Module Forge CV-controlled polyBLEP PWM oscillator starter"
+                        if waveform == "pwm"
                         else "Original Module Forge polyBLAMP triangle oscillator starter"
                         if waveform == "triangle"
                         else "Original Module Forge sine oscillator starter"),
@@ -592,6 +648,17 @@ def render_files(slug: str, name: str, kind: str = "oscillator",
             "a 5 V nominal peak and limits its frequency below Nyquist. "
             "Both edges are corrected; polyBLEP reduces, but does not "
             "eliminate, aliases.")
+    elif waveform == "pwm":
+        source = PWM_SOURCE_TEMPLATE
+        panel = PWM_PANEL_TEMPLATE
+        integration = INTEGRATION_TEMPLATE.replace(
+            "The starter emits a 5 V peak sine and limits its frequency below Nyquist.",
+            "The starter emits a 16-voice polyBLEP PWM pulse with a 5 V nominal "
+            "peak, WIDTH knob (5%-95%), and polyphonic PW CV (10 V spans "
+            "100% width). Both edges are corrected; the moving-width edge "
+            "is not fully bandlimited during audio-rate modulation. The "
+            "output has a duty-dependent DC component; high-pass externally "
+            "if needed. Port indices differ from the fixed-duty pulse starter.")
     elif waveform == "triangle":
         source = TRIANGLE_SOURCE_TEMPLATE
         panel = TRIANGLE_PANEL_TEMPLATE
@@ -708,9 +775,9 @@ def main(argv: list[str] | None = None) -> int:
     new.add_argument("--name", required=True, help="human-readable module name")
     new.add_argument("--kind", choices=("oscillator", "effect"),
                      default="oscillator", help="starter variant (default: oscillator)")
-    new.add_argument("--waveform", choices=("sine", "saw", "pulse", "triangle"),
+    new.add_argument("--waveform", choices=("sine", "saw", "pulse", "pwm", "triangle"),
                      default="sine", help="oscillator waveform (saw/pulse: polyBLEP; "
-                     "triangle: polyBLAMP; default sine)")
+                     "pwm: width-knob/CV polyBLEP; triangle: polyBLAMP; default sine)")
     new.add_argument("--out", type=Path, default=Path("module-forge-output"),
                      help="parent directory for generated module folder")
     check = subparsers.add_parser("check", help="validate a generated skeleton")

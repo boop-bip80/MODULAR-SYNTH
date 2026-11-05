@@ -7,6 +7,7 @@ signal than an actual fork plugin/DAW build.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import tempfile
@@ -18,12 +19,22 @@ ROOT = Path(__file__).resolve().parents[1]
 HARNESS = ROOT / "tests" / "rack_wrapper_smoke.cpp"
 STUBS = ROOT / "tests" / "rack_stub"
 WRAPPER_SOURCES = (
-    "MorphVCO.cpp", "StateFilter.cpp", "Macro8.cpp", "StereoEcho.cpp",
-    "ClockedLFO.cpp", "FMVoice.cpp", "ChanceHold.cpp",
+    "MorphVCO.cpp", "StateFilter.cpp", "FoldDrive.cpp", "Macro8.cpp",
+    "StereoEcho.cpp", "ClockedLFO.cpp", "FMVoice.cpp", "ChanceHold.cpp",
+    "DualVCA.cpp",
 )
 
 
 class RackWrapperSmokeTests(unittest.TestCase):
+    def test_runtime_shim_covers_every_declared_first_party_model(self) -> None:
+        manifest = json.loads(
+            (ROOT / "plugins" / "ModularSynth" / "plugin.json").read_text(encoding="utf-8")
+        )
+        declared = {entry["slug"] for entry in manifest["modules"]}
+        exercised = {Path(filename).stem for filename in WRAPPER_SOURCES}
+        self.assertEqual(declared, exercised,
+                         "Runtime Rack shim must not silently skip newly registered modules")
+
     def test_macro8_trigger_initialization_matches_pinned_rack_contract(self) -> None:
         """Guard the braced value-init that broke hosted Rack compilation.
 
@@ -40,7 +51,7 @@ class RackWrapperSmokeTests(unittest.TestCase):
         self.assertIn("liveTrigger.reset();", macro8)
 
     @unittest.skipUnless(shutil.which("c++"), "C++17 compiler not installed")
-    def test_seven_first_party_headless_wrappers_compile_and_process(self) -> None:
+    def test_nine_first_party_headless_wrappers_compile_and_process(self) -> None:
         with tempfile.TemporaryDirectory(prefix="modular-synth-wrapper-smoke-") as temp:
             # The production Makefile compiles these as separate translation
             # units and renames pluginInstance at preprocessing time.
@@ -68,15 +79,17 @@ class RackWrapperSmokeTests(unittest.TestCase):
                             + checked.stdout + checked.stderr,
                         )
             profiles = (
-                ("strict", ["-O1"]),
-                ("production", ["-O3", "-ffast-math", "-fno-finite-math-only"]),
-                ("aggressive-fastmath", ["-O3", "-ffast-math"]),
+                ("gnu++11-strict", "gnu++11", ["-O1"]),
+                ("gnu++11-production", "gnu++11", ["-O3", "-ffast-math", "-fno-finite-math-only"]),
+                ("c++17-strict", "c++17", ["-O1"]),
+                ("c++17-production", "c++17", ["-O3", "-ffast-math", "-fno-finite-math-only"]),
+                ("c++17-aggressive-fastmath", "c++17", ["-O3", "-ffast-math"]),
             )
-            for profile, flags in profiles:
+            for profile, dialect, flags in profiles:
                 with self.subTest(profile=profile):
                     binary = Path(temp) / f"rack-wrapper-smoke-{profile}"
                     compile_command = [
-                        "c++", "-std=c++17", *flags,
+                        "c++", f"-std={dialect}", *flags,
                         "-Wall", "-Wextra", "-Wpedantic", "-pthread",
                         "-DHEADLESS", "-I", str(STUBS), str(HARNESS), "-o", str(binary),
                     ]
@@ -98,7 +111,7 @@ class RackWrapperSmokeTests(unittest.TestCase):
                         f"HEADLESS wrapper shim process smoke failed ({profile}):\n"
                         + completed.stdout + completed.stderr,
                     )
-                    self.assertIn("PASS: 7 HEADLESS wrapper", completed.stdout)
+                    self.assertIn("PASS: 9 HEADLESS wrapper", completed.stdout)
 
 
 if __name__ == "__main__":

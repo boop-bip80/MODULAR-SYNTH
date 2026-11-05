@@ -41,6 +41,30 @@ The inspector also cannot prove:
 - Correct metadata/ports for arbitrary third-party modules; these remain unverified until a matching pinned manifest/schema is supplied.
 - Whether a patch creates a desirable sound. Run an actual host smoke test and measure audio output.
 
+### Trace a first-party voice to stereo host outputs
+
+Use the optional source-backed route auditor to see which saved cables carry
+first-party oscillator signal through known processing ports into Cardinal's
+HostAudio2 Left/M and Right inputs:
+
+```sh
+python3 tools/patches/patch_audio_routes.py \
+  patches/examples/MODULAR_-_Night_Lanterns_Dual_Timbre.vcv \
+  --show-signal-traces --require-source-verified-stereo
+
+# The same cable-by-cable source paths as structured data:
+python3 tools/patches/patch_audio_routes.py \
+  patches/examples/MODULAR_-_Night_Lanterns_Dual_Timbre.vcv \
+  --show-signal-traces --json
+```
+
+The report traces **every** verified first-party generator contribution per
+host terminal, including mixed paths, with saved cable IDs and module/port
+hops. The stereo gate requires both jacks on every saved HostAudio2 module to
+have conservatively recognized signal-port chains. Unknown third-party DSP
+remains opaque, and passing this check **does not establish audible output,
+gain staging, pitch correctness or DAW compatibility**.
+
 ## Play the first-party Morph VCO patch
 
 Open [`patches/examples/MODULAR_-_Morph_VCO_Performance.vcv`](../patches/examples/MODULAR_-_Morph_VCO_Performance.vcv) in a build of **this fork** that contains `ModularSynth/MorphVCO` (upstream Cardinal builds do **not** contain it). The patch is based on the bundled Cardinal Synth template, with its original VCO replaced by the new first-party Morph VCO.

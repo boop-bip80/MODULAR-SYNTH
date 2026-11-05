@@ -1,5 +1,5 @@
 /*
- * Test-only stand-in for the SMALL Rack surface used by the five original
+ * Test-only stand-in for the SMALL Rack surface used by the nine original
  * modules. This is not the Rack SDK and must never be shipped with a plugin.
  * A passing smoke test proves compilation/process flow against these types,
  * not Cardinal/Rack ABI compatibility or a runnable plugin.

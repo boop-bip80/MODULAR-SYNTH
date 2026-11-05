@@ -39,5 +39,8 @@ if [[ ! -s "${installers[0]}" ]]; then
   exit 1
 fi
 
-printf 'PASS: Windows %s release assets present: %s and %s\n' \
-  "$target" "$archive" "${installers[0]}"
+# Require structurally intact release bundles, real Windows PE files of the
+# requested architecture, and the exact plugin variants promised by packaging.
+# Keeping this after the basename checks preserves the existing CLI contract.
+python3 -B "$(dirname "$0")/verify-windows-payload.py" \
+  --zip "$archive" --installer "${installers[0]}" --target "$target"

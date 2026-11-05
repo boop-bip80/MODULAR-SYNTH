@@ -99,6 +99,7 @@ def _source_verified_signal_route(
     root: Path, generator_id: int, modules: dict[int, dict],
     outgoing: dict[int, list[dict]], wired_hosts: set[int],
     target_terminal: tuple[int, int] | None = None,
+    *, include_cable_hops: bool = False,
 ) -> dict | None:
     """Find a conservative first-party signal-port chain (never infer sound).
 
@@ -111,11 +112,11 @@ def _source_verified_signal_route(
     source_ports = _verified_signal_ports(root, model)
     if source_ports is None:
         return None
-    queue = deque((generator_id, port, (generator_id,))
+    queue = deque((generator_id, port, (generator_id,), ())
                   for port in source_ports[1])
     visited: set[tuple[int, int]] = set()
     while queue:
-        current, output_port, ancestry = queue.popleft()
+        current, output_port, ancestry, cable_hops = queue.popleft()
         if (current, output_port) in visited:
             continue
         visited.add((current, output_port))
@@ -125,18 +126,28 @@ def _source_verified_signal_route(
             if edge["outputId"] != output_port:
                 continue
             target_id, target_port = edge["inputModuleId"], edge["inputId"]
+            hop = {
+                "cable_id": edge["id"],
+                "output_module_id": current,
+                "output_port": output_port,
+                "input_module_id": target_id,
+                "input_port": target_port,
+            }
             target = modules[target_id]
             if (target["plugin"], target["model"]) == ("Cardinal", "HostAudio2"):
                 if (target_id in wired_hosts and target_port in (0, 1)
                         and (target_terminal is None
                              or (target_id, target_port) == target_terminal)):
-                    return {
+                    result = {
                         "module_id": generator_id,
                         "model": f"ModularSynth/{model}",
                         "host_module_id": target_id,
                         "host_input_port": target_port,
                         "via_module_ids": list(ancestry),
                     }
+                    if include_cable_hops:
+                        result["cable_hops"] = [*cable_hops, hop]
+                    return result
                 continue
             if target["plugin"] != "ModularSynth":
                 continue  # Opaque or control/host modules are not audio evidence.
@@ -147,7 +158,8 @@ def _source_verified_signal_route(
                 target_port, ())
             for next_port in outputs:
                 if next_port in signal_ports[1]:
-                    queue.append((target_id, next_port, ancestry + (target_id,)))
+                    queue.append((target_id, next_port, ancestry + (target_id,),
+                                  cable_hops + (hop,)))
     return None
 
 
@@ -180,6 +192,11 @@ def audit_output_routes(path: str | Path, root: str | Path = ROOT) -> dict:
         # jacks. Terminal-level evidence is tracked separately to avoid a
         # misleading stereo/complete-output interpretation.
         "source_verified_host_inputs": [],
+        # Unlike source_verified_host_inputs (one proof per terminal), this
+        # enumerates every first-party generator with a typed path to each
+        # terminal. Each hop records the exact cable and jack ordinals so a
+        # patch author can trace why a voice is counted or excluded.
+        "source_verified_host_input_traces": [],
         "unverified_wired_host_inputs": [],
         "advisories": [],
     }
@@ -343,11 +360,17 @@ def audit_output_routes(path: str | Path, root: str | Path = ROOT) -> dict:
             terminal = (host_id, cable["inputId"])
             verified = None
             for generator_id in generators:
-                verified = _source_verified_signal_route(
+                trace = _source_verified_signal_route(
                     root, generator_id, modules, outgoing, wired_hosts,
-                    target_terminal=terminal)
-                if verified is not None:
-                    break
+                    target_terminal=terminal, include_cable_hops=True)
+                if trace is not None:
+                    result["source_verified_host_input_traces"].append(trace)
+                    if verified is None:
+                        # Retain the original one-route-per-terminal API;
+                        # cable provenance lives in the separate all-sources
+                        # report, without changing existing consumers.
+                        verified = {key: value for key, value in trace.items()
+                                    if key != "cable_hops"}
             if verified is not None:
                 result["source_verified_host_inputs"].append(verified)
                 continue
@@ -368,7 +391,7 @@ def audit_output_routes(path: str | Path, root: str | Path = ROOT) -> dict:
     return result
 
 
-def format_output_routes(result: dict) -> str:
+def format_output_routes(result: dict, *, show_signal_traces: bool = False) -> str:
     lines = [f"{'PASS' if result['ok'] else 'FAIL'}  {result['path']}",
              "  HostAudio2 source contract: "
              + ("verified" if result["host_contract_verified"] else "unverified")]
@@ -401,6 +424,24 @@ def format_output_routes(result: dict) -> str:
             f"{len(result['source_verified_host_inputs'])}/{wired}"
             " (not proof of audio or stereo width)"
         )
+        lines.append(
+            "  Source-verified first-party generator-to-terminal traces: "
+            f"{len(result['source_verified_host_input_traces'])}"
+            " (includes distinct generators mixed onto one jack)"
+        )
+        if show_signal_traces:
+            for trace in result["source_verified_host_input_traces"]:
+                lines.append(
+                    f"    {trace['model']}[{trace['module_id']}] -> "
+                    f"HostAudio2[{trace['host_module_id']}]:in"
+                    f"{trace['host_input_port']}"
+                )
+                for hop in trace["cable_hops"]:
+                    lines.append(
+                        f"      cable #{hop['cable_id']}: "
+                        f"{hop['output_module_id']}:out{hop['output_port']} -> "
+                        f"{hop['input_module_id']}:in{hop['input_port']}"
+                    )
     if result["unverified_first_party_signal_routes"]:
         lines.append(
             "  First-party voices with host graph routes but no verified "
@@ -426,6 +467,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-root", type=Path, default=ROOT)
     parser.add_argument("--json", action="store_true", help="Structured reports")
     parser.add_argument(
+        "--show-signal-traces", action="store_true",
+        help="Include source-verified cable-by-cable provenance for every "
+             "first-party generator feeding each HostAudio2 jack. Use "
+             "--json for structured traces. Not an audibility test.",
+    )
+    parser.add_argument(
         "--require-host-input", action="store_true",
         help="Exit 1 if a structurally valid patch has no source-verified "
              "wired Cardinal/HostAudio2 input; not an audible-audio test",
@@ -449,13 +496,20 @@ def main(argv: list[str] | None = None) -> int:
              "signal-port chain. This is not an audible-audio test; "
              "third-party-only routes remain unverified.",
     )
+    parser.add_argument(
+        "--require-source-verified-stereo", action="store_true",
+        help="Exit 1 unless every saved HostAudio2 module has both Left/M "
+             "and Right jacks connected through source-verified first-party "
+             "generator-to-terminal signal-port chains. Does NOT prove "
+             "different stereo content or audible output.",
+    )
     args = parser.parse_args(argv)
     reports = [audit_output_routes(path, args.repo_root) for path in args.patches]
     if args.json:
         print(json.dumps(reports, indent=2))
     else:
         for report in reports:
-            print(format_output_routes(report))
+            print(format_output_routes(report, show_signal_traces=args.show_signal_traces))
     if not all(report["ok"] for report in reports):
         return 2
     if args.require_host_input and not all(
@@ -478,6 +532,17 @@ def main(argv: list[str] | None = None) -> int:
         not report["host_contract_verified"]
         or not report["has_wired_host_input"]
         or report["unverified_wired_host_inputs"]
+        for report in reports
+    ):
+        return 1
+    if args.require_source_verified_stereo and any(
+        not report["host_contract_verified"]
+        or not report["sinks"]
+        or any(
+            {route["host_input_port"] for route in report["source_verified_host_inputs"]
+             if route["host_module_id"] == sink["module_id"]} != {0, 1}
+            for sink in report["sinks"]
+        )
         for report in reports
     ):
         return 1

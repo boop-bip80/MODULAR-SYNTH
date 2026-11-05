@@ -34,7 +34,10 @@ class CompiledFirstPartyGateTests(unittest.TestCase):
 
     def write_image(self, *, markers: tuple[str, ...] | None = None,
                     header: bytes | None = None,
-                    trailer_markers: tuple[str, ...] = ()) -> None:
+                    trailer_markers: tuple[str, ...] = (),
+                    load_flags: int = 4,
+                    section_type: int | None = None,
+                    section_flags: int = 2) -> None:
         marker_names = markers if markers is not None else (
             "ModularSynth",
             *(entry["slug"] for entry in self.data["modules"]),
@@ -48,8 +51,18 @@ class CompiledFirstPartyGateTests(unittest.TestCase):
         struct.pack_into("<Q", elf, 32, 64)  # program header offset
         struct.pack_into("<HHH", elf, 52, 64, 56, 1)  # EHDR, PHDR sizes/count
         struct.pack_into("<IIQQQQQQ", elf, 64,
-                         1, 4, 0x100, 0x100, 0, len(mapped), len(mapped), 0x1000)
+                         1, load_flags, 0x100, 0x100, 0, len(mapped), len(mapped), 0x1000)
         elf[0x100:] = mapped
+        if section_type is not None:
+            # Optional real-style section table: SHT_NULL plus a marker-bearing
+            # section inside the PT_LOAD range. The section table is unmapped.
+            section_table = len(elf)
+            elf.extend(b"\0" * 128)
+            struct.pack_into("<Q", elf, 40, section_table)  # e_shoff
+            struct.pack_into("<HHH", elf, 58, 64, 2, 0)
+            struct.pack_into("<IIQQQQIIQQ", elf, section_table + 64,
+                             0, section_type, section_flags, 0x100, 0x100,
+                             len(mapped), 0, 0, 1, 0)
         if header is not None:
             elf[:len(header)] = header
         if trailer_markers:
@@ -125,6 +138,63 @@ class CompiledFirstPartyGateTests(unittest.TestCase):
         struct.pack_into("<I", payload, 64, 4)  # PT_NOTE, not PT_LOAD
         self.binary.write_bytes(payload)
         self.assertIn("no file-backed load segments", self.run_gate().stderr)
+
+    def test_rejects_marker_suffix_of_unrelated_identifier(self) -> None:
+        self.write_image(markers=(
+            "NotModularSynth", *(entry["slug"] for entry in self.data["modules"])
+        ))
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ModularSynth", result.stderr)
+
+    def test_rejects_identifiers_only_in_writable_load_segment(self) -> None:
+        self.write_image(load_flags=6)  # PF_R | PF_W, not a constant pool.
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no read-only", result.stderr)
+
+    def test_section_table_can_prove_readonly_allocated_literal_storage(self) -> None:
+        self.write_image(section_type=1, section_flags=2)  # PROGBITS, ALLOC.
+        checked = self.run_gate()
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        self.write_image(section_type=7, section_flags=2)  # NOTE, not literals.
+        self.assertIn("literal sections", self.run_gate().stderr)
+        self.write_image(section_type=1, section_flags=3)  # Writable PROGBITS.
+        self.assertIn("literal sections", self.run_gate().stderr)
+        self.write_image(section_type=1, section_flags=0)  # Nonallocated data.
+        self.assertIn("literal sections", self.run_gate().stderr)
+        self.write_image(section_type=1, section_flags=6)  # Executable code.
+        self.assertIn("literal sections", self.run_gate().stderr)
+
+    def test_rejects_invalid_section_table_boundaries(self) -> None:
+        self.write_image(section_type=1)
+        elf = bytearray(self.binary.read_bytes())
+        struct.pack_into("<Q", elf, 40, len(elf) + 1)
+        self.binary.write_bytes(elf)
+        self.assertIn("section header table", self.run_gate().stderr)
+        self.write_image(section_type=1)
+        elf = bytearray(self.binary.read_bytes())
+        section = struct.unpack_from("<Q", elf, 40)[0]
+        struct.pack_into("<Q", elf, section + 64 + 32, len(elf) + 1)
+        self.binary.write_bytes(elf)
+        self.assertIn("literal section", self.run_gate().stderr)
+
+    def test_rejects_impossible_architecture_and_bad_load_alignment(self) -> None:
+        self.write_image()
+        elf = bytearray(self.binary.read_bytes())
+        struct.pack_into("<H", elf, 18, 3)  # EM_386 with ELF64, impossible.
+        self.binary.write_bytes(elf)
+        self.assertIn("machine", self.run_gate().stderr)
+        self.write_image()
+        elf = bytearray(self.binary.read_bytes())
+        struct.pack_into("<Q", elf, 64 + 48, 3)  # Non-power-of-two align.
+        self.binary.write_bytes(elf)
+        self.assertIn("alignment", self.run_gate().stderr)
+        self.write_image()
+        elf = bytearray(self.binary.read_bytes())
+        struct.pack_into("<Q", elf, 64 + 16, 0x101)  # p_vaddr misaligned.
+        self.binary.write_bytes(elf)
+        self.assertIn("alignment", self.run_gate().stderr)
 
     def test_accepts_file_backed_elf32_program_headers(self) -> None:
         mapped = b"\0".join(s.encode("ascii") for s in (

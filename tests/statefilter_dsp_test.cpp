@@ -147,6 +147,94 @@ void testControlBehaviour() {
            && small.low <= larger.low + 0.00001f,
            "near-zero drive progresses monotonically");
 }
+
+// An independent implementation of the original uncached TPT equations.
+// This guards sonic parity when the control-coefficient cache is added or
+// changed: held controls, rapid modulation and sample-rate changes must all
+// produce the same voltage sequence, not merely a plausible filter response.
+struct UncachedStateFilter {
+    double ic1eq = 0.0;
+    double ic2eq = 0.0;
+    double previousSampleRate = 0.0;
+
+    StateFilter::Sample process(double input, double sampleRate, double cutoff,
+                                double resonance, double drive) {
+        if (!StateFilter::ieeeFinite(sampleRate) || sampleRate < 1000.0) {
+            ic1eq = ic2eq = previousSampleRate = 0.0;
+            return {0.0f, 0.0f, 0.0f};
+        }
+        if (sampleRate != previousSampleRate) {
+            ic1eq = ic2eq = 0.0;
+            previousSampleRate = sampleRate;
+        }
+        const double maximum = std::min(20000.0, 0.45 * sampleRate);
+        const double hz = StateFilter::finiteClamp(cutoff,
+            std::min(1000.0, maximum), 5.0, maximum);
+        const double resonant = StateFilter::finiteClamp(resonance, 0.0, 0.0, 1.0);
+        const double distortion = StateFilter::finiteClamp(drive, 0.0, 0.0, 1.0);
+        const double q = 0.5 + 11.5 * resonant * resonant;
+        const double k = 1.0 / q;
+        const double volts = StateFilter::finiteClamp(input, 0.0, -20.0, 20.0);
+        double x = volts / 5.0;
+        if (distortion > 0.0) {
+            const double gain = 1.0 + 12.0 * distortion * distortion;
+            const double shaped = std::tanh(gain * x) / std::tanh(gain);
+            x += distortion * (shaped - x);
+        }
+        const double g = std::tan(kPi * hz / sampleRate);
+        const double a1 = 1.0 / (1.0 + g * (g + k));
+        const double a2 = g * a1;
+        const double v3 = x - ic2eq;
+        const double band = a1 * ic1eq + a2 * v3;
+        const double low = ic2eq + g * band;
+        const double high = x - k * band - low;
+        ic1eq = StateFilter::finiteClamp(2.0 * band - ic1eq, 0.0, -16.0, 16.0);
+        ic2eq = StateFilter::finiteClamp(2.0 * low - ic2eq, 0.0, -16.0, 16.0);
+        if (std::abs(ic1eq) < 1e-20)
+            ic1eq = 0.0;
+        if (std::abs(ic2eq) < 1e-20)
+            ic2eq = 0.0;
+        return {StateFilter::boundedVoltage(low),
+                StateFilter::boundedVoltage(band), StateFilter::boundedVoltage(high)};
+    }
+};
+
+void testCoefficientCacheMatchesUncachedAudio() {
+    StateFilter cached;
+    UncachedStateFilter original;
+    double maximumError = 0.0;
+    for (int frame = 0; frame < 24000; ++frame) {
+        // Long steady stretches test the cache hit path. Frequent transitions
+        // test invalidation, including switching drive between 0 and nonzero.
+        const double rate = frame < 9000 ? 48000.0
+                           : frame < 18000 ? 96000.0 : 44100.0;
+        const double hz = frame < 4000 ? 735.0 : frame < 8000 ? 3500.0
+                        : frame < 12000 ? 735.0 : frame < 16000
+                        ? 5.0 + 18000.0 * ((frame % 73) / 72.0) : 2500.0;
+        const double resonance = frame < 10000 ? 0.5
+                               : frame < 16000 ? (frame % 23) / 22.0 : 0.93;
+        const double drive = frame < 5000 ? 0.0 : frame < 10000 ? 0.7
+                           : frame < 16000 ? (frame % 5) / 4.0 : 0.7;
+        const double signal = 4.0 * std::sin(frame * 0.217)
+                            + 1.3 * std::sin(frame * 0.0017);
+        const auto a = cached.process(signal, rate, hz, resonance, drive);
+        const auto b = original.process(signal, rate, hz, resonance, drive);
+        maximumError = std::max(maximumError, std::abs(double(a.low - b.low)));
+        maximumError = std::max(maximumError, std::abs(double(a.band - b.band)));
+        maximumError = std::max(maximumError, std::abs(double(a.high - b.high)));
+    }
+    expect(maximumError < 1e-6,
+           "cached coefficients preserve uncached voltage output through automation and host-rate changes");
+
+    cached.reset();
+    original = UncachedStateFilter{};
+    const auto afterReset = cached.process(2.0, 48000.0, 1250.0, 0.8, 0.75);
+    const auto originalReset = original.process(2.0, 48000.0, 1250.0, 0.8, 0.75);
+    expect(afterReset.low == originalReset.low &&
+           afterReset.band == originalReset.band &&
+           afterReset.high == originalReset.high,
+           "explicit reset invalidates all cached coefficients");
+}
 } // namespace
 
 int main() {
@@ -154,6 +242,7 @@ int main() {
     testDCAndReset();
     testBoundsAndSampleRateChanges();
     testControlBehaviour();
+    testCoefficientCacheMatchesUncachedAudio();
 
     if (failures != 0) {
         std::fprintf(stderr, "StateFilter: %d tests failed\n", failures);

@@ -432,6 +432,29 @@ source-only route gate. This inventory cannot tell whether a plugin was linked,
 a patch loaded, a CV actually emitted, a knob was host-automated or any sound
 was produced.
 
+### Preview a saved Macro8 scene transition (source-only)
+
+The `morph` command estimates the transition from a fully settled LIVE or
+saved A–D scene into another saved scene. It reads the saved Macro8 morph time
+and reproduces the source DSP's per-sample one-pole smoothing equation at an
+explicit evaluation time. It reports eight normalized controls and nominal
+bipolar/unipolar CV voltages; **it does not run the Rack audio graph**.
+
+~~~bash
+python3 tools/instrument-builder/instrument_builder.py morph \
+  Echo_Motion.msinstrument --from A --to B --at 0.25
+
+# Reproducible, machine-readable estimate at 48 kHz:
+python3 tools/instrument-builder/instrument_builder.py morph \
+  Echo_Motion.msinstrument --from A --to B --at 0.25 \
+  --sample-rate 48000 --json
+~~~
+
+Use `--module-id` to select one source Macro8 if the saved patch contains
+several. Empty target scenes, malformed source bundles, nonfinite time/rate
+values and unsupported saved state are rejected; the command does not write
+back to the bundle or imply successful host automation.
+
 ### Safety and limits
 
 - The source `.vcv` is parsed as strict JSON: duplicate keys, NaN/Inf,
