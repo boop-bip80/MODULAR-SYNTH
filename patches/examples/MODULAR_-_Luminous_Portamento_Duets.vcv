@@ -1,0 +1,121 @@
+{
+  "version": "2.4.1",
+  "zoom": 0.8,
+  "modules": [
+    {
+      "id": 2, "plugin": "Cardinal", "model": "HostMIDI", "pos": [0, 0], "params": [],
+      "data": {"pwRange": 2, "smooth": true, "channels": 8, "polyMode": 1,
+               "lastPitch": 8192, "lastMod": 0, "inputChannel": 0, "outputChannel": 0}
+    },
+    {
+      "id": 992000100001, "plugin": "ModularSynth", "model": "SlewGlide", "pos": [12, 0],
+      "params": [{"id": 0, "value": 0.12}, {"id": 1, "value": 0.18}], "data": null
+    },
+    {
+      "id": 992000100002, "plugin": "ModularSynth", "model": "Macro8", "pos": [28, 0],
+      "params": [
+        {"id": 0, "value": 0.025}, {"id": 1, "value": 0.035},
+        {"id": 2, "value": 0.06}, {"id": 3, "value": 0.07},
+        {"id": 4, "value": 0.02}, {"id": 5, "value": 0.025},
+        {"id": 6, "value": 0.04}, {"id": 7, "value": 0.02},
+        {"id": 8, "value": 1.25}, {"id": 9, "value": 0},
+        {"id": 10, "value": 0}, {"id": 11, "value": 0},
+        {"id": 12, "value": 0}, {"id": 13, "value": 0},
+        {"id": 14, "value": 0}, {"id": 15, "value": 0},
+        {"id": 16, "value": 0}, {"id": 17, "value": 0},
+        {"id": 18, "value": 0}, {"id": 19, "value": 0},
+        {"id": 20, "value": 0}, {"id": 21, "value": 0},
+        {"id": 22, "value": 0}
+      ],
+      "data": {
+        "macro8Version": 1,
+        "names": ["Rise Glide", "Fall Glide", "Lin Color", "Exp Color",
+                  "Lin Q", "Exp Q", "Echo Wet", "Echo Return"],
+        "snapshots": [
+          [0.008, 0.01, 0.035, 0.02, 0.012, 0.01, 0.02, 0.015],
+          [0.055, 0.09, 0.15, 0.11, 0.035, 0.055, 0.06, 0.04],
+          [0.18, 0.28, 0.27, 0.22, 0.09, 0.07, 0.13, 0.085],
+          [0.32, 0.21, 0.16, 0.35, 0.05, 0.11, 0.17, 0.10]
+        ],
+        "selectedSlot": -1
+      }
+    },
+    {
+      "id": 992000100003, "plugin": "ModularSynth", "model": "MorphVCO", "pos": [48, 0],
+      "params": [{"id": 0, "value": 0}, {"id": 1, "value": 0},
+                 {"id": 2, "value": 0.14}, {"id": 3, "value": 0.44},
+                 {"id": 4, "value": 0.002}], "data": null
+    },
+    {
+      "id": 992000100004, "plugin": "ModularSynth", "model": "MorphVCO", "pos": [64, 0],
+      "params": [{"id": 0, "value": 1}, {"id": 1, "value": -3},
+                 {"id": 2, "value": 0.28}, {"id": 3, "value": 0.55},
+                 {"id": 4, "value": 0.004}], "data": null
+    },
+    {
+      "id": 992000100005, "plugin": "ModularSynth", "model": "StateFilter", "pos": [82, 0],
+      "params": [{"id": 0, "value": -0.7}, {"id": 1, "value": 0.07},
+                 {"id": 2, "value": 0.02}], "data": null
+    },
+    {
+      "id": 992000100006, "plugin": "ModularSynth", "model": "StateFilter", "pos": [96, 0],
+      "params": [{"id": 0, "value": -0.25}, {"id": 1, "value": 0.08},
+                 {"id": 2, "value": 0.025}], "data": null
+    },
+    {
+      "id": 992000100007, "plugin": "Fundamental", "model": "ADSR", "pos": [109, 0],
+      "params": [{"id": 0, "value": 0.06}, {"id": 1, "value": 0.30},
+                 {"id": 2, "value": 0.72}, {"id": 3, "value": 0.46},
+                 {"id": 4, "value": 0}, {"id": 5, "value": 0},
+                 {"id": 6, "value": 0}, {"id": 7, "value": 0},
+                 {"id": 8, "value": 0}], "data": null
+    },
+    {
+      "id": 992000100008, "plugin": "ModularSynth", "model": "DualVCA", "pos": [122, 0],
+      "params": [{"id": 0, "value": 0.18}, {"id": 1, "value": 0.12},
+                 {"id": 2, "value": 0.14}, {"id": 3, "value": 0.16}], "data": null
+    },
+    {
+      "id": 992000100009, "plugin": "ModularSynth", "model": "StereoEcho", "pos": [139, 0],
+      "params": [{"id": 0, "value": 380}, {"id": 1, "value": 0.19},
+                 {"id": 2, "value": 0.20}, {"id": 3, "value": 0.43}], "data": null
+    },
+    {
+      "id": 1, "plugin": "Cardinal", "model": "HostAudio2", "pos": [157, 0],
+      "params": [{"id": 0, "value": 0.14}], "data": {"dcFilter": true}
+    },
+    {
+      "id": 992000100010, "plugin": "Cardinal", "model": "TextEditor", "pos": [170, 0],
+      "params": [],
+      "data": {
+        "filepath": "", "lang": "None", "width": 35,
+        "etext": "MODULAR-SYNTH / LUMINOUS PORTAMENTO DUETS\n\nTwo eight-voice gliding oscillator manuals\nform layered octaves with divergent movement.\nHost MIDI pitch -> SlewGlide CV IN; its LINEAR\noutput tunes the left MorphVCO and EXP output\ntunes the right MorphVCO one octave up.\n\nMIDI GATE/RETRIGGER -> one shared ADSR,\nseparately gating both filter/oscillator chains\nthrough DualVCA and StereoEcho to true saved\nHostAudio2 Left and Right input routes.\n\nMacro8 A: Spark (short glide).\nMacro8 B: Velvet (warm, lyrical slide).\nMacro8 C: Comet (long, luminous lines).\nMacro8 D: Orbit (slow, asymmetric arrival).\nMacro Rise/Fall CV extends the glide time;\nLINEAR and EXP are genuinely different curves.\nSlewGlide MOVING gate stays unpatched for you\nto explore in your own modulation routing.\n\nStart with low monitor volume, play legato\nMIDI notes or sustained 8-note chords.\nSaved-source routing only: not listened to,\nplayed or level-measured in a fork DAW.\n"
+      }
+    }
+  ],
+  "cables": [
+    {"id": 992000100401, "outputModuleId": 2, "outputId": 0, "inputModuleId": 992000100001, "inputId": 0, "color": "#ff5757"},
+    {"id": 992000100402, "outputModuleId": 992000100001, "outputId": 0, "inputModuleId": 992000100003, "inputId": 0, "color": "#ff5757"},
+    {"id": 992000100403, "outputModuleId": 992000100001, "outputId": 1, "inputModuleId": 992000100004, "inputId": 0, "color": "#ef82ff"},
+    {"id": 992000100404, "outputModuleId": 2, "outputId": 1, "inputModuleId": 992000100007, "inputId": 4, "color": "#f9c74f"},
+    {"id": 992000100405, "outputModuleId": 2, "outputId": 6, "inputModuleId": 992000100007, "inputId": 5, "color": "#f9c74f"},
+    {"id": 992000100406, "outputModuleId": 992000100003, "outputId": 0, "inputModuleId": 992000100005, "inputId": 0, "color": "#9bffaa"},
+    {"id": 992000100407, "outputModuleId": 992000100004, "outputId": 0, "inputModuleId": 992000100006, "inputId": 0, "color": "#d9ff7a"},
+    {"id": 992000100408, "outputModuleId": 992000100005, "outputId": 0, "inputModuleId": 992000100008, "inputId": 0, "color": "#9bffaa"},
+    {"id": 992000100409, "outputModuleId": 992000100006, "outputId": 1, "inputModuleId": 992000100008, "inputId": 2, "color": "#d9ff7a"},
+    {"id": 992000100410, "outputModuleId": 992000100007, "outputId": 0, "inputModuleId": 992000100008, "inputId": 1, "color": "#f9c74f"},
+    {"id": 992000100411, "outputModuleId": 992000100007, "outputId": 0, "inputModuleId": 992000100008, "inputId": 3, "color": "#f9c74f"},
+    {"id": 992000100412, "outputModuleId": 992000100008, "outputId": 0, "inputModuleId": 992000100009, "inputId": 0, "color": "#8fd7ff"},
+    {"id": 992000100413, "outputModuleId": 992000100008, "outputId": 1, "inputModuleId": 992000100009, "inputId": 1, "color": "#ffd29b"},
+    {"id": 992000100414, "outputModuleId": 992000100009, "outputId": 0, "inputModuleId": 1, "inputId": 0, "color": "#8fd7ff"},
+    {"id": 992000100415, "outputModuleId": 992000100009, "outputId": 1, "inputModuleId": 1, "inputId": 1, "color": "#ffd29b"},
+    {"id": 992000100416, "outputModuleId": 992000100002, "outputId": 0, "inputModuleId": 992000100001, "inputId": 1, "color": "#a1b9ff"},
+    {"id": 992000100417, "outputModuleId": 992000100002, "outputId": 1, "inputModuleId": 992000100001, "inputId": 2, "color": "#a1b9ff"},
+    {"id": 992000100418, "outputModuleId": 992000100002, "outputId": 2, "inputModuleId": 992000100003, "inputId": 2, "color": "#ffcf78"},
+    {"id": 992000100419, "outputModuleId": 992000100002, "outputId": 3, "inputModuleId": 992000100004, "inputId": 2, "color": "#ffcf78"},
+    {"id": 992000100420, "outputModuleId": 992000100002, "outputId": 4, "inputModuleId": 992000100005, "inputId": 2, "color": "#ffcf78"},
+    {"id": 992000100421, "outputModuleId": 992000100002, "outputId": 5, "inputModuleId": 992000100006, "inputId": 2, "color": "#ffcf78"},
+    {"id": 992000100422, "outputModuleId": 992000100002, "outputId": 6, "inputModuleId": 992000100009, "inputId": 4, "color": "#ffcf78"},
+    {"id": 992000100423, "outputModuleId": 992000100002, "outputId": 7, "inputModuleId": 992000100009, "inputId": 3, "color": "#ffcf78"}
+  ]
+}

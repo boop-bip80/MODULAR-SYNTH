@@ -21,7 +21,7 @@ STUBS = ROOT / "tests" / "rack_stub"
 WRAPPER_SOURCES = (
     "MorphVCO.cpp", "StateFilter.cpp", "FoldDrive.cpp", "Macro8.cpp",
     "StereoEcho.cpp", "ClockedLFO.cpp", "FMVoice.cpp", "ChanceHold.cpp",
-    "DualVCA.cpp",
+    "DualVCA.cpp", "SlewGlide.cpp",
 )
 
 
@@ -51,7 +51,7 @@ class RackWrapperSmokeTests(unittest.TestCase):
         self.assertIn("liveTrigger.reset();", macro8)
 
     @unittest.skipUnless(shutil.which("c++"), "C++17 compiler not installed")
-    def test_nine_first_party_headless_wrappers_compile_and_process(self) -> None:
+    def test_ten_first_party_headless_wrappers_compile_and_process(self) -> None:
         with tempfile.TemporaryDirectory(prefix="modular-synth-wrapper-smoke-") as temp:
             # The production Makefile compiles these as separate translation
             # units and renames pluginInstance at preprocessing time.
@@ -111,7 +111,7 @@ class RackWrapperSmokeTests(unittest.TestCase):
                         f"HEADLESS wrapper shim process smoke failed ({profile}):\n"
                         + completed.stdout + completed.stderr,
                     )
-                    self.assertIn("PASS: 9 HEADLESS wrapper", completed.stdout)
+                    self.assertIn("PASS: 10 HEADLESS wrapper", completed.stdout)
 
 
 if __name__ == "__main__":

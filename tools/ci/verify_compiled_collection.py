@@ -17,7 +17,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 ORIGINALS = frozenset({
     "ChanceHold", "ClockedLFO", "DualVCA", "FMVoice", "FoldDrive",
-    "Macro8", "MorphVCO", "StateFilter", "StereoEcho",
+    "Macro8", "MorphVCO", "StateFilter", "StereoEcho", "SlewGlide",
 })
 SLUG = re.compile(r"[A-Z][A-Za-z0-9]{1,39}\Z")
 

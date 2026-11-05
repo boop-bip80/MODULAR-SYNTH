@@ -15,10 +15,17 @@ import sys
 from pathlib import Path
 
 
-ENGINES = ("MorphVCO", "StateFilter", "FMVoice", "StereoEcho")
+LEGACY_ENGINES = ("MorphVCO", "StateFilter", "FMVoice", "StereoEcho")
+ENGINES = LEGACY_ENGINES + ("FoldDrive", "ClockedLFO", "ChanceHold")
 VOICES = (1, 8, 16)
 RATES = (48000, 96000)
 MAX_BYTES = 8 * 1024 * 1024
+SCENARIO_SETS = {
+    frozenset((engine, voice, rate)
+              for engine in engines for voice in VOICES for rate in RATES): label
+    for engines, label in ((LEGACY_ENGINES, "legacy-24"),
+                           (ENGINES, "extended-42"))
+}
 
 
 class CompareError(ValueError):
@@ -71,8 +78,8 @@ def load_rows(path: Path) -> dict[tuple[str, int, int], dict]:
                           parse_constant=_reject_constant)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise CompareError(f"{path}: invalid JSON benchmark: {exc}") from exc
-    if not isinstance(rows, list) or len(rows) != len(ENGINES) * len(VOICES) * len(RATES):
-        raise CompareError("expected exactly 24 benchmark scenarios")
+    if not isinstance(rows, list) or len(rows) not in (24, 42):
+        raise CompareError("expected exactly 24 legacy or 42 current benchmark scenarios")
     indexed: dict[tuple[str, int, int], dict] = {}
     for row in rows:
         if not isinstance(row, dict):
@@ -118,7 +125,7 @@ def load_rows(path: Path) -> dict[tuple[str, int, int], dict]:
             raise CompareError(f"single repeat cannot have dispersion in {key}")
         indexed[key] = dict(row, repetitions=repeats, min_elapsed_ms=low,
                             max_elapsed_ms=high, p90_elapsed_ms=p90)
-    if set(indexed) != {(e, v, r) for e in ENGINES for v in VOICES for r in RATES}:
+    if frozenset(indexed) not in SCENARIO_SETS:
         raise CompareError("missing expected benchmark scenarios")
     return indexed
 
@@ -168,6 +175,7 @@ def compare(baseline: dict, candidate: dict) -> dict:
     return {
         "scope": "standalone source-DSP only, not DAW/host CPU or deadline evidence",
         "confidence": "observed trial ranges only; no statistical significance or CI timing gate",
+        "scenario_profile": SCENARIO_SETS[frozenset(baseline)],
         "equal_weight_geometric_speedup": math.exp(sum(logarithms) / len(logarithms)),
         "scenarios": rows,
     }

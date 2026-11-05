@@ -7,7 +7,7 @@ This fork inherits the substantial upstream Cardinal build matrix. It also has a
 | Workflow | Automatic triggers | Manual trigger | Purpose |
 | --- | --- | --- | --- |
 | `quality-baseline.yml` | Pull requests and pushes to `main` | Yes | Fast repository/patch tests, offline submodule preflight, Module Forge and Instrument Builder suites, and standalone DSP compile/smoke tests (optimization and runtime-probed sanitizers) |
-| `real-rack-headers.yml` | PRs and `main` pushes changing original wrapper source, Rack/DPF pins or the check itself | Yes | Nine original HEADLESS syntax checks and temporary nine-object ELF link smoke against exact pinned **real** Rack/DPF/Jansson headers; no loadable plugin or host execution |
+| `real-rack-headers.yml` | PRs and `main` pushes changing original wrapper source, Rack/DPF pins or the check itself | Yes | Ten original HEADLESS syntax checks and temporary ten-object ELF link smoke against exact pinned **real** Rack/DPF/Jansson headers; no loadable plugin or host execution |
 | `module-forge-real-headers.yml` | PRs and `main` pushes changing Module Forge source or its gate | Yes | Syntax-only pinned real-header validation of generated sine, opt-in polyBLEP saw, fixed-duty polyBLEP pulse and stereo TPT effect; no host build |
 | `build.yml` | Pushes to `main` (except documentation-only changes) and all tag pushes | Yes | Full cross-platform builds, linked Linux ELF manifest-inventory validation, platform packaging, manifest-complete source archives and release uploads |
 | `irc.yml` | None | Yes, but its upstream-only job is skipped on this fork | Prevent derivative activity from posting announcements to Cardinal's upstream IRC channel |
@@ -54,7 +54,13 @@ The inherited macOS packaging script produces `Cardinal-macOS.pkg`; the workflow
 
 **Windows release ZIP/installer gate:** Windows packaging creates fork-named ZIPs such as `MODULAR-SYNTH-win64-v26.02.zip`, while Inno Setup outputs a target-specific `Cardinal-win64-<version>-installer.exe`. The old upload and Release globs expected `Cardinal-*.zip`, so a packaged fork ZIP would be excluded. Tagged Windows builds now require a nonempty ZIP for the exact tag and exactly one nonempty matching-target installer before upload, and the upload/release globs include both correct filename families with missing-asset failures. Ordinary main cache-warming builds may warn if packaging was skipped. The offline [regression test](../tests/test_ci_windows_release_assets.py) checks the gate and source wiring; **this does not establish a successful hosted build, shipped release, or installed Windows plugin**.
 
-**macOS release-tag package gate (PR [#65](https://github.com/boop-bip80/MODULAR-SYNTH/pull/65)):** The macOS job is **not** a matrix job; its old Release step incorrectly checked `matrix.debug == '0'` and could silently skip an upload. The tag-only GitHub Release step now checks `startsWith(github.ref, 'refs/tags/')` without that matrix condition. On a tag, `actions/upload-artifact` fails if no matching `*.pkg` exists and `softprops/action-gh-release` uses `fail_on_unmatched_files: true`. On an ordinary main push, a cache-warming job may legitimately skip package creation and gets a warning instead. [Source test](../tests/test_ci_macos_release.py) verifies the YAML conditions; **no macOS `.pkg`, signed/notarized installer, hosted package step or tag release has yet passed**.
+**macOS runner and release-tag package gate:** The macOS job is **not** a matrix job; its old Release step incorrectly checked `matrix.debug == '0'` and could silently skip an upload. The tag-only GitHub Release step now checks `startsWith(github.ref, 'refs/tags/')` without that matrix condition. On a tag, `actions/upload-artifact` fails if no matching `*.pkg` exists and `softprops/action-gh-release` uses `fail_on_unmatched_files: true`. Build/packaging is attempted on main pushes even with an empty cache; a non-release artifact-upload warning is not an authorization to claim a package exists. GitHub retired the inherited `macos-14` image on November 2, 2026 ([runner-images #13518](https://github.com/actions/runner-images/issues/13518)); the current workflow requests `macos-15-intel` explicitly and verifies Darwin, x86_64 and Xcode before checkout. In the [November 5 merged-main build](https://github.com/boop-bip80/MODULAR-SYNTH/actions/runs/42126069430), the Intel runner/host check passed and the job reached recursive checkout, but the complete build/package outcome must be inspected separately.
+
+The source-independent [macOS payload verifier](../.github/workflows/scripts/verify-macos-release-payload.py) rejects missing/arch-incomplete `.app`, AU, LV2, VST2, VST3 and CLAP images and corrupt XAR package inventories. Its binary preflight also requires the actual Cardinal and CardinalNative application entrypoints to be universal, and rejects a thin or corrupt nested executable even when a different valid universal helper exists. [Synthetic regression fixtures](../tests/test_ci_macos_release.py) exercise these gates without requiring an Apple runner. Passing them is **not** evidence of Apple code signing, notarization, installation, DAW load, audio/MIDI, or a fork release.
+
+**Windows PE/extraction hardening (source gate):** The pre-upload ZIP verifier also checks the documented required CLAP/VST3/standalone inventory, all member CRCs, requested PE32/PE32+ machine architectures, and the COFF executable-image and DLL-versus-application flags. Every ZIP member is checked for case-folded Windows-name collisions, reserved device names, trailing space/dot components, control characters, special files, symlink targets, file-as-directory conflicts, and bounded uncompressed member and total size. A structurally consistent PE header is **not** proof of real linker validity, signatures, Windows installation, plug-in loadability or DAW audio. Real signed-installer and end-to-end plugin-host tests remain mandatory.
+
+**New tenth-module source/binary release contract:** Source tarball validation now requires the original SlewGlide source wrapper, DSP header and SVG through the manifest-driven inventory, and the compiled ELF string-inventory gate requires the SlewGlide identifier even if a stale manifest were to omit it. These checks cover only archived file presence and linked read-only model marker strings, not module registration execution or sound quality.
 
 The upstream-derived `build.yml` keeps its existing jobs intact: Linux cross-builds, Linux debug, macOS, Windows, MOD hardware builds, WebAssembly, headless, LTO, system dependency builds, source tarball, and plugin validation. Workflow changes should not silently delete platforms or plugin formats.
 
@@ -153,7 +159,7 @@ python3 -B tests/run_dsp_tests.py --sanitize=auto
 
 [`tools/ci/check_real_rack_headers.py`](../tools/ci/check_real_rack_headers.py)
 adds a **separate, narrower Linux source compatibility signal** beyond the
-`tests/rack_stub` test double. It parses the actual nine
+`tests/rack_stub` test double. It parses the actual ten
 `plugins/ModularSynth/src/*.cpp` translation units individually with the
 production `pluginInstance` alias, `HEADLESS` and `USING_CARDINAL_NOT_RACK`
 definitions, actual pinned Rack/DPF API headers, and authentic dependency
@@ -161,7 +167,7 @@ headers. It checks **exact Gitlink revisions** of Rack, DPF and all six
 required nested Rack submodules before compiling. It never fetches sources,
 installs packages, or checks in generated dependency headers itself.
 
-The syntax gate now compiles all **nine wrappers twice**, under `gnu++11`
+The syntax gate now compiles all **ten wrappers twice**, under `gnu++11`
 (used by several Cardinal production plugin targets) and `gnu++17`. Neither
 compiler mode is allowed to stand in for the other. The first failing module
 and dialect stop the gate; a modern-dialect-only pass cannot conceal a C++11

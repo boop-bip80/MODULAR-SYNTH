@@ -22,7 +22,10 @@ PACKAGE_COMPONENTS = frozenset({
     "dpf-cardinal-vst3bundles.pkg", "dpf-cardinal-clapbundles.pkg",
 })
 REQUIRED_BUNDLES = ("app", "component", "lv2", "vst", "vst3", "clap")
-REQUIRED_STANDALONES = ("Cardinal.app", "CardinalNative.app")
+REQUIRED_STANDALONES = {
+    "Cardinal.app": "Cardinal",
+    "CardinalNative.app": "CardinalNative",
+}
 
 
 class VerificationError(ValueError):
@@ -95,11 +98,17 @@ def mach_arches(path: Path) -> frozenset[int]:
 
 
 def verify_binaries(bin_dir: Path) -> None:
-    if not bin_dir.is_dir():
+    if not bin_dir.is_dir() or bin_dir.is_symlink():
         raise VerificationError(f"macOS binary directory missing: {bin_dir}")
-    for standalone in REQUIRED_STANDALONES:
-        if not (bin_dir / standalone).is_dir():
+    # Info_{JACK,Native}.plist declare these executable names.  A random
+    # universal helper inside the app cannot substitute for the actual entry.
+    for standalone, executable_name in REQUIRED_STANDALONES.items():
+        app = bin_dir / standalone
+        if not app.is_dir() or app.is_symlink():
             raise VerificationError(f"required macOS standalone missing: {standalone}")
+        executable = app / "Contents" / "MacOS" / executable_name
+        if not executable.is_file() or executable.is_symlink() or mach_arches(executable) != EXPECTED_ARCHES:
+            raise VerificationError(f"required macOS standalone executable is not universal: {executable}")
     for suffix in REQUIRED_BUNDLES:
         bundles = sorted(bin_dir.glob("*." + suffix))
         if not bundles:
@@ -112,9 +121,16 @@ def verify_binaries(bin_dir: Path) -> None:
             candidates = [p for p in bundle.rglob("*")
                           if p.is_file() and not p.is_symlink()
                           and (p.suffix in (".dylib", ".so") or "MacOS" in p.parts)]
-            if not any(mach_arches(path) == EXPECTED_ARCHES for path in candidates):
+            # At least one healthy image is not sufficient: the actual plugin
+            # executable (or a nested binary helper) could still be thin or
+            # corrupted while an unrelated universal dylib masks the issue.
+            if not candidates:
                 raise VerificationError(
-                    f"no intact universal x86_64+arm64 Mach-O in {bundle}")
+                    f"no universal macOS executable image candidates in {bundle}")
+            for path in candidates:
+                if mach_arches(path) != EXPECTED_ARCHES:
+                    raise VerificationError(
+                        f"macOS executable image is not intact universal x86_64+arm64: {path}")
 
 
 def parse_xar(path: Path) -> tuple[ET.Element, int, int]:

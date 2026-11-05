@@ -1,6 +1,6 @@
 # Factory patch coverage: source-only evidence matrix
 
-This report tracks the **sixteen checked-in `MODULAR_-_*.vcv` examples** and asks two separate questions:
+This report describes source-backed coverage for the **twenty checked-in `MODULAR_-_*.vcv` examples** and asks two separate questions. Its illustrative table is not the complete, live catalog; run `tools/patches/factory_patch_coverage.py --json` for the authoritative per-example, per-model result.
 
 1. Does **every model declared by the first-party `ModularSynth` manifest** appear in at least one original example?
 2. Are the **module instances, saved cables and settings** needed for each example's advertised patching workflow actually present?
@@ -9,7 +9,7 @@ The executable checker is `tools/patches/factory_patch_coverage.py`. It imports 
 
 ## First-party model coverage
 
-| First-party model from `plugins/ModularSynth/plugin.json` | Examples containing it | Source-backed relevance |
+| First-party model from `plugins/ModularSynth/plugin.json` | Representative examples containing it | Source-backed relevance |
 | --- | --- | --- |
 | `MorphVCO` | `MODULAR_-_Morph_VCO_Performance.vcv`, `MODULAR_-_Morphing_State_Pad.vcv`, `MODULAR_-_Cinematic_Drift_Pad.vcv`, `MODULAR_-_Rhythmic_Grit_Bass.vcv`, `MODULAR_-_Polyphonic_Motion_Pad.vcv`, `MODULAR_-_Stereo_Echo_Showcase.vcv`, `MODULAR_-_Echo_Motion_Performance.vcv`, `MODULAR_-_Clocked_Modulation_Studio.vcv`, `MODULAR_-_Cinematic_Pulse_Score.vcv`, `MODULAR_-_Noir_Expressive_Lead.vcv` | Saved MIDI pitch and waveform paths, including ClockedLFO oscillator morph CV |
 | `StateFilter` | `MODULAR_-_Morphing_State_Pad.vcv`, `MODULAR_-_Cinematic_Drift_Pad.vcv`, `MODULAR_-_Rhythmic_Grit_Bass.vcv`, `MODULAR_-_Polyphonic_Motion_Pad.vcv`, `MODULAR_-_Stereo_Echo_Showcase.vcv`, `MODULAR_-_Echo_Motion_Performance.vcv`, `MODULAR_-_Clocked_Modulation_Studio.vcv`, `MODULAR_-_Cinematic_Pulse_Score.vcv`, `MODULAR_-_Noir_Expressive_Lead.vcv` | Saved LP/HP and resonance/drive/CV routes, with source-backed first-party port indices |
@@ -19,6 +19,8 @@ The executable checker is `tools/patches/factory_patch_coverage.py`. It imports 
 | `ClockedLFO` | `MODULAR_-_Clocked_Modulation_Studio.vcv`, `MODULAR_-_Cinematic_Pulse_Score.vcv` | One beat/reset-clocked eight-lane example; one MIDI mono **free-running** rhythmic envelope example |
 | `FMVoice` | `MODULAR_-_FM_Voice_Performance.vcv` | Saved MIDI pitch and gate route through the original two-operator voice and an ADSR/VCA to HostAudio2; no linked host/audio test | 
 | `DualVCA` | `MODULAR_-_Morph_VCO_Performance.vcv` | Both independent A/B audio and CV routes, two bounded outputs into host left/right; no host runtime guarantee |
+| `ChanceHold` | `MODULAR_-_Aurora_Glass_Bells.vcv` | Saved source modulation and chance/gate wiring; actual stochastic sound/playback remains a host test |
+| `SlewGlide` | `MODULAR_-_Luminous_Portamento_Duets.vcv` | Independent linear and exponential pitch glide control for octave-spaced oscillator voices, with verified stereo output wiring |
 
 The analyzer obtains the model list from the manifest **at runtime**. If a new model is added without a first-party example instantiating it, the test fails until coverage is provided and reviewed.
 
@@ -41,6 +43,7 @@ The analyzer obtains the model list from the manifest **at runtime**. If a new m
 | Cinematic Pulse Score | Mono MIDI pitch/gate→MorphVCO and **first** ADSR/VCA→filter; **free-running** ClockedLFO PULSE out 3→**second** ADSR gate 4→second VCA CV 0 on filtered LP→Echo L; filter HP bypasses rhythm VCA→Echo R; LFO SINE0→Morph CV2; four Macro8 CVs for filter resonance/drive and Echo feedback/wet, four A–D unipolar scenes, 2.6 s morph | Helper binds both ADSR/VCA chains by distinct saved IDs, verifies LFO free 0.8 Hz with no HostTime/CLOCK/RESET cable; no audible pulse/film-score or timing guarantee |
 | Noir Expressive Lead | Mono HostMIDI pitch/gate, aftertouch output **3→MorphVCO morph CV 2**, mod wheel output **5→Echo wet CV 4**, oscillator→filter LP→enveloped VCA→Echo L (Right normalled); Macro8 outputs 0–4 to time/feedback/resonance/drive/PWM, four A–D scenes, 0.65 s morph, Echo L/R→host jacks | Source-verified checked-in HostMIDI/HostAudio2 jack indices and original CV cable routes only; no controller messages, DAW or sound tested |
 | Fold Drive Cinematic Motion | HostMIDI **8-channel Reuse** pitch/gate/retrigger; oscillator → FoldDrive IN 0 → StateFilter LP → MIDI-gated ADSR/VCA → both host jacks; free-running ClockedLFO **TRI 1→FoldDrive DRV 1**, **SIN 0→BIAS 2**, MIDI mod-wheel **5→MIX 3** and aftertouch **3→MorphVCO MORPH 2**; LFO free rate 0.25 Hz and no clock/reset cable | Source-backed saved module/route data and FoldDrive port semantics only; no alias/CPU, true eight-voice audio or DAW automation measurement |
+| Luminous Portamento Duets | Eight-channel HostMIDI pitch flows into SlewGlide linear/exponential outputs for two distinct octave-spaced MorphVCOs; LP/BP paths feed DualVCA and StereoEcho with separate left/right HostAudio2 routes; four Macro8 performance snapshots shape rise/fall and timbre | Saved-source routing and parameter positions only; actual musical glide timing, 8-voice playback, stereo sound and DAW behavior still require audition |
 
 The analyzer checks required graph **connectivity by module type**, now including the two-operator FMVoice example; pinned port indices are grounded in the original-module, checked-in Cardinal HostMIDI/HostAudio/HostTime, and source-inspected pinned Fundamental ADSR/VCA-1 declarations. The **existing inspector** independently verifies numeric port bounds for original `ModularSynth` modules and checked-in Cardinal HostMIDI/HostTime/HostAudio2, but does not automatically verify every Fundamental port. Saved stereo routes demonstrate two nominal `HostAudio2` input cables, **not** that a compiled host plays independently panned stereo. The existing inspector separately checks structural cable IDs, unique destinations, source-backed port bounds and parameter ranges. Its warnings about third-party models are preserved and displayed as warning counts; they must not be treated as proof of module availability.
 

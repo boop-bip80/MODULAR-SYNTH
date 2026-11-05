@@ -13,9 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 COMPARE = ROOT / "tools/dsp-bench/compare.py"
 
 
-def fixtures(factor=1.0):
+def fixtures(factor=1.0, *, legacy=False):
     rows = []
-    for engine in ("MorphVCO", "StateFilter", "FMVoice", "StereoEcho"):
+    engines = ("MorphVCO", "StateFilter", "FMVoice", "StereoEcho")
+    if not legacy:
+        engines += ("FoldDrive", "ClockedLFO", "ChanceHold")
+    for engine in engines:
         for voices in (1, 8, 16):
             for rate in (48000, 96000):
                 milliseconds = (1.0 + voices * 0.09 + rate / 90000.0) * factor
@@ -59,7 +62,8 @@ class BenchmarkComparisonTests(unittest.TestCase):
         result = self.invoke(None, None, "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
-        self.assertEqual(len(report["scenarios"]), 24)
+        self.assertEqual(len(report["scenarios"]), 42)
+        self.assertEqual(report["scenario_profile"], "extended-42")
         self.assertAlmostEqual(report["equal_weight_geometric_speedup"], 1.0)
         self.assertIn("not DAW/host CPU", report["scope"])
         self.assertEqual({row["observed_range"] for row in report["scenarios"]},
@@ -78,6 +82,32 @@ class BenchmarkComparisonTests(unittest.TestCase):
         self.assertEqual(slower.returncode, 0, slower.stderr)
         self.assertIn("nonoverlap-slower", slower.stdout)
         self.assertIn("not host CPU", slower.stdout)
+
+    def test_legacy_capture_is_accepted_but_never_compared_to_42_scenarios(self):
+        legacy = fixtures(legacy=True)
+        result = self.invoke(legacy, legacy, "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["scenario_profile"], "legacy-24")
+        self.assertEqual(len(report["scenarios"]), 24)
+        mixed = self.invoke(legacy, fixtures())
+        self.assertEqual(mixed.returncode, 2)
+        self.assertIn("scenario sets differ", mixed.stderr)
+
+    def test_missing_extended_engine_and_duplicate_engine_are_rejected(self):
+        candidate = fixtures()
+        with self.subTest(problem="missing ChanceHold"):
+            result = self.invoke(fixtures(), candidate[:-6])
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("benchmark scenarios", result.stderr)
+        with self.subTest(problem="duplicated engine"):
+            duplicated = fixtures()
+            for row in duplicated:
+                if row["engine"] == "FoldDrive":
+                    row["engine"] = "FMVoice"
+            result = self.invoke(fixtures(), duplicated)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("duplicate scenario", result.stderr)
 
     def test_bad_input_sets_and_numeric_types_fail_closed(self):
         bad_rows = []

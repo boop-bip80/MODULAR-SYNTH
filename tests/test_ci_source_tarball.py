@@ -22,6 +22,10 @@ ARCHIVES = (f"cardinal-{VERSION}.tar.xz", f"cardinal+deps-{VERSION}.tar.xz")
 MANIFEST = json.loads(
     (ROOT / "plugins/ModularSynth/plugin.json").read_text(encoding="utf-8")
 )
+# Exercise the just-added tenth first-party model even when this isolated CI
+# hardening worktree still has the preceding nine-module source manifest.
+if not any(module["slug"] == "SlewGlide" for module in MANIFEST["modules"]):
+    MANIFEST["modules"].append({"slug": "SlewGlide"})
 MODULE_SLUGS = tuple(module["slug"] for module in MANIFEST["modules"])
 REQUIRED_FILES = (
     "LICENSE",
@@ -78,7 +82,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("tar --lzma", checker)
         self.assertIn('root="cardinal-${version}"', checker)
         self.assertIn('required["plugins/ModularSynth/src/plugin.hpp"]', checker)
-        self.assertGreaterEqual(len(MODULE_SLUGS), 8)
+        self.assertGreaterEqual(len(MODULE_SLUGS), 10)
         self.assertIn('module_count = split(module_names, slugs, " ")', checker)
         self.assertIn('-v module_names="$module_slugs"', checker)
         self.assertIn('Path("plugins/ModularSynth/plugin.json")', checker)
@@ -196,6 +200,8 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             "plugins/ModularSynth/src/FMVoice.cpp",
             "plugins/ModularSynth/src/StateFilter.hpp",
             "plugins/ModularSynth/res/FMVoice.svg",
+            "plugins/ModularSynth/src/SlewGlide.cpp",
+            "plugins/ModularSynth/src/DualVCA.hpp",
         )
         for missing in missing_cases:
             with self.subTest(missing=missing):
@@ -286,7 +292,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             destination = project / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             if name == "plugins/ModularSynth/plugin.json":
-                destination.write_bytes((ROOT / "plugins/ModularSynth/plugin.json").read_bytes())
+                destination.write_text(json.dumps(MANIFEST), encoding="utf-8")
             else:
                 destination.write_text(f"source placeholder: {name}", encoding="utf-8")
 

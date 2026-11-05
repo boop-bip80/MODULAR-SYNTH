@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Originals — musician's quick reference
 
-Nine first-party Rack models are **statically registered in source** and expected
+Ten first-party Rack models are **statically registered in source** and expected
 under **MODULAR-SYNTH Originals** in the module browser after a successful build.
 This page is a patching cheat sheet for the models actually
 declared in [the collection manifest](../plugins/ModularSynth/plugin.json)
@@ -21,6 +21,7 @@ measured audio or a verified DAW session.
 | **FM Voice** (`FMVoice`) | 16-voice two-operator phase-modulation sine voice with feedback | **4 in / 2 out** | Octave 0; fine 0 cents; ratio 1:1; index 0 rad; feedback 0% |
 | **Chance Hold** (`ChanceHold`) | Seeded 16-lane random S&H with chance, glide and stepped trigger | **5 in / 3 out** | Free clock 1 Hz; chance 75%; glide 0.15 s; quantize off |
 | **Dual VCA** (`DualVCA`) | Two independent 16-lane CV-controlled gains with A/B and bounded SUM | **4 in / 3 out** | A/B levels 100%; linear curves 0%; unplugged CV is full gain |
+| **Slew Glide** (`SlewGlide`) | 16-lane asymmetric pitch/control glide with simultaneous linear and exponential curves | **3 in / 3 out** | Rise 0.20 s; fall 0.30 s; zero time snaps |
 
 ### Morph VCO (`MorphVCO`)
 
@@ -176,6 +177,24 @@ measured audio or a verified DAW session.
 - The source-backed Morph VCO Performance example now uses Dual VCA
   A/B to feed both host audio inputs; host playback is not verified.
 
+### Slew Glide (`SlewGlide`)
+
+[Source/configuration](../plugins/ModularSynth/src/SlewGlide.cpp) ·
+[DSP contract and examples](SLEW_GLIDE.md)
+
+- Patch an incoming pitch or control voltage into **CV IN**. **LINEAR**
+  moves at a constant slew rate, **EXP** approaches the target by a one-pole
+  curve, and **MOVING** rises to **+10 V** while either output still differs
+  from its target by more than 0.1 mV. All three outputs support 16 lanes.
+- **RISE** and **FALL** set independent 0…5-second times (defaults 0.20/0.30 s).
+  For LINEAR, a specified time means the duration for a **10 V step**;
+  for EXP, approximately 99% target acquisition after that time.
+  +10 V on the corresponding rise/fall CV adds 5 s, limited to 0…5 s.
+- The DSP bounds input/output to **±10 V**, sanitizes nonfinite input/knob/CV
+  values and invalid host sample rates, and performs no audio-loop heap work.
+  Reset and retired polyphony lanes clear their prior slew. This is a source
+  and test-shim implementation; live Rack/DAW CV behavior remains to verify.
+
 ## Five suggested wiring recipes (host-unverified)
 
 1. **Keyboard subtractive voice:** `Host MIDI pitch → Morph VCO PITCH`;
@@ -215,11 +234,11 @@ oscillator morph. Those are saved signal/CV routes, not an audio audition.
 HostTime beat/reset routing and Clocked LFO modulation to VCO, filter,
 ADSR retrigger and Echo wet mix; it needs host transport for beat lock. **Cinematic Pulse Score** instead leaves HostTime/CLK disconnected, uses a free-running LFO PULSE to gate a second ADSR/VCA on its low-pass left path, and keeps high-pass right separate. Its four A–D Macro8 scenes are saved CV positions, not auditioned film-score audio.
 
-## Nineteen factory patches
+## Twenty factory patches
 
-All nineteen links below are actual `.vcv` files under
+All twenty links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
-existing plugin collection and does not require one of these nine first-party
+existing plugin collection and does not require one of these ten first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
 
 | Patch | Models | Play/try this |
@@ -233,6 +252,7 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Aurora Glass Bells](../patches/examples/MODULAR_-_Aurora_Glass_Bells.vcv) | Originals | Eight-voice FM bells: Chance Hold → DualVCA attenuated cutoff drift, four Macro8 scenes and LP/BP stereo echo |
 | [Night Lanterns Dual Timbre](../patches/examples/MODULAR_-_Night_Lanterns_Dual_Timbre.vcv) | Originals | Eight MIDI voices; dark folded MorphVCO left and metallic FMVoice right, beat-clocked LFO, eight Macro8 scene routes through stereo Echo |
 | [Reed Chamber Organ](../patches/examples/MODULAR_-_Reed_Chamber_Organ.vcv) | Originals | Eight-voice two-manual 8'/4' combo-organ sketch with coherent 3 Hz vibrato, envelope-gated stereo voice paths and four Macro8 tone scenes; not a tonewheel/rotary model |
+| [Luminous Portamento Duets](../patches/examples/MODULAR_-_Luminous_Portamento_Duets.vcv) | Originals | Eight-voice two-manual octave timbre: SlewGlide linear/exponential CV pitch to distinct MorphVCOs, filtered LP/BP stereo output, and four scenes for independent rise/fall glide |
 | [Morphing State Pad](../patches/examples/MODULAR_-_Morphing_State_Pad.vcv) | Originals | Hold notes; recall Macro8 A/B to modulate oscillator/filter |
 | [Cinematic Drift Pad](../patches/examples/MODULAR_-_Cinematic_Drift_Pad.vcv) | Originals | Long ADSR pad; alternate Macro8 A/B with slow transitions |
 | [Rhythmic Grit Bass](../patches/examples/MODULAR_-_Rhythmic_Grit_Bass.vcv) | Originals | Short MIDI rhythms; rapid Macro8 scene transitions |
@@ -255,7 +275,7 @@ and [offline patch checks](PATCH_WORKFLOW.md) provide more context.
 
 ## What is—and is not—verified
 
-The manifest, module C++ metadata and all nineteen saved patch graphs can be
+The manifest, module C++ metadata and all twenty saved patch graphs can be
 checked offline with:
 
 ```sh

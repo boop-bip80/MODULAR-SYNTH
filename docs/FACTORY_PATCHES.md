@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Factory Patches — original examples
 
-These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `DualVCA`, `Macro8`, `StereoEcho`, `ClockedLFO`, `FMVoice` and `ChanceHold` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
+These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `DualVCA`, `Macro8`, `StereoEcho`, `ClockedLFO`, `FMVoice`, `ChanceHold` and `SlewGlide` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
 
 | Patch | Purpose | Interaction |
 | --- | --- | --- |
@@ -13,6 +13,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_Aurora_Glass_Bells.vcv` | Eight-voice FM bell patch with envelope-gated notes, attenuated random filter drift, LP/BP spectral stereo split and five Macro8 scene controls | Hold MIDI chords; recall Dawn/Prism/Halo/Dusk A–D scenes; Chance Hold wanders freely without DAW transport |
 | `MODULAR_-_Night_Lanterns_Dual_Timbre.vcv` | Eight-voice dark MorphVCO/FoldDrive/StateFilter left layer opposite a near-harmonic FMVoice right layer, independently envelope-gated by DualVCA, through crossfeeding StereoEcho | Play MIDI chords; start the host transport for four-beat LFO pulse-width/fold-bias motion; recall Ember/Lantern/Flare/Dusk Macro8 A–D scenes |
 | `MODULAR_-_Reed_Chamber_Organ.vcv` | Original eight-voice two-manual combo-organ *sketch*: detuned 8-foot and octave-up 4-foot MorphVCO voices, per-note ADSR/DualVCA, gentle low-pass tone shaping, 3 Hz free-running vibrato and two source-verified stereo echo paths | Play held MIDI chords or detached organ stabs; recall Chapel/Reed/Swirl/Shimmer A–D tone-color scenes; no transport necessary, and this is **not** a tonewheel or rotary-speaker physical model |
+| `MODULAR_-_Luminous_Portamento_Duets.vcv` | Original eight-voice, two-manual octave texture using simultaneous linear/exponential SlewGlide pitch, separate LP/BP filtered voices and two source-verified stereo host paths | Play legato MIDI lines or sustained chords; recall Spark/Velvet/Comet/Orbit Macro8 scenes to morph glide times, color, resonance and echoes |
 | `MODULAR_-_Morphing_State_Pad.vcv` | First-party Morph VCO → StateFilter, with three Macro8 CV routes | Recall A/B macro snapshots while holding a note |
 | `MODULAR_-_Cinematic_Drift_Pad.vcv` | Long ADSR performance pad and four macros including bipolar cutoff CV | Alternate 4-second Macro8 A/B transitions |
 | `MODULAR_-_Rhythmic_Grit_Bass.vcv` | Tightly gated bass with Macro8 cutoff modulation | Play short external MIDI rhythms; recall 0.20-second transitions |
@@ -28,14 +29,14 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 
 1. Use a recent MODULAR-SYNTH/Cardinal **main** or **Synth** build with its packaged modules and example patches.
 2. If the examples folder is packaged, choose **File → Open demo / example project** and select the `MODULAR_-` patch; otherwise load the `.vcv` directly from `patches/examples/`.
-3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad, Clocked Modulation Studio, Fold Drive Cinematic Motion, Aurora Glass Bells, Night Lanterns and Reed Chamber Organ save eight MIDI channels.
+3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad, Clocked Modulation Studio, Fold Drive Cinematic Motion, Aurora Glass Bells, Night Lanterns, Reed Chamber Organ and Luminous Portamento Duets save eight MIDI channels.
 4. For Clockwork Pulses, start the DAW transport; it uses **Host Time** without live MIDI notes. For Clocked Modulation Studio and Night Lanterns, use transport **and MIDI** if testing external beat lock (their LFOs free-run without transport). Cinematic Pulse Score needs **MIDI only**: its LFO CLOCK/RESET jacks are unplugged and it does not follow BPM. Noir Expressive Lead also needs MIDI notes; MIDI channel pressure and CC1 mod wheel are optional expressive controls, subject to the keyboard/DAW's MIDI routing.
 5. Begin with low speaker or headphone volume. The output gain is intentionally conservative, but patch signal levels are not yet perceptually validated.
 
 ## Scope and compatibility
 
 - These are **patch examples**, not new DSP modules or a finished preset management system.
-- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, FoldDrive, DualVCA, Macro8, StereoEcho, ClockedLFO, FMVoice and ChanceHold).
+- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, FoldDrive, DualVCA, Macro8, StereoEcho, ClockedLFO, FMVoice, ChanceHold and SlewGlide).
 - MIDI/transport mapping and sample-rate behavior are inherited from the built-in modules and host.
 - The examples target `Cardinal/HostAudio2`. Some use two saved input routes; others feed a single host input. Polyphonic Motion Pad sends the same summed voice signal to both channels, **not** an independently panned stereo image. They are not standalone VST3 exports.
 - They use plain-text VCV Rack 2.x patch JSON for reproducibility.
@@ -271,6 +272,68 @@ python3 -m unittest discover -s tests -p 'test_night_lanterns_patch.py' -v
 ```
 
 Acceptance still requires opening the patch in a fork-built Cardinal/DAW host, auditioning 1/2/4/8 notes with transport start/stop, verifying stereo levels and release tails, and save/reopen at 44.1/48/96 kHz. The source checks do not exercise any of that.
+
+## Luminous Portamento Duets — linear and exponential glides in stereo
+
+[Open the source patch](../patches/examples/MODULAR_-_Luminous_Portamento_Duets.vcv).
+This **12-module, 23-cable** original example is an eight-voice keyboard study
+in a two-manual, octave-spaced sonority. It intentionally demonstrates the
+simultaneous output curves of the new **SlewGlide**, not a physical instrument
+model or measured stereo mix.
+
+- HostMIDI saves **8-channel Reuse polyphony**. Its pitch output 0 drives
+  SlewGlide **signal input 0**, with independent MIDI gate 1 and retrigger 6
+  cables into one bundled Fundamental ADSR.
+- SlewGlide **linear output 0** tunes the left MorphVCO pitch input 0
+  (octave 0, fine 0 cents); **exponential output 1** tunes a separate right
+  MorphVCO (octave +1, fine −3 cents). Different glide curves therefore
+  reach two distinct oscillator instances, each passing through its own
+  StateFilter. The left LP output feeds DualVCA A; the right BP feeds
+  DualVCA B. Shared ADSR output 0 gates both, followed by separate
+  StereoEcho left/right inputs and **source-verified distinct HostAudio2
+  jacks 0 and 1**.
+- Macro8 outputs 0 and 1 modulate SlewGlide rise/fall CV inputs 1 and 2.
+  Its other six outputs control the two oscillator morph inputs, two
+  filter resonance CVs, echo wet and echo feedback. All eight macros use
+  saved **unipolar** output ranges. The SlewGlide **MOVING** +10 V gate
+  output remains available but intentionally unpatched.
+
+The two SlewGlide time knobs start at **0.12 s rise / 0.18 s fall**. Positive
+macro CV adds **0.5 seconds per volt**, so the source-defined A–D snapshot
+values imply the following directional times *after a scene has settled*:
+
+| Recall | Nominal rise | Nominal fall | Character |
+| --- | ---: | ---: | --- |
+| A — Spark | 0.16 s | 0.23 s | Relatively short transitions |
+| B — Velvet | 0.395 s | 0.63 s | Lyric line and held chord changes |
+| C — Comet | 1.02 s | 1.58 s | Long, slowly resolving motion |
+| D — Orbit | 1.72 s | 1.23 s | Asymmetric rising and falling slides |
+
+SlewGlide's *linear* time means **10 V of travel** (a normal 1 V octave
+interval covers only one-tenth of that nominal time); *exponential* time
+means approximately **99% convergence to a fixed target**. They are not
+interchangeable timing curves. Macro8 morph duration is 1.25 seconds, so
+actual CV can itself transition between these scene targets.
+
+The saved DualVCA maximum gains are **0.18/0.14**, HostAudio2 output gain
+**0.14**, and StereoEcho base time **380 ms** with modest feedback/wet
+values. These are source settings, **not an acoustic headroom guarantee**.
+Begin monitoring quietly. Play single legato transitions first, then chords;
+no host transport is required.
+
+Source-only acceptance:
+
+```sh
+python3 tools/patches/patch_inspector.py validate patches/examples/MODULAR_-_Luminous_Portamento_Duets.vcv
+python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Luminous_Portamento_Duets.vcv --require-source-verified-stereo --require-source-verified-signal-route
+python3 tools/patches/factory_patch_coverage.py
+python3 -m unittest discover -s tests -p 'test_luminous_portamento_patch.py' -v
+```
+
+This proves saved endpoint contracts and directed first-party signal paths,
+not audible glide, level balance, Rack rendering or DAW save/reopen. Before
+releasing this patch, audition one/eight voices at 44.1/48/96 kHz, monitor
+stereo meters and tails, and verify session reload.
 
 ## Reed Chamber Organ — two manuals, gentle vibrato and four tone-color scenes
 

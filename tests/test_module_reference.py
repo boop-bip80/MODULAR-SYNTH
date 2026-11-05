@@ -17,9 +17,9 @@ DOC_PATH = ROOT / "docs/MODULE_QUICK_REFERENCE.md"
 PLUGIN_DIR = ROOT / "plugins/ModularSynth"
 PATCH_DIR = ROOT / "patches/examples"
 
-# The quick reference covers exactly the current nine first-party modules.
+# The quick reference covers exactly the current ten first-party modules.
 # A newly registered model requires an explicit catalog update.
-MODULE_SLUGS = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA")
+MODULE_SLUGS = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA", "SlewGlide")
 
 
 def enum_ports(source: str, enum_name: str) -> list[str]:
@@ -170,11 +170,12 @@ class ModuleQuickReferenceTests(unittest.TestCase):
         linked = [path for path, _ in rows]
         self.assertEqual(len(linked), len(set(linked)), "Duplicate factory-patch references")
         self.assertEqual(actual, set(linked), "Update quick reference when factory patches change")
-        self.assertEqual(19, len(actual))
-        self.assertIn("## Nineteen factory patches", self.document)
+        self.assertEqual(20, len(actual))
+        self.assertIn("## Twenty factory patches", self.document)
         self.assertIn("[Cinematic Pulse Score]", self.document)
         self.assertIn("[Night Lanterns Dual Timbre]", self.document)
         self.assertIn("[Reed Chamber Organ]", self.document)
+        self.assertIn("[Luminous Portamento Duets]", self.document)
         for path, classification in rows:
             with self.subTest(path=path):
                 patch = json.loads((ROOT / path).read_text(encoding="utf-8"))

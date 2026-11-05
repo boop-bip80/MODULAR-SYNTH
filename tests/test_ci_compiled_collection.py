@@ -27,6 +27,12 @@ class CompiledFirstPartyGateTests(unittest.TestCase):
         self.binary = self.root / "Cardinal"
         self.manifest = self.root / "plugin.json"
         self.data = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        # This source-hardening branch was cut before the independently built
+        # SlewGlide module landed. Validate the new ten-module release contract
+        # with the same fixture both before and after integration.
+        if not any(entry.get("slug") == "SlewGlide"
+                   for entry in self.data["modules"]):
+            self.data["modules"].append({"slug": "SlewGlide"})
         self.write_manifest()
 
     def write_manifest(self) -> None:
@@ -212,15 +218,19 @@ class CompiledFirstPartyGateTests(unittest.TestCase):
         checked = self.run_gate()
         self.assertEqual(checked.returncode, 0, checked.stderr)
 
-    def test_ninth_original_module_is_required_even_if_manifest_omits_it(self) -> None:
-        self.data["modules"] = [
-            entry for entry in self.data["modules"] if entry["slug"] != "DualVCA"
-        ]
-        self.write_manifest()
-        self.write_image()
-        result = self.run_gate()
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("DualVCA", result.stderr)
+    def test_new_original_modules_are_required_even_if_manifest_omits_them(self) -> None:
+        for missing in ("DualVCA", "SlewGlide"):
+            with self.subTest(missing=missing):
+                retained = list(self.data["modules"])
+                self.data["modules"] = [
+                    entry for entry in retained if entry["slug"] != missing
+                ]
+                self.write_manifest()
+                self.write_image()
+                result = self.run_gate()
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(missing, result.stderr)
+                self.data["modules"] = retained
 
     def test_accepts_an_actual_linked_elf_with_loadable_model_strings(self) -> None:
         if not sys.platform.startswith("linux"):

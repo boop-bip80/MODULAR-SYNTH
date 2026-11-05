@@ -52,5 +52,5 @@ jobs:
       - name: Verify pinned dependencies and syntax-check nine real wrappers
         run: python3 -B tools/ci/check_real_rack_headers.py
 
-      - name: Compile and link nine original HEADLESS wrappers
+      - name: Compile and link ten original HEADLESS wrappers
         run: python3 -B tools/ci/check_real_rack_headers.py --link-smoke

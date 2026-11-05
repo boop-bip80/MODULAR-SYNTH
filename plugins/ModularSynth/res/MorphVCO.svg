@@ -20,6 +20,16 @@
   <path d="M12 190h156" stroke="#3c455b" stroke-width="1"/>
   <path d="M12 253h156" stroke="#3c455b" stroke-width="1"/>
   <path d="M12 315h156" stroke="#3c455b" stroke-width="1"/>
+  <!-- Opaque input/output lanes sit behind the actual Rack jacks and NanoVG labels. -->
+  <rect id="morphInputRail" x="12" y="259" width="156" height="59" rx="8" fill="#152C3E" stroke="#75D7EA" stroke-width="2"/>
+  <rect id="morphOutputRail" x="12" y="321" width="156" height="53" rx="8" fill="#261D3C" stroke="#C69AF8" stroke-width="2"/>
+  <g fill="#19374A" stroke="#95E7F8" stroke-width="1.6">
+    <circle cx="28" cy="301" r="12"/><circle cx="69" cy="301" r="12"/>
+    <circle cx="111" cy="301" r="12"/><circle cx="152" cy="301" r="12"/>
+  </g>
+  <g fill="#302244" stroke="#D1A5FF" stroke-width="1.6">
+    <circle cx="55" cy="352" r="12"/><circle cx="125" cy="352" r="12"/>
+  </g>
   <circle cx="50" cy="82" r="28" fill="#20243b" stroke="#9aaccc" stroke-width="1.5"/>
   <circle cx="130" cy="82" r="28" fill="#20243b" stroke="#9aaccc" stroke-width="1.5"/>
   <circle cx="52" cy="164" r="28" fill="#261f41" stroke="#bb96f0" stroke-width="1.5"/>

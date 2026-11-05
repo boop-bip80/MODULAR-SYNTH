@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Source-backed audit of solid input/output zones on two original panels.
+"""Source-backed audit of solid input/output zones on six original panels.
 
 The geometry comes from the actual Rack PJ301MPort widget callsites; the
 labels and foreground colors come from the NanoVG draw override. Measurements
@@ -28,6 +28,52 @@ PORT_CALL = re.compile(
 # Only the actual signal-path jacks are covered: the panels' other decorative
 # knob rings remain subject to the existing broad contrast advisory.
 ZONES: dict[str, dict[str, tuple[tuple[str, str, str], ...]]] = {
+    "MorphVCO": {
+        "morphInputRail": (
+            ("Input", "PITCH_INPUT", "1V/OCT"),
+            ("Input", "FM_INPUT", "FM"),
+            ("Input", "MORPH_CV_INPUT", "MORPH"),
+            ("Input", "PWM_CV_INPUT", "PWM"),
+        ),
+        "morphOutputRail": (
+            ("Output", "MORPH_OUTPUT", "WAVE"),
+            ("Output", "SINE_OUTPUT", "SINE"),
+        ),
+    },
+    "FMVoice": {
+        "fmInputRail": (
+            ("Input", "PITCH_INPUT", "1V/OCT"),
+            ("Input", "RATIO_CV_INPUT", "RATIO"),
+            ("Input", "INDEX_CV_INPUT", "INDEX"),
+            ("Input", "FEEDBACK_CV_INPUT", "FDBK"),
+        ),
+        "fmOutputRail": (
+            ("Output", "CARRIER_OUTPUT", "FM OUT"),
+            ("Output", "MODULATOR_OUTPUT", "MOD"),
+        ),
+    },
+    "FoldDrive": {
+        "foldInputRail": (
+            ("Input", "AUDIO_INPUT", "IN"),
+            ("Input", "DRIVE_CV_INPUT", "DRV"),
+            ("Input", "BIAS_CV_INPUT", "BIA"),
+            ("Input", "MIX_CV_INPUT", "MIX"),
+        ),
+        "foldOutputRail": (("Output", "AUDIO_OUTPUT", "OUT"),),
+    },
+    "StateFilter": {
+        "stateInputRail": (
+            ("Input", "AUDIO_INPUT", "IN"),
+            ("Input", "CUTOFF_CV_INPUT", "FREQ"),
+            ("Input", "RESONANCE_CV_INPUT", "RES"),
+            ("Input", "DRIVE_CV_INPUT", "DRV"),
+        ),
+        "stateOutputRail": (
+            ("Output", "LOWPASS_OUTPUT", "LP"),
+            ("Output", "BANDPASS_OUTPUT", "BP"),
+            ("Output", "HIGHPASS_OUTPUT", "HP"),
+        ),
+    },
     "DualVCA": {
         "dualInputRail": (
             ("Input", "AUDIO_A_INPUT", "A IN"),
@@ -147,13 +193,19 @@ def audit_panel(root: Path, model: str) -> list[str]:
             if not _inside(box, x, y, radius + outline / 2):
                 raise ValueError(f"{model}/{zone_id}: {port} jack ring protrudes across rail edge")
 
+            # Some real panels use the same word for a knob and its CV jack
+            # (e.g. FMVoice RATIO/INDEX, MorphVCO WAVE). Bind a jack label
+            # by its actual position within the specific solid rail. Reject
+            # missing/ambiguous matches rather than accepting a knob label.
             associated = [label for label in labels if label["name"] == text]
-            if len(associated) != 1:
-                raise ValueError(f"{model}/{zone_id}: {port} missing unique NanoVG label {text!r}")
-            label = associated[0]
-            position = label["position"]
-            if position is None or not _inside(box, position[0], position[1], LABEL_INSET):
-                raise ValueError(f"{model}/{zone_id}: label {text!r} outside solid rail")
+            inside = [label for label in associated
+                      if label["position"] is not None and
+                      _inside(box, *label["position"], LABEL_INSET)]
+            if len(inside) != 1:
+                if len(associated) == 1:
+                    raise ValueError(f"{model}/{zone_id}: label {text!r} outside solid rail")
+                raise ValueError(f"{model}/{zone_id}: {port} missing unique in-rail NanoVG label {text!r}")
+            label = inside[0]
             if label["color"] is None:
                 raise ValueError(f"{model}/{zone_id}: label {text!r} foreground unknown")
             text_ratio = contrast_ratio(fill, label["color"])
@@ -183,7 +235,11 @@ def main(argv: list[str] | None = None) -> int:
         print(error, file=sys.stderr)
     if errors:
         return 1
-    print("PASS: 2 source-backed signal-zone panels, 5 rails, 14 jacks and 14 labels "
+    panels = len(ZONES)
+    rails = sum(len(zones) for zones in ZONES.values())
+    ports = sum(len(items) for zones in ZONES.values() for items in zones.values())
+    print(f"PASS: {panels} source-backed signal-zone panels, {rails} rails, "
+          f"{ports} jacks and {ports} labels "
           "(no rendered contrast or Rack widget footprint verified)")
     return 0
 
