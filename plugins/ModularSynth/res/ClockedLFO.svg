@@ -11,15 +11,17 @@
   <path d="M14 221 H226" stroke="#65dcc6" stroke-width="1.6"/>
   <path d="M14 298 H226" stroke="#bd8de6" stroke-width="1.6"/>
 
-  <!-- Low-contrast panel decoration stays clear of control/jack centers. -->
-  <g fill="none" stroke="#406879" stroke-width="1">
+  <!-- Knob guides are subdued; jack zones use distinct input/output rails. -->
+  <g fill="none" stroke="#527B8E" stroke-width="1.2">
     <circle cx="62" cy="91" r="37"/>
     <circle cx="177" cy="91" r="37"/>
     <circle cx="62" cy="171" r="37"/>
     <circle cx="177" cy="171" r="37"/>
-    <rect x="13" y="230" width="214" height="65" rx="8"/>
-    <rect x="13" y="307" width="214" height="66" rx="8"/>
   </g>
+  <rect x="13" y="230" width="214" height="65" rx="8"
+        fill="none" stroke="#65DCC6" stroke-width="1.3"/>
+  <rect x="13" y="307" width="214" height="66" rx="8"
+        fill="none" stroke="#BD8DE6" stroke-width="1.3"/>
   <g fill="none" stroke="#4ea5a6" stroke-width="2" stroke-linecap="round">
     <path d="M21 216 C35 202 48 229 62 216 S89 203 103 216"/>
     <path d="M138 216 L152 204 L166 228 L181 204 L195 228 L218 216"/>

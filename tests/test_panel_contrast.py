@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "contrast_audit.py"
@@ -182,6 +183,33 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("dynamic label coordinates", result.stdout)
         self.assertNotIn("WARN TEXT", result.stdout)
 
+    def test_translucent_flat_base_cannot_be_reported_as_measured(self) -> None:
+        root = self.fixture()
+        self.use_flat_panels(root, "#101724")
+        svg = root / "plugins/ModularSynth/res/MorphVCO.svg"
+        self.replace_once(svg, 'fill="#101724"',
+                          'fill="#101724" fill-opacity="0.5"')
+        result = self.run_cli(root, "--fail-on-low-contrast")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        section = result.stdout.split("[MorphVCO] label underlay:", 1)[1]
+        section = section.split("\n[", 1)[0]
+        self.assertIn("UNKNOWN TEXT MORPH VCO", section)
+        self.assertNotIn("MEASURED TEXT MORPH VCO", section)
+        self.assertIn("styled/nonopaque", section)
+
+    def test_css_styled_flat_base_cannot_be_reported_as_measured(self) -> None:
+        root = self.fixture()
+        self.use_flat_panels(root, "#101724")
+        svg = root / "plugins/ModularSynth/res/StateFilter.svg"
+        self.replace_once(svg, '<rect width="210"',
+                          '<rect class="panel-theme" width="210"')
+        result = self.run_cli(root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        section = result.stdout.split("[StateFilter] label underlay:", 1)[1]
+        section = section.split("\n[", 1)[0]
+        self.assertIn("UNKNOWN TEXT STATE FILTER", section)
+        self.assertNotIn("MEASURED TEXT STATE FILTER", section)
+
     def test_flat_low_contrast_label_warns_and_optional_strict_fails(self) -> None:
         root = self.fixture()
         self.use_flat_panels(root, "#F3F1FF")
@@ -204,6 +232,34 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("0 low outline swatches", result.stdout)
         strict = self.run_cli(REPO, "--fail-on-low-contrast")
         self.assertEqual(strict.returncode, 0, strict.stdout + strict.stderr)
+
+    def test_clocked_modules_have_distinct_readable_input_output_rails(self) -> None:
+        color = runpy.run_path(str(CHECKER))
+        rgb = color["rgb"]
+        ratio = color["contrast_ratio"]
+        backgrounds = {"ClockedLFO": ("#1C2D3C",),
+                       "ChanceHold": ("#1A2239", "#1A3442")}
+        for model, base_stops in backgrounds.items():
+            with self.subTest(model=model):
+                svg = ET.parse(REPO / "plugins/ModularSynth/res" / f"{model}.svg")
+                rails = {}
+                for node in svg.getroot().iter():
+                    if (node.tag.endswith("}rect") and node.get("x") == "13"
+                            and node.get("y") in ("230", "307")):
+                        rails[node.get("y")] = node
+                self.assertEqual(set(rails), {"230", "307"})
+                self.assertEqual(rails["230"].get("fill"), "none")
+                self.assertEqual(rails["307"].get("fill"), "none")
+                first = rgb(rails["230"].get("stroke"))
+                second = rgb(rails["307"].get("stroke"))
+                self.assertIsNotNone(first)
+                self.assertIsNotNone(second)
+                self.assertNotEqual(first, second)
+                # These are source-palette comparisons only, not actual
+                # rendered contrast of Rack labels or controls.
+                for foreground in (first, second):
+                    for underlay in base_stops:
+                        self.assertGreaterEqual(ratio(foreground, rgb(underlay)), 4.5)
 
     def test_degraded_snapshot_ring_still_triggers_strict_warning(self) -> None:
         root = self.fixture()

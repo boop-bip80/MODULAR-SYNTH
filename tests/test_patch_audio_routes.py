@@ -414,6 +414,105 @@ class AudioRoutesTests(unittest.TestCase):
         }])
         self.assertEqual(result["unrouted_first_party_generators"], [])
 
+    def test_traces_record_every_cable_and_jack_through_a_processor_chain(self) -> None:
+        self.patch["modules"].extend([
+            module(3, "ModularSynth", "StateFilter"),
+            module(4, "ModularSynth", "FoldDrive"),
+            module(5, "ModularSynth", "StereoEcho"),
+        ])
+        self.patch["cables"] = [
+            wire(20, 1, 3, 1, 0),
+            wire(21, 3, 4, 2, 0),
+            wire(22, 4, 5, 0, 1),
+            wire(23, 5, 2, 0, 1),
+        ]
+        report = self.audit()
+        self.assertTrue(report["ok"], report["errors"])
+        traces = report["source_verified_host_input_traces"]
+        self.assertEqual(len(traces), 1)
+        self.assertEqual(traces[0]["via_module_ids"], [1, 3, 4, 5])
+        self.assertEqual(traces[0]["host_input_port"], 1)
+        self.assertEqual(traces[0]["cable_hops"], [
+            {"cable_id": cid, "output_module_id": src, "output_port": out,
+             "input_module_id": dst, "input_port": inp}
+            for cid, src, out, dst, inp in (
+                (20, 1, 1, 3, 0), (21, 3, 2, 4, 0),
+                (22, 4, 0, 5, 1), (23, 5, 0, 2, 1),
+            )
+        ])
+        # The legacy report is intentionally unchanged for existing tools.
+        self.assertNotIn("cable_hops", report["source_verified_host_inputs"][0])
+        described = format_output_routes(report, show_signal_traces=True)
+        self.assertIn("ModularSynth/MorphVCO[1] -> HostAudio2[2]:in1", described)
+        self.assertIn("cable #21: 3:out2 -> 4:in0", described)
+        self.assertNotIn("cable #21:", format_output_routes(report))
+
+    def test_multiple_generators_contributing_to_one_vca_sum_are_all_traced(self) -> None:
+        self.patch["modules"].extend([
+            module(3, "ModularSynth", "FMVoice"),
+            module(4, "ModularSynth", "DualVCA"),
+        ])
+        self.patch["cables"] = [
+            wire(10, 1, 4, 1, 0),  # MorphVCO -> VCA lane A
+            wire(11, 3, 4, 0, 2),  # FMVoice -> VCA lane B
+            wire(12, 4, 2, 2, 0),  # SUM -> HostAudio2 Left/M
+        ]
+        report = self.audit()
+        self.assertTrue(report["ok"], report["errors"])
+        self.assertEqual(len(report["source_verified_host_inputs"]), 1)
+        traces = report["source_verified_host_input_traces"]
+        self.assertEqual([trace["module_id"] for trace in traces], [1, 3])
+        self.assertEqual([[hop["cable_id"] for hop in trace["cable_hops"]]
+                          for trace in traces], [[10, 12], [11, 12]])
+        self.assertEqual([trace["via_module_ids"] for trace in traces],
+                         [[1, 4], [3, 4]])
+        self.assertIn("2 (includes distinct generators", format_output_routes(report))
+        self.path.write_text(json.dumps(self.patch), encoding="utf-8")
+        cli = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "patches" / "patch_audio_routes.py"),
+             str(self.path), "--show-signal-traces"],
+            cwd=ROOT, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(cli.returncode, 0, cli.stderr)
+        self.assertIn("cable #12: 4:out2 -> 2:in0", cli.stdout)
+
+    def test_cv_cable_does_not_become_a_verified_trace_through_filter(self) -> None:
+        self.patch["modules"].append(module(3, "ModularSynth", "StateFilter"))
+        self.patch["cables"] = [
+            wire(10, 1, 3, 0, 2),  # Resonance CV, not audio.
+            wire(11, 3, 2, 0, 0),
+        ]
+        report = self.audit()
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["source_verified_host_input_traces"], [])
+        self.assertEqual(len(report["unverified_wired_host_inputs"]), 1)
+
+    def test_stereo_gate_requires_both_source_verified_ports_on_each_host(self) -> None:
+        script = ROOT / "tools" / "patches" / "patch_audio_routes.py"
+
+        def call() -> subprocess.CompletedProcess[str]:
+            self.path.write_text(json.dumps(self.patch), encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, str(script), str(self.path),
+                 "--require-source-verified-stereo"],
+                cwd=ROOT, capture_output=True, text=True, check=False,
+            )
+
+        self.assertEqual(call().returncode, 1)  # Only Left/M cabled.
+        self.patch["cables"].append(wire(4, 1, 2, 1, 1))
+        self.assertEqual(call().returncode, 0)
+        self.patch["modules"].append(module(3, "Cardinal", "HostAudio2"))
+        self.patch["cables"].append(wire(5, 1, 3, 0, 0))
+        self.assertEqual(call().returncode, 1)  # Second host lacks Right.
+        self.patch["cables"].append(wire(6, 1, 3, 1, 1))
+        self.assertEqual(call().returncode, 0)
+        self.patch["modules"].append(module(4, "ModularSynth", "Macro8"))
+        self.patch["cables"][-1] = wire(6, 4, 3, 0, 1)
+        self.assertEqual(call().returncode, 1)  # Right is a control signal.
+        self.patch["modules"] = [module(4, "ModularSynth", "Macro8")]
+        self.patch["cables"] = []
+        self.assertEqual(call().returncode, 1)  # No host: never vacuous pass.
+
     def test_opaque_third_party_hop_remains_unverified(self) -> None:
         self.patch["modules"].append(module(3, "ThirdParty", "UnknownVCA"))
         self.patch["cables"] = [wire(11, 1, 3), wire(12, 3, 2)]

@@ -50,11 +50,14 @@ def manifest_slugs(path: Path) -> tuple[str, ...]:
 
 
 def _loadable_elf_ranges(image: mmap.mmap, binary: Path) -> tuple[tuple[int, int], ...]:
-    """Return file-backed PT_LOAD bytes, excluding ELF debug/trailer data.
+    """Return file-backed, read-only literal ranges of a linked ELF image.
 
     A NUL-terminated identifier in an ELF section that is never mapped into
     memory (such as a debug section or an appended trailer) is not evidence of
-    a model identifier in the compiled runtime image.
+    a model identifier in the compiled runtime image. Writable data and ELF
+    note/metadata sections are not acceptable substitutes for string literals.
+    Section headers are optional for a valid executable; if present, they
+    narrow the ranges further to allocated, read-only PROGBITS sections.
     """
     if image[:4] != b"\x7fELF" or image[4] not in (1, 2) or image[5] not in (1, 2):
         raise InventoryError(f"expected a Linux ELF host image: {binary}")
@@ -69,7 +72,10 @@ def _loadable_elf_ranges(image: mmap.mmap, binary: Path) -> tuple[tuple[int, int
     elf_type, elf_machine, version = struct.unpack_from(endian + "HHI", image, 16)
     if elf_type not in (2, 3):
         raise InventoryError(f"expected linked executable/shared ELF, not an object file: {binary}")
-    if elf_machine == 0 or version != 1:
+    # Reject impossible ELF class/machine combinations as well as the generic
+    # EM_NONE. These are the Linux targets built by this repository.
+    machines = {3: (1,), 40: (1,), 62: (2,), 183: (2,), 243: (1, 2)}
+    if elf_machine not in machines or bits not in machines[elf_machine] or version != 1:
         raise InventoryError(f"invalid ELF machine or header version: {binary}")
     if bits == 2:
         table_offset = struct.unpack_from(endian + "Q", image, 32)[0]
@@ -84,24 +90,77 @@ def _loadable_elf_ranges(image: mmap.mmap, binary: Path) -> tuple[tuple[int, int
             or table_offset + entry_count * entry_size > len(image)):
         raise InventoryError(f"missing or invalid ELF program header table: {binary}")
     ranges: list[tuple[int, int]] = []
+    saw_load = False
     for index in range(entry_count):
         offset = table_offset + index * entry_size
         segment_type = struct.unpack_from(endian + "I", image, offset)[0]
         if segment_type != 1:  # PT_LOAD: file bytes mapped into the process.
             continue
+        saw_load = True
         if bits == 2:
+            flags = struct.unpack_from(endian + "I", image, offset + 4)[0]
             file_offset = struct.unpack_from(endian + "Q", image, offset + 8)[0]
+            address = struct.unpack_from(endian + "Q", image, offset + 16)[0]
             file_size, memory_size = struct.unpack_from(endian + "QQ", image, offset + 32)
+            alignment = struct.unpack_from(endian + "Q", image, offset + 48)[0]
         else:
             file_offset = struct.unpack_from(endian + "I", image, offset + 4)[0]
+            address = struct.unpack_from(endian + "I", image, offset + 8)[0]
             file_size, memory_size = struct.unpack_from(endian + "II", image, offset + 16)
+            flags, alignment = struct.unpack_from(endian + "II", image, offset + 24)
         if (file_size > memory_size or file_offset > len(image)
                 or file_size > len(image) - file_offset):
             raise InventoryError(f"invalid file-backed ELF load segment: {binary}")
-        if file_size:
+        if (alignment not in (0, 1) and
+                (alignment & (alignment - 1) or file_offset % alignment != address % alignment)):
+            raise InventoryError(f"invalid ELF load segment alignment: {binary}")
+        # ELF reserves upper permission bits for OS/architecture extensions;
+        # only the standard low PF_R/PF_W bits determine literal eligibility.
+        if file_size and flags & 4 and not flags & 2:  # PF_R and not PF_W.
             ranges.append((file_offset, file_offset + file_size))
-    if not ranges:
+    if not saw_load:
         raise InventoryError(f"ELF has no file-backed load segments: {binary}")
+    if not ranges:
+        raise InventoryError(f"ELF has no read-only file-backed load segments: {binary}")
+
+    if bits == 2:
+        section_offset = struct.unpack_from(endian + "Q", image, 40)[0]
+        section_entry_size, section_count = struct.unpack_from(endian + "HH", image, 58)
+        minimum_section_size = 64
+    else:
+        section_offset = struct.unpack_from(endian + "I", image, 32)[0]
+        section_entry_size, section_count = struct.unpack_from(endian + "HH", image, 46)
+        minimum_section_size = 40
+    if section_count:
+        if (not section_offset or section_entry_size < minimum_section_size or
+                section_offset > len(image) or
+                section_count * section_entry_size > len(image) - section_offset):
+            raise InventoryError(f"invalid ELF section header table: {binary}")
+        literal_sections: list[tuple[int, int]] = []
+        for index in range(section_count):
+            offset = section_offset + index * section_entry_size
+            section_type = struct.unpack_from(endian + "I", image, offset + 4)[0]
+            if bits == 2:
+                flags = struct.unpack_from(endian + "Q", image, offset + 8)[0]
+                start, size = struct.unpack_from(endian + "QQ", image, offset + 24)
+            else:
+                flags = struct.unpack_from(endian + "I", image, offset + 8)[0]
+                start, size = struct.unpack_from(endian + "II", image, offset + 16)
+            # SHT_PROGBITS, SHF_ALLOC, !SHF_WRITE, !SHF_EXECINSTR.
+            # This excludes .note, .comment, and executable instructions.
+            if section_type != 1 or not flags & 2 or flags & (1 | 4) or not size:
+                continue
+            if start > len(image) or size > len(image) - start:
+                raise InventoryError(f"invalid ELF allocated literal section: {binary}")
+            literal_sections.append((start, start + size))
+        ranges = [
+            (max(load_start, section_start), min(load_end, section_end))
+            for load_start, load_end in ranges
+            for section_start, section_end in literal_sections
+            if max(load_start, section_start) < min(load_end, section_end)
+        ]
+        if not ranges:
+            raise InventoryError(f"ELF has no read-only allocated literal sections: {binary}")
     return tuple(ranges)
 
 
@@ -114,13 +173,15 @@ def verify_elf_inventory(binary: Path, slugs: tuple[str, ...]) -> None:
             with mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as image:
                 ranges = _loadable_elf_ranges(image, binary)
                 # createModel<T>("Slug") and StaticPluginLoader("ModularSynth")
-                # require these NUL-terminated strings in loadable image bytes.
-                # String presence still does not prove model registration.
+                # require standalone NUL-terminated literals within mapped,
+                # nonwritable bytes. A suffix of "NotFMVoice\0" is not evidence
+                # of an independent "FMVoice\0" literal. String presence still
+                # does not prove that a model was registered or instantiated.
                 markers = ("ModularSynth", *slugs)
                 absent = [
                     marker for marker in markers
                     if not any(
-                        image.find(marker.encode("ascii") + b"\0", start, end) >= 0
+                        _has_standalone_literal(image, marker.encode("ascii") + b"\0", start, end)
                         for start, end in ranges
                     )
                 ]
@@ -130,6 +191,15 @@ def verify_elf_inventory(binary: Path, slugs: tuple[str, ...]) -> None:
                         + ", ".join(absent))
     except OSError as exc:
         raise InventoryError(f"cannot inspect compiled host {binary}: {exc}") from exc
+
+
+def _has_standalone_literal(image: mmap.mmap, marker: bytes, start: int, end: int) -> bool:
+    offset = image.find(marker, start, end)
+    while offset >= 0:
+        if offset == 0 or image[offset - 1] not in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_":
+            return True
+        offset = image.find(marker, offset + 1, end)
+    return False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -145,8 +215,8 @@ def main(argv: list[str] | None = None) -> int:
     except InventoryError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
-    print(f"PASS: linked ELF PT_LOAD segments contain ModularSynth and {len(slugs)} "
-          "manifest-declared identifier strings "
+    print(f"PASS: linked ELF read-only runtime literals contain ModularSynth and {len(slugs)} "
+          "manifest-declared standalone identifier strings "
           "(not proof of model registration or host loadability)")
     return 0
 

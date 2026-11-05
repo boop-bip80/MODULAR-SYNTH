@@ -241,9 +241,22 @@ def _svg_underlay(root: ET.Element) -> tuple[str, tuple[int, int, int] | None,
     paint = base.get("fill", "")
     solid = rgb(paint)
     if solid is not None:
-        if len(painted) == 1 and base.get("opacity", "1") == "1":
+        # A sole rectangle is not necessarily a solid opaque underlay:
+        # inherited CSS, per-paint alpha, blending or masks can invalidate
+        # the ratio. Report UNKNOWN instead of certifying a swatch against it.
+        inherited = any(node.get(key) is not None for node in (root, base)
+                        for key in ("style", "class", "filter", "mask", "clip-path",
+                                    "mix-blend-mode"))
+        transformed = any(node.get("transform") is not None for node in (root, base))
+        transparent = any(node.get(key, "1").strip() not in ("1", "1.0")
+                          for node in (root, base)
+                          for key in ("opacity", "fill-opacity"))
+        css = any(_local_name(node.tag) in ("style", "script", "animate", "set")
+                  for node in root.iter())
+        if (len(painted) == 1 and not inherited and not transformed and
+                not transparent and not css and base.get("stroke", "none") == "none"):
             return "known solid base", solid, []
-        return "layered SVG artwork over solid base", None, []
+        return "layered SVG artwork over solid base (or styled/nonopaque)", None, []
 
     gradient = re.fullmatch(r"url\(#([^)]+)\)", paint)
     if gradient is not None:

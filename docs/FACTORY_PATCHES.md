@@ -11,6 +11,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_FM_Voice_Performance.vcv` | MIDI-controlled two-operator FM Voice with ADSR/VCA | Play notes; move ratio, index and feedback; avoid extreme high-frequency aliasing |
 | `MODULAR_-_Chance_Hold_FM_Drift.vcv` | Seeded probabilistic random CV glides the FM Voice modulation index during MIDI performance | Play MIDI with the 1 Hz, 75% Chance Hold source; adjust chance, glide and quantize to vary timbre |
 | `MODULAR_-_Aurora_Glass_Bells.vcv` | Eight-voice FM bell patch with envelope-gated notes, attenuated random filter drift, LP/BP spectral stereo split and five Macro8 scene controls | Hold MIDI chords; recall Dawn/Prism/Halo/Dusk A–D scenes; Chance Hold wanders freely without DAW transport |
+| `MODULAR_-_Night_Lanterns_Dual_Timbre.vcv` | Eight-voice dark MorphVCO/FoldDrive/StateFilter left layer opposite a near-harmonic FMVoice right layer, independently envelope-gated by DualVCA, through crossfeeding StereoEcho | Play MIDI chords; start the host transport for four-beat LFO pulse-width/fold-bias motion; recall Ember/Lantern/Flare/Dusk Macro8 A–D scenes |
 | `MODULAR_-_Morphing_State_Pad.vcv` | First-party Morph VCO → StateFilter, with three Macro8 CV routes | Recall A/B macro snapshots while holding a note |
 | `MODULAR_-_Cinematic_Drift_Pad.vcv` | Long ADSR performance pad and four macros including bipolar cutoff CV | Alternate 4-second Macro8 A/B transitions |
 | `MODULAR_-_Rhythmic_Grit_Bass.vcv` | Tightly gated bass with Macro8 cutoff modulation | Play short external MIDI rhythms; recall 0.20-second transitions |
@@ -26,8 +27,8 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 
 1. Use a recent MODULAR-SYNTH/Cardinal **main** or **Synth** build with its packaged modules and example patches.
 2. If the examples folder is packaged, choose **File → Open demo / example project** and select the `MODULAR_-` patch; otherwise load the `.vcv` directly from `patches/examples/`.
-3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad, Clocked Modulation Studio, Fold Drive Cinematic Motion and Aurora Glass Bells save eight MIDI channels.
-4. For Clockwork Pulses, start the DAW transport; it uses **Host Time** without live MIDI notes. For Clocked Modulation Studio, use transport **and MIDI** if testing external beat lock (the LFO free-runs without transport). Cinematic Pulse Score needs **MIDI only**: its LFO CLOCK/RESET jacks are unplugged and it does not follow BPM. Noir Expressive Lead also needs MIDI notes; MIDI channel pressure and CC1 mod wheel are optional expressive controls, subject to the keyboard/DAW's MIDI routing.
+3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad, Clocked Modulation Studio, Fold Drive Cinematic Motion, Aurora Glass Bells and Night Lanterns save eight MIDI channels.
+4. For Clockwork Pulses, start the DAW transport; it uses **Host Time** without live MIDI notes. For Clocked Modulation Studio and Night Lanterns, use transport **and MIDI** if testing external beat lock (their LFOs free-run without transport). Cinematic Pulse Score needs **MIDI only**: its LFO CLOCK/RESET jacks are unplugged and it does not follow BPM. Noir Expressive Lead also needs MIDI notes; MIDI channel pressure and CC1 mod wheel are optional expressive controls, subject to the keyboard/DAW's MIDI routing.
 5. Begin with low speaker or headphone volume. The output gain is intentionally conservative, but patch signal levels are not yet perceptually validated.
 
 ## Scope and compatibility
@@ -241,6 +242,34 @@ python3 -m unittest discover -s tests -p 'test_aurora_glass_bells.py' -v
 ```
 
 No one has yet verified this patch's MIDI voice allocation, perceived musicality, 1/2/4/8-voice CPU/memory load, audio headroom, echo tails, host plugin loading or DAW save/reopen. Audition at low volume in a fork-built host before calling it performance-ready, including aftertouch/pedal transitions where supported and sample rates 44.1/48/96 kHz.
+
+## Night Lanterns — dual-timbre polyphony with four-beat movement
+
+[Open the source preset](../patches/examples/MODULAR_-_Night_Lanterns_Dual_Timbre.vcv). This original **13-module, 26-cable** graph needs no samples. The eight saved HostMIDI channels feed two independent 1 V/oct voices: a MorphVCO tuned an octave lower for a darker register and a near-2:1 FMVoice for a more bell-like overtone layer. Fundamental ADSR receives distinct MIDI gate and retrigger events and feeds both `DualVCA` envelope jacks. The MorphVCO passes through FoldDrive and StateFilter low-pass before DualVCA A, while FMVoice feeds DualVCA B directly. A and B reach separate StereoEcho inputs, with Echo L/R connected to separate HostAudio2 jacks. These are **two different source-verified signal chains**, not a measured stereo image.
+
+The transport's `HostTime` BEAT output 3 and RESET output 1 connect to ClockedLFO inputs 1/2. Its saved ratio 0 selects **one cycle per four incoming beat pulses**; sine modulates oscillator pulse width and triangle modulates FoldDrive bias. When no transport pulses arrive, the saved free rate −2 gives a nominal 0.25 Hz fallback. This patch intentionally combines slow periodic motion with performer-initiated Macro8 scene transitions instead of generating random notes or misrepresenting direct DAW BPM access inside the LFO.
+
+All eight named Macro8 CV channels use unipolar 0–10 V, one per target: MorphVCO morph (0→input 2), FM index (1→input 2), filter resonance (2→input 2), FoldDrive drive (3→input 1), Echo wet (4→input 4), Echo time (5→input 2), Echo feedback (6→input 3), and FoldDrive wet (7→input 3). Its four saved snapshots settle nominally within **2 seconds** under the source one-pole smoother:
+
+| Scene | Morph position | FM index | Fold drive | Echo wet | Echo time | Echo feedback |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A — Ember | 0.34 | 0.80 rad | 22% | 23% | 360 ms | 18% |
+| B — Lantern | 0.50 | 1.36 rad | 29% | 28% | 440 ms | 22% |
+| C — Flare | 0.77 | 1.92 rad | 42% | 38% | 540 ms | 27% |
+| D — Dusk | 0.38 | 1.04 rad | 23% | 30% | 620 ms | 24% |
+
+These scene values are computed from *saved knobs and first-party CV scales*, not from rendered audio. The A/B DualVCA maximum gains are saved at **0.16/0.13**, the Echo crossfeed at **0.58**, and the host output at **0.15**. They are intended to give a cautious starting level but do **not** establish clipping or eight-voice summed headroom. Start at low monitoring volume.
+
+Source-only verification:
+
+```sh
+python3 tools/patches/patch_inspector.py validate patches/examples/MODULAR_-_Night_Lanterns_Dual_Timbre.vcv
+python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Night_Lanterns_Dual_Timbre.vcv --require-host-input --require-generator-route
+python3 tools/patches/factory_patch_coverage.py
+python3 -m unittest discover -s tests -p 'test_night_lanterns_patch.py' -v
+```
+
+Acceptance still requires opening the patch in a fork-built Cardinal/DAW host, auditioning 1/2/4/8 notes with transport start/stop, verifying stereo levels and release tails, and save/reopen at 44.1/48/96 kHz. The source checks do not exercise any of that.
 
 ## Future work
 

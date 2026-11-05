@@ -277,6 +277,8 @@ jobs:
           source deps/PawPaw/local.env macos-universal-10.15
           make features
           make NOOPT=true ${MAKE_ARGS} -j $(sysctl -n hw.logicalcpu)
+      - name: Verify universal macOS build products
+        run: python3 -B .github/workflows/scripts/verify-macos-release-payload.py --binaries bin
       - name: Build macOS (packaging)
         shell: bash
         env:
@@ -300,6 +302,11 @@ jobs:
           # The inherited installer script emits Cardinal-macOS.pkg, not the fork name.
           test -s Cardinal-macOS.pkg
           mv Cardinal-macOS.pkg ${{ github.event.repository.name }}-macOS-universal-${{ github.event.pull_request.number || env.SHA8 }}.pkg
+      - name: Verify macOS installer XAR and component inventory
+        run: |
+          python3 -B .github/workflows/scripts/verify-macos-release-payload.py \
+            --package "${{ github.event.repository.name }}-macOS-universal-${{ github.event.pull_request.number || env.SHA8 }}.pkg" \
+            --expected-name "${{ github.event.repository.name }}-macOS-universal-${{ github.event.pull_request.number || env.SHA8 }}.pkg"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.repository.name }}-macOS-universal-${{ github.event.pull_request.number || env.SHA8 }}
@@ -360,9 +367,16 @@ jobs:
       - name: Bootstrap toolchain
         id: mpb_bootstrap
         if: steps.mpb-cache.outputs.cache-hit != 'true'
+        env:
+          MOD_LINARO_SOURCE_URL: ${{ vars.MOD_LINARO_SOURCE_URL }}
+          MOD_LINARO_SOURCE_SHA256: ${{ vars.MOD_LINARO_SOURCE_SHA256 }}
         run: |
           git clone --depth=1 https://github.com/moddevices/mod-plugin-builder.git deps/mod-plugin-builder
           sed -i "s/CT_LOG_PROGRESS_BAR=y/CT_LOG_PROGRESS_BAR=n/" deps/mod-plugin-builder/toolchain/*.config
+          # Legacy source URLs now redirect to HTML. Crosstool-NG does not have
+          # a pinned digest for GCC Linaro 7.5 and otherwise extracts that HTML.
+          # The builder's .common uses ~/mod-workdir/download as its local cache.
+          python3 tools/ci/seed_mod_toolchain_source.py
           $(pwd)/deps/mod-plugin-builder/bootstrap.sh ${{ matrix.target }} minimal && $(pwd)/deps/mod-plugin-builder/.clean-install.sh ${{ matrix.target }}
       - name: Diagnose failed toolchain bootstrap
         if: ${{ failure() && steps.mpb_bootstrap.outcome == 'failure' }}

@@ -29,6 +29,19 @@ struct StateFilter {
     double ic2eq = 0.0;
     double previousSampleRate = 0.0;
 
+    // Cutoff, resonance and drive commonly remain constant for thousands of
+    // samples. Cache only control-derived coefficients: never cache audio or
+    // integrator state. A changing CV still recomputes at audio rate.
+    double cachedCutoffHz = -1.0;
+    double cachedResonance = -1.0;
+    double cachedDrive = -1.0;
+    double cachedG = 0.0;
+    double cachedK = 0.0;
+    double cachedA1 = 0.0;
+    double cachedA2 = 0.0;
+    double cachedDriveGain = 1.0;
+    double cachedDriveDenominator = 1.0;
+
     // Do not use std::isfinite here: -ffast-math permits compilers to
     // assume all floating-point inputs are finite and optimize it away.
     // Reading IEEE-754 exponent bits via memcpy works under that mode.
@@ -58,6 +71,9 @@ struct StateFilter {
         ic1eq = 0.0;
         ic2eq = 0.0;
         previousSampleRate = 0.0;
+        cachedCutoffHz = -1.0;
+        cachedResonance = -1.0;
+        cachedDrive = -1.0;
     }
 
     Sample process(double inputVoltage, double sampleRate, double cutoffHz,
@@ -73,6 +89,9 @@ struct StateFilter {
             ic1eq = 0.0;
             ic2eq = 0.0;
             previousSampleRate = sampleRate;
+            // A sample-rate change changes tan(pi * cutoff / sampleRate),
+            // even when the cutoff and resonance controls are unchanged.
+            cachedCutoffHz = -1.0;
         }
 
         const double maxCutoff = std::min(20000.0, 0.45 * sampleRate);
@@ -80,34 +99,41 @@ struct StateFilter {
         const double resonance01 = finiteClamp(resonance, 0.0, 0.0, 1.0);
         const double drive01 = finiteClamp(drive, 0.0, 0.0, 1.0);
 
-        // 0.5 <= Q <= 12.0: bounded but capable of a prominent resonant peak.
-        // The state-variable filter damping coefficient is k = 1 / Q.
-        const double q = 0.5 + 11.5 * resonance01 * resonance01;
-        const double k = 1.0 / q;
+        // Trapezoidal integrator coefficients. Compute tan() only when the
+        // effective cutoff, resonance or sample rate changes. The exact
+        // floating-point operations match the uncached filter transfer.
+        if (frequency != cachedCutoffHz || resonance01 != cachedResonance) {
+            // 0.5 <= Q <= 12.0, with damping coefficient k = 1 / Q.
+            const double q = 0.5 + 11.5 * resonance01 * resonance01;
+            cachedK = 1.0 / q;
+            cachedG = std::tan(kPi * frequency / sampleRate);
+            cachedA1 = 1.0 / (1.0 + cachedG * (cachedG + cachedK));
+            cachedA2 = cachedG * cachedA1;
+            cachedCutoffHz = frequency;
+            cachedResonance = resonance01;
+        }
 
         // A nonlinearity on the input, not inside the integrator loop.
         // Bypassed at drive=0 to preserve linear DC/low-frequency response.
         const double volts = finiteClamp(inputVoltage, 0.0, -20.0, 20.0);
         double x = volts / 5.0;
         if (drive01 > 0.0) {
-            const double gain = 1.0 + 12.0 * drive01 * drive01;
-            const double shaped = std::tanh(gain * x) / std::tanh(gain);
+            if (drive01 != cachedDrive) {
+                cachedDriveGain = 1.0 + 12.0 * drive01 * drive01;
+                cachedDriveDenominator = std::tanh(cachedDriveGain);
+                cachedDrive = drive01;
+            }
+            const double shaped = std::tanh(cachedDriveGain * x) / cachedDriveDenominator;
             // Crossfade through drive=0: the normalized tanh function does
             // not converge to x as gain tends to 1, so abruptly switching
             // from bypass would otherwise produce an audible gain jump.
             x += drive01 * (shaped - x);
         }
 
-        // Trapezoidal integrator coefficients. g is finite because the
-        // frequency is strictly below Nyquist (<= 0.45 * sampleRate).
-        const double g = std::tan(kPi * frequency / sampleRate);
-        const double a1 = 1.0 / (1.0 + g * (g + k));
-        const double a2 = g * a1;
-
         const double v3 = x - ic2eq;
-        const double band = a1 * ic1eq + a2 * v3;
-        const double low = ic2eq + g * band;
-        const double high = x - k * band - low;
+        const double band = cachedA1 * ic1eq + cachedA2 * v3;
+        const double low = ic2eq + cachedG * band;
+        const double high = x - cachedK * band - low;
 
         // Prevent corrupted automation or unusual host signals from making
         // the state unbounded; these are safety limits, not analog modeling.

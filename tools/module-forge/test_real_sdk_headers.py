@@ -20,12 +20,13 @@ import check_real_generated_headers as gate
 
 
 class GeneratedRealHeaderGateTests(unittest.TestCase):
-    def test_five_generated_sources_are_valid_and_waveforms_distinct(self) -> None:
+    def test_six_generated_sources_are_valid_and_waveforms_distinct(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             sources = gate.generate_starters(Path(temp))
             self.assertEqual([path.name for path in sources],
                              ["ForgeRealOsc.cpp", "ForgeRealSaw.cpp",
-                              "ForgeRealPulse.cpp", "ForgeRealTriangle.cpp",
+                              "ForgeRealPulse.cpp", "ForgeRealPWM.cpp",
+                              "ForgeRealTriangle.cpp",
                               "ForgeRealLP.cpp"])
             for source in sources:
                 self.assertTrue(source.is_file())
@@ -43,7 +44,15 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
             self.assertNotIn("std::sin(", pulse)
             self.assertIn("PULSE OUT", (Path(temp) / "ForgeRealPulse" /
                                          "ForgeRealPulse.svg").read_text())
-            triangle = sources[3].read_text()
+            pwm = sources[3].read_text()
+            self.assertIn("WIDTH_PARAM, NUM_PARAMS", pwm)
+            self.assertIn("WIDTH_CV_INPUT, NUM_INPUTS", pwm)
+            self.assertIn("rawPulse + polyBlep(t, dt)", pwm)
+            self.assertIn("width = std::max(0.05f", pwm)
+            self.assertNotIn("std::sin(", pwm)
+            self.assertIn("PWM OUT", (Path(temp) / "ForgeRealPWM" /
+                                       "ForgeRealPWM.svg").read_text())
+            triangle = sources[4].read_text()
             self.assertIn("static float polyBlamp(float t, float dt)", triangle)
             self.assertIn("rawTriangle - 4.f * polyBlamp(t, dt)", triangle)
             self.assertNotIn("std::sin(", triangle)
@@ -52,6 +61,7 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
             self.assertFalse((Path(temp) / "ForgeRealOsc" / "ForgeRealOsc.dsp.hpp").exists())
             self.assertFalse((Path(temp) / "ForgeRealSaw" / "ForgeRealSaw.dsp.hpp").exists())
             self.assertFalse((Path(temp) / "ForgeRealPulse" / "ForgeRealPulse.dsp.hpp").exists())
+            self.assertFalse((Path(temp) / "ForgeRealPWM" / "ForgeRealPWM.dsp.hpp").exists())
             self.assertFalse((Path(temp) / "ForgeRealTriangle" /
                               "ForgeRealTriangle.dsp.hpp").exists())
             self.assertTrue((Path(temp) / "ForgeRealLP" / "ForgeRealLP.dsp.hpp").exists())
@@ -60,12 +70,13 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
         paths = [Path("/tmp/a/ForgeRealOsc.cpp"),
                  Path("/tmp/b/ForgeRealSaw.cpp"),
                  Path("/tmp/c/ForgeRealPulse.cpp"),
+                 Path("/tmp/f/ForgeRealPWM.cpp"),
                  Path("/tmp/e/ForgeRealTriangle.cpp"),
                  Path("/tmp/d/ForgeRealLP.cpp")]
         sdk_rack_headers = str(gate.ROOT / "src" / "Rack" / "include")
         flags = ["-DHEADLESS", "-fsyntax-only", "-I", sdk_rack_headers]
         commands = gate.syntax_commands("c++", flags, paths)
-        self.assertEqual(len(commands), 5)
+        self.assertEqual(len(commands), 6)
         for command, source in zip(commands, paths):
             self.assertEqual(command[0], "c++")
             self.assertEqual(command[1:3], ["-iquote", str(gate.COLLECTION)])
@@ -138,7 +149,7 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
             self.assertEqual(result, 2)
             self.assertIn("wrong pinned gitlink", output.getvalue())
 
-    def test_compiler_invokes_all_five_real_header_translation_units(self) -> None:
+    def test_compiler_invokes_all_six_real_header_translation_units(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             rack = Path(temp) / "rack"
             template = rack / "dep/speexdsp/include/speex/speexdsp_config_types.h.in"
@@ -164,14 +175,15 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                     result = gate.main(["--rack-root", str(rack),
                                         "--dpf-root", str(Path(temp) / "dpf")])
             self.assertEqual(result, 0)
-            self.assertEqual(len(calls), 10)
-            for index, dialect in ((0, "-std=gnu++11"), (5, "-std=gnu++17")):
+            self.assertEqual(len(calls), 12)
+            for index, dialect in ((0, "-std=gnu++11"), (6, "-std=gnu++17")):
                 self.assertTrue(calls[index][-1].endswith("/ForgeRealOsc/ForgeRealOsc.cpp"))
                 self.assertTrue(calls[index + 1][-1].endswith("/ForgeRealSaw/ForgeRealSaw.cpp"))
                 self.assertTrue(calls[index + 2][-1].endswith("/ForgeRealPulse/ForgeRealPulse.cpp"))
-                self.assertTrue(calls[index + 3][-1].endswith("/ForgeRealTriangle/ForgeRealTriangle.cpp"))
-                self.assertTrue(calls[index + 4][-1].endswith("/ForgeRealLP/ForgeRealLP.cpp"))
-                self.assertTrue(all(dialect in call for call in calls[index:index + 5]))
+                self.assertTrue(calls[index + 3][-1].endswith("/ForgeRealPWM/ForgeRealPWM.cpp"))
+                self.assertTrue(calls[index + 4][-1].endswith("/ForgeRealTriangle/ForgeRealTriangle.cpp"))
+                self.assertTrue(calls[index + 5][-1].endswith("/ForgeRealLP/ForgeRealLP.cpp"))
+                self.assertTrue(all(dialect in call for call in calls[index:index + 6]))
             self.assertTrue(all("rack_stub" not in " ".join(c) for c in calls))
 
 
@@ -191,6 +203,15 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
 
             with mock.patch.object(gate, "check_module", side_effect=check):
                 with self.assertRaisesRegex(gate.sdk.PreflightError, "tampered pulse"):
+                    gate.generate_starters(Path(temp))
+
+    def test_invalid_generated_pwm_fails_closed_before_compile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            def check(folder: Path) -> list[str]:
+                return ["tampered PWM"] if folder.name == "ForgeRealPWM" else []
+
+            with mock.patch.object(gate, "check_module", side_effect=check):
+                with self.assertRaisesRegex(gate.sdk.PreflightError, "tampered PWM"):
                     gate.generate_starters(Path(temp))
 
     def test_invalid_generated_triangle_fails_closed_before_compile(self) -> None:

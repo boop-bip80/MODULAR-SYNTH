@@ -1,0 +1,126 @@
+{
+  "version": "2.4.1",
+  "zoom": 0.76,
+  "modules": [
+    {
+      "id": 2, "plugin": "Cardinal", "model": "HostMIDI", "pos": [0, 0], "params": [],
+      "data": {"pwRange": 2, "smooth": true, "channels": 8, "polyMode": 1,
+               "lastPitch": 8192, "lastMod": 0, "inputChannel": 0, "outputChannel": 0}
+    },
+    {"id": 3, "plugin": "Cardinal", "model": "HostTime", "pos": [10, 0], "params": [], "data": null},
+    {
+      "id": 990000000201, "plugin": "ModularSynth", "model": "ClockedLFO", "pos": [21, 0],
+      "params": [{"id": 0, "value": -2}, {"id": 1, "value": 0},
+                 {"id": 2, "value": 0.125}, {"id": 3, "value": 0.5}], "data": null
+    },
+    {
+      "id": 990000000202, "plugin": "ModularSynth", "model": "Macro8", "pos": [38, 0],
+      "params": [
+        {"id": 0, "value": 0.12}, {"id": 1, "value": 0.04},
+        {"id": 2, "value": 0.02}, {"id": 3, "value": 0.04},
+        {"id": 4, "value": 0.05}, {"id": 5, "value": 0.04},
+        {"id": 6, "value": 0.02}, {"id": 7, "value": 0.04},
+        {"id": 8, "value": 2.0}, {"id": 9, "value": 0},
+        {"id": 10, "value": 0}, {"id": 11, "value": 0},
+        {"id": 12, "value": 0}, {"id": 13, "value": 0},
+        {"id": 14, "value": 0}, {"id": 15, "value": 0},
+        {"id": 16, "value": 0}, {"id": 17, "value": 0},
+        {"id": 18, "value": 0}, {"id": 19, "value": 0},
+        {"id": 20, "value": 0}, {"id": 21, "value": 0},
+        {"id": 22, "value": 0}
+      ],
+      "data": {
+        "macro8Version": 1,
+        "names": ["Morph", "FM Index", "Resonance", "Fold Drive",
+                  "Echo Wet", "Echo Time", "Echo Feedback", "Fold Wet"],
+        "snapshots": [
+          [0.12, 0.04, 0.02, 0.04, 0.05, 0.04, 0.02, 0.04],
+          [0.28, 0.11, 0.04, 0.11, 0.10, 0.12, 0.06, 0.09],
+          [0.55, 0.18, 0.10, 0.24, 0.20, 0.22, 0.11, 0.15],
+          [0.16, 0.07, 0.07, 0.05, 0.12, 0.30, 0.08, 0.08]
+        ],
+        "selectedSlot": -1
+      }
+    },
+    {
+      "id": 990000000203, "plugin": "ModularSynth", "model": "MorphVCO", "pos": [62, 0],
+      "params": [{"id": 0, "value": -1}, {"id": 1, "value": -3},
+                 {"id": 2, "value": 0.22}, {"id": 3, "value": 0.5},
+                 {"id": 4, "value": 0}], "data": null
+    },
+    {
+      "id": 990000000204, "plugin": "ModularSynth", "model": "FoldDrive", "pos": [79, 0],
+      "params": [{"id": 0, "value": 0.18}, {"id": 1, "value": 0},
+                 {"id": 2, "value": 0.25}], "data": null
+    },
+    {
+      "id": 990000000205, "plugin": "ModularSynth", "model": "StateFilter", "pos": [93, 0],
+      "params": [{"id": 0, "value": -0.55}, {"id": 1, "value": 0.12},
+                 {"id": 2, "value": 0.02}], "data": null
+    },
+    {
+      "id": 990000000206, "plugin": "ModularSynth", "model": "FMVoice", "pos": [107, 0],
+      "params": [{"id": 0, "value": 0}, {"id": 1, "value": 4},
+                 {"id": 2, "value": 2.003}, {"id": 3, "value": 0.48},
+                 {"id": 4, "value": 0.03}], "data": null
+    },
+    {
+      "id": 990000000207, "plugin": "Fundamental", "model": "ADSR", "pos": [120, 0],
+      "params": [{"id": 0, "value": 0.12}, {"id": 1, "value": 0.64},
+                 {"id": 2, "value": 0.25}, {"id": 3, "value": 0.78},
+                 {"id": 4, "value": 0}, {"id": 5, "value": 0},
+                 {"id": 6, "value": 0}, {"id": 7, "value": 0},
+                 {"id": 8, "value": 0}], "data": null
+    },
+    {
+      "id": 990000000208, "plugin": "ModularSynth", "model": "DualVCA", "pos": [133, 0],
+      "params": [{"id": 0, "value": 0.16}, {"id": 1, "value": 0.28},
+                 {"id": 2, "value": 0.13}, {"id": 3, "value": 0.48}], "data": null
+    },
+    {
+      "id": 990000000209, "plugin": "ModularSynth", "model": "StereoEcho", "pos": [151, 0],
+      "params": [{"id": 0, "value": 320}, {"id": 1, "value": 0.16},
+                 {"id": 2, "value": 0.18}, {"id": 3, "value": 0.58}], "data": null
+    },
+    {
+      "id": 1, "plugin": "Cardinal", "model": "HostAudio2", "pos": [169, 0],
+      "params": [{"id": 0, "value": 0.15}], "data": {"dcFilter": true}
+    },
+    {
+      "id": 990000000210, "plugin": "Cardinal", "model": "TextEditor", "pos": [179, 0],
+      "params": [],
+      "data": {
+        "filepath": "", "lang": "None", "width": 33,
+        "etext": "MODULAR-SYNTH / NIGHT LANTERNS\n\nOriginal dual-timbre, eight-voice MIDI patch.\nMorphVCO (one octave down) -> FoldDrive ->\nStateFilter LP -> DualVCA A -> Echo LEFT.\nFMVoice (near 2:1 ratio) -> DualVCA B ->\nEcho RIGHT. ADSR gates both VCA channels.\n\nHostTime BEAT drives ClockedLFO; RESET aligns\nphase. Its 1/4-beat-cycle ratio moves pulse\nwidth and FoldDrive bias in a four-beat arc.\nWhen transport stops, LFO free-runs at 0.25 Hz.\nMacro8 output controls all eight named targets.\nRecall A Ember, B Lantern, C Flare, D Dusk.\nThe two layers crossfeed through StereoEcho.\n\nKeep speaker volume low: eight-voice headroom\nand live audio/DAW output are not verified.\nSaved graph validated against source only.\n"
+      }
+    }
+  ],
+  "cables": [
+    {"id": 990000000401, "outputModuleId": 3, "outputId": 3, "inputModuleId": 990000000201, "inputId": 1, "color": "#bb9fff"},
+    {"id": 990000000402, "outputModuleId": 3, "outputId": 1, "inputModuleId": 990000000201, "inputId": 2, "color": "#bb9fff"},
+    {"id": 990000000403, "outputModuleId": 2, "outputId": 0, "inputModuleId": 990000000203, "inputId": 0, "color": "#ff5757"},
+    {"id": 990000000404, "outputModuleId": 2, "outputId": 0, "inputModuleId": 990000000206, "inputId": 0, "color": "#ff5757"},
+    {"id": 990000000405, "outputModuleId": 2, "outputId": 1, "inputModuleId": 990000000207, "inputId": 4, "color": "#f9c74f"},
+    {"id": 990000000406, "outputModuleId": 2, "outputId": 6, "inputModuleId": 990000000207, "inputId": 5, "color": "#f9c74f"},
+    {"id": 990000000407, "outputModuleId": 990000000203, "outputId": 0, "inputModuleId": 990000000204, "inputId": 0, "color": "#adff67"},
+    {"id": 990000000408, "outputModuleId": 990000000201, "outputId": 0, "inputModuleId": 990000000203, "inputId": 3, "color": "#d495ff"},
+    {"id": 990000000409, "outputModuleId": 990000000201, "outputId": 1, "inputModuleId": 990000000204, "inputId": 2, "color": "#d495ff"},
+    {"id": 990000000410, "outputModuleId": 990000000204, "outputId": 0, "inputModuleId": 990000000205, "inputId": 0, "color": "#66d9ff"},
+    {"id": 990000000411, "outputModuleId": 990000000205, "outputId": 0, "inputModuleId": 990000000208, "inputId": 0, "color": "#66d9ff"},
+    {"id": 990000000412, "outputModuleId": 990000000206, "outputId": 0, "inputModuleId": 990000000208, "inputId": 2, "color": "#ffa3d6"},
+    {"id": 990000000413, "outputModuleId": 990000000207, "outputId": 0, "inputModuleId": 990000000208, "inputId": 1, "color": "#ffb55b"},
+    {"id": 990000000414, "outputModuleId": 990000000207, "outputId": 0, "inputModuleId": 990000000208, "inputId": 3, "color": "#ffb55b"},
+    {"id": 990000000415, "outputModuleId": 990000000208, "outputId": 0, "inputModuleId": 990000000209, "inputId": 0, "color": "#66d9ff"},
+    {"id": 990000000416, "outputModuleId": 990000000208, "outputId": 1, "inputModuleId": 990000000209, "inputId": 1, "color": "#ffa3d6"},
+    {"id": 990000000417, "outputModuleId": 990000000209, "outputId": 0, "inputModuleId": 1, "inputId": 0, "color": "#66d9ff"},
+    {"id": 990000000418, "outputModuleId": 990000000209, "outputId": 1, "inputModuleId": 1, "inputId": 1, "color": "#ffa3d6"},
+    {"id": 990000000419, "outputModuleId": 990000000202, "outputId": 0, "inputModuleId": 990000000203, "inputId": 2, "color": "#ffd46b"},
+    {"id": 990000000420, "outputModuleId": 990000000202, "outputId": 1, "inputModuleId": 990000000206, "inputId": 2, "color": "#ffd46b"},
+    {"id": 990000000421, "outputModuleId": 990000000202, "outputId": 2, "inputModuleId": 990000000205, "inputId": 2, "color": "#ffd46b"},
+    {"id": 990000000422, "outputModuleId": 990000000202, "outputId": 3, "inputModuleId": 990000000204, "inputId": 1, "color": "#ffd46b"},
+    {"id": 990000000423, "outputModuleId": 990000000202, "outputId": 4, "inputModuleId": 990000000209, "inputId": 4, "color": "#ffd46b"},
+    {"id": 990000000424, "outputModuleId": 990000000202, "outputId": 5, "inputModuleId": 990000000209, "inputId": 2, "color": "#ffd46b"},
+    {"id": 990000000425, "outputModuleId": 990000000202, "outputId": 6, "inputModuleId": 990000000209, "inputId": 3, "color": "#ffd46b"},
+    {"id": 990000000426, "outputModuleId": 990000000202, "outputId": 7, "inputModuleId": 990000000204, "inputId": 3, "color": "#ffd46b"}
+  ]
+}

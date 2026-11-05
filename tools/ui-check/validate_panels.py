@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Conservative source-level checks for the MODULAR-SYNTH SVG panels.
 
-Not a renderer: verifies XML, Rack 3U geometry, the exact panel asset used by
-each widget, and the centers of statically resolvable centered controls. It
-does not determine visual overlap, hit boxes, labels, fonts or display output.
+Not a renderer: verifies XML, Rack 3U geometry, safe, locally resolvable SVG
+paint references, the exact panel asset used by each widget, centered control
+callsite cardinality, and statically resolvable centers. It does not determine
+visual overlap, hit boxes, labels, fonts or display output.
 """
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import math
 from pathlib import Path
 import re
@@ -23,7 +25,10 @@ PANELS = {"MorphVCO": 12, "StateFilter": 14, "FoldDrive": 12,
           "ChanceHold": 16, "DualVCA": 12}
 # This widget uses literal create*Centered() sites, so it can be checked for
 # exact source callsite cardinality as well as in-bounds center coordinates.
-EXPECTED_SITES = {"FoldDrive": {"Param": 3, "Input": 4, "Output": 1},
+EXPECTED_SITES = {"MorphVCO": {"Param": 5, "Input": 4, "Output": 2},
+                  "StateFilter": {"Param": 3, "Input": 4, "Output": 3},
+                  "Macro8": {"Param": 5, "Input": 0, "Output": 1, "Light": 3},
+                  "FoldDrive": {"Param": 3, "Input": 4, "Output": 1},
                   "StereoEcho": {"Param": 4, "Input": 5, "Output": 2},
                   "ClockedLFO": {"Param": 4, "Input": 5, "Output": 5, "Light": 1},
                   "FMVoice": {"Param": 5, "Input": 4, "Output": 2},
@@ -51,6 +56,12 @@ PANEL_ASSET = re.compile(
     r"\s*\)\s*\)", re.S
 )
 WIDGET_START = re.compile(r"\bstruct\s+ModularSynth(\w+)Widget\s*:\s*ModuleWidget\b")
+SVG_ID = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*\Z")
+SVG_LOCAL_URL = re.compile(r"url\(\s*(['\"]?)#([A-Za-z_][A-Za-z0-9_.-]*)\1\s*\)\Z", re.I)
+SVG_URL_CANDIDATE = re.compile(r"url\s*\([^)]*\)", re.I)
+SVG_UNSUPPORTED = {"script", "foreignObject", "image", "style", "animate",
+                   "animateMotion", "animateTransform", "set"}
+SVG_PAINT_SERVER = {"linearGradient", "radialGradient", "pattern"}
 
 
 def _finite(value: float) -> bool:
@@ -79,17 +90,77 @@ def _length_ok(raw: str | None, expected_mm: float, expected_px: float) -> bool:
     return _near(number * mm_per_unit, expected_mm)
 
 
+def _check_svg_resources(root: ET.Element, svg_path: Path) -> list[str]:
+    """Ensure every local SVG paint reference resolves unambiguously.
+
+    An unresolved gradient silently drops important visual contrast in Rack.
+    The shipped panels have no need for external files, scripts, animation or
+    stylesheets; prohibit these rather than accidentally depending on a
+    network resource or on CSS behavior our source checks cannot inspect.
+    """
+    errors: list[str] = []
+    ids: Counter[str] = Counter()
+    references: list[tuple[str, str, str]] = []
+    for element in root.iter():
+        tag = element.tag.rsplit("}", 1)[-1]
+        if tag in SVG_UNSUPPORTED:
+            errors.append(f"{svg_path}: unsupported/external SVG element <{tag}>")
+        if "id" in element.attrib:
+            identifier = element.attrib["id"]
+            if not SVG_ID.fullmatch(identifier):
+                errors.append(f"{svg_path}: invalid SVG id {identifier!r}")
+            else:
+                ids[identifier] += 1
+        for attribute, value in element.attrib.items():
+            key = attribute.rsplit("}", 1)[-1]
+            if key == "href":
+                if not value.startswith("#") or not SVG_ID.fullmatch(value[1:]):
+                    errors.append(f"{svg_path}: external/invalid SVG href {value!r}")
+                else:
+                    references.append((value[1:], tag, key))
+            if re.search(r"url\s*\(", value, re.I):
+                candidates = SVG_URL_CANDIDATE.findall(value)
+                # Every url(...) in this asset must be a self-contained
+                # reference to an internal definition, without fallbacks.
+                if not candidates or len(candidates) != len(re.findall(r"url\s*\(", value, re.I)):
+                    errors.append(f"{svg_path}: invalid SVG url() in {tag}.{key}: {value!r}")
+                for candidate in candidates:
+                    match = SVG_LOCAL_URL.fullmatch(candidate)
+                    if not match:
+                        errors.append(f"{svg_path}: external/invalid SVG url {candidate!r} in {tag}.{key}")
+                    else:
+                        references.append((match.group(2), tag, key))
+
+    for identifier, count in ids.items():
+        if count > 1:
+            errors.append(f"{svg_path}: duplicate SVG id {identifier!r} ({count} definitions)")
+    for identifier, tag, key in references:
+        if ids[identifier] != 1:
+            errors.append(f"{svg_path}: {tag}.{key} references missing/ambiguous SVG id #{identifier}")
+        elif key in {"fill", "stroke"}:
+            target = next(node for node in root.iter() if node.get("id") == identifier)
+            target_tag = target.tag.rsplit("}", 1)[-1]
+            if target_tag not in SVG_PAINT_SERVER:
+                errors.append(f"{svg_path}: {tag}.{key} references #{identifier} "
+                              f"(<{target_tag}> is not a paint server)")
+    return errors
+
+
 def _check_svg(svg_path: Path, model: str, hp: int) -> list[str]:
     errors: list[str] = []
     if not svg_path.is_file():
         return [f"{svg_path}: missing panel SVG"]
     try:
-        root = ET.parse(svg_path).getroot()
+        data = svg_path.read_bytes()
+        if re.search(rb"<!\s*(?:DOCTYPE|ENTITY)\b", data, re.I):
+            return [f"{svg_path}: external/entity declarations are not allowed in panel SVGs"]
+        root = ET.fromstring(data)
     except (ET.ParseError, OSError, ValueError) as exc:
         return [f"{svg_path}: invalid SVG/XML: {exc}"]
     if root.tag != SVG_NS:
         errors.append(f"{svg_path}: root must be namespaced SVG <svg>")
         return errors
+    errors.extend(_check_svg_resources(root, svg_path))
 
     width_px = hp * GRID_PX_PER_HP
     if not _length_ok(root.get("width"), hp * HP_MM, width_px):
@@ -237,7 +308,7 @@ def _check_widget(source_path: Path, model: str, hp: int
                         f"{source_path}:{line}: {match.group('kind')} center "
                         f"({x:g}, {y:g}) outside {width:g}x{GRID_HEIGHT_PX:g} panel"
                     )
-    expected_sites = EXPECTED_SITES.get(model, {})
+    expected_sites = EXPECTED_SITES[model]
     for kind, expected in expected_sites.items():
         actual = kinds.get(kind, 0)
         if actual != expected:
@@ -245,6 +316,9 @@ def _check_widget(source_path: Path, model: str, hp: int
                 f"{source_path}: expected {expected} {kind} centered callsites, "
                 f"found {actual}"
             )
+    for kind, actual in kinds.items():
+        if kind not in expected_sites:
+            errors.append(f"{source_path}: unexpected {actual} {kind} centered callsite(s)")
     if sites == 0:
         errors.append(f"{source_path}: no centered knob/jack/switch/light creation found")
     if count == 0:
@@ -285,8 +359,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FAIL: {len(errors)} panel validation error(s)", file=sys.stderr)
         return 1
     print(
-        f"PASS: {len(PANELS)} SVG panels, Rack 3U/HP geometry, source asset "
-        f"links and {checked} conservative candidate widget centers checked"
+        f"PASS: {len(PANELS)} SVG panels, Rack 3U/HP geometry, local paint "
+        f"references, source asset links, exact control callsites and "
+        f"{checked} conservative candidate widget centers checked"
     )
     print("NOTE: source-level checks only; visual rendering/overlap not verified")
     return 0

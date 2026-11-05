@@ -182,6 +182,93 @@ class PanelGeometryTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("center (400,", result.stderr)
 
+    def test_all_nine_modules_have_exact_control_callsite_cardinality(self) -> None:
+        changes = (
+            ("MorphVCO", "createInputCentered<PJ301MPort>",
+             "createOutputCentered<PJ301MPort>", "expected 4 Input centered callsites, found 3"),
+            ("StateFilter", "createParamCentered<RoundBlackKnob>",
+             "createOutputCentered<RoundBlackKnob>", "expected 3 Param centered callsites, found 2"),
+            ("Macro8", "createLightCentered<SmallLight<GreenLight>>",
+             "createInputCentered<SmallLight<GreenLight>>", "expected 3 Light centered callsites, found 2"),
+        )
+        for model, before, after, message in changes:
+            with self.subTest(model=model):
+                model_root = self.fixture()
+                source = model_root / "plugins/ModularSynth/src" / (model + ".cpp")
+                self.replace_one(source, before, after)
+                result = self.run_checker(model_root)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+
+    def test_unknown_control_type_is_not_silently_accepted(self) -> None:
+        root = self.fixture()
+        source = root / "plugins/ModularSynth/src/MorphVCO.cpp"
+        self.replace_one(source, "createOutputCentered<PJ301MPort>",
+                         "createLightCentered<PJ301MPort>")
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unexpected 1 Light centered callsite(s)", result.stderr)
+
+    def test_svg_missing_gradient_target_rejected(self) -> None:
+        root = self.fixture()
+        panel = root / "plugins/ModularSynth/res/Macro8.svg"
+        self.replace_one(panel, 'fill="url(#panel)"', 'fill="url(#missing)"')
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("references missing/ambiguous SVG id #missing", result.stderr)
+
+    def test_svg_duplicate_gradient_id_rejected(self) -> None:
+        root = self.fixture()
+        panel = root / "plugins/ModularSynth/res/MorphVCO.svg"
+        self.replace_one(panel, '<linearGradient id="line"', '<linearGradient id="base"')
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("duplicate SVG id 'base'", result.stderr)
+
+    def test_svg_paint_reference_must_point_to_gradient_or_pattern(self) -> None:
+        root = self.fixture()
+        panel = root / "plugins/ModularSynth/res/MorphVCO.svg"
+        self.replace_one(panel, '<linearGradient id="base"', '<g id="base"')
+        self.replace_one(panel, '</linearGradient>', '</g>')
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is not a paint server", result.stderr)
+
+    def test_svg_external_paint_url_rejected(self) -> None:
+        root = self.fixture()
+        panel = root / "plugins/ModularSynth/res/MorphVCO.svg"
+        self.replace_one(panel, 'fill="url(#base)"',
+                         'fill="url(https://example.invalid/base.svg#base)"')
+        result = self.run_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("external/invalid SVG url", result.stderr)
+
+    def test_svg_script_external_image_and_entity_declarations_rejected(self) -> None:
+        root = self.fixture()
+        panel = root / "plugins/ModularSynth/res/MorphVCO.svg"
+        original = panel.read_text(encoding="utf-8")
+        try:
+            for fragment, message in (
+                ('<script xmlns="http://www.w3.org/2000/svg"/>',
+                 "unsupported/external SVG element <script>"),
+                ('<image xmlns="http://www.w3.org/2000/svg" '
+                 'href="https://example.invalid/texture.png"/>',
+                 "unsupported/external SVG element <image>"),
+            ):
+                panel.write_text(original.replace("</svg>", fragment + "</svg>"),
+                                 encoding="utf-8")
+                result = self.run_checker(root)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+            panel.write_text(original.replace("<svg ",
+                '<!DOCTYPE svg [<!ENTITY external SYSTEM "file:///private.txt">]><svg ', 1),
+                encoding="utf-8")
+            result = self.run_checker(root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("external/entity declarations are not allowed", result.stderr)
+        finally:
+            panel.write_text(original, encoding="utf-8")
+
 
 if __name__ == "__main__":
     unittest.main()

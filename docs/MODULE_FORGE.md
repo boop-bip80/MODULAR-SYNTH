@@ -1,7 +1,7 @@
 # Module Forge — first-party oscillator and effect scaffolding
 
 **Status:** developer tooling with oscillator (sine, opt-in polyBLEP saw,
-polyBLEP pulse or polyBLAMP triangle) and stereo low-pass effect starters,
+fixed-duty pulse, CV-controlled PWM or polyBLAMP triangle) and stereo low-pass effect starters,
 not a live module forge. This is not yet an in-app source editor,
 just-in-time DSP compiler, module hot loader, or standalone
 plugin exporter. The separate `plugins/ModularSynth` collection is the home
@@ -29,6 +29,16 @@ checked under C++17). Generation alone does not establish host compatibility:
   rising and falling edges. It retains the default pitch/CV port indices,
   reset semantics and voice-retirement behavior; its SVG says **PULSE OUT**.
   This is a musical starter, not an alias-free pulse oscillator or a PWM module.
+- **`--kind oscillator --waveform pwm` (opt-in):** a separate 16-voice
+  PWM starter with two knobs (**PITCH**, **WIDTH**) and two polyphonic CV
+  inputs (**V/OCT**, **PW CV**) driving a nominal ±5 V pulse output.
+  WIDTH is constrained to 5–95% duty; 10 V of PW CV spans 100 percentage
+  points before clamping. The variable falling edge and fixed wrap edge each
+  get polyBLEP corrections. At a static width the wave is bounded, including
+  at high fundamental rates. This waveform has a duty-dependent DC component,
+  and rapid audio-rate width modulation can still alias. It has a different
+  module port/parameter layout from the historical fixed-duty `pulse` option,
+  which remains unchanged.
 - **`--kind oscillator --waveform triangle` (opt-in):** a 16-voice, nominal
   ±5 V triangle with polyBLAMP smoothing of both opposite-slope corners.
   The polynomial correction is the integral of a polyBLEP step correction,
@@ -90,6 +100,15 @@ python3 tools/module-forge/module_forge.py new \
 python3 tools/module-forge/module_forge.py check module-forge-output/ForgePulse
 ```
 
+Generate a voltage-controllable PWM oscillator:
+
+```bash
+python3 tools/module-forge/module_forge.py new \
+    --kind oscillator --waveform pwm \
+    --slug ForgePWM --name "Forge PWM" --out module-forge-output
+python3 tools/module-forge/module_forge.py check module-forge-output/ForgePWM
+```
+
 Generate the slope-corrected triangle starter:
 
 ```bash
@@ -101,8 +120,9 @@ python3 tools/module-forge/module_forge.py check module-forge-output/ForgeTriang
 
 The outputs will be `module-forge-output/OrbitSine/` and
 `module-forge-output/StereoTPT/` for the initial examples, and
-`module-forge-output/ForgeSaw/`, `module-forge-output/ForgePulse/` and
-`module-forge-output/ForgeTriangle/` for the opt-in corrected waveforms.
+`module-forge-output/ForgeSaw/`, `module-forge-output/ForgePulse/`,
+`module-forge-output/ForgePWM/` and `module-forge-output/ForgeTriangle/`
+for the opt-in corrected waveforms.
 With no waveform option,
 the generator's sine files and manifest remain byte-for-byte unchanged.
 Non-default `--waveform` values are rejected for `--kind effect`. Read each generated
@@ -143,6 +163,14 @@ invalid sample-rate fallback, and at least 8 dB lower aggregate folded odd
 harmonic (3, 5, 7, 9) energy than an uncorrected 9.28 kHz square wave using
 the same oscillator phase. These are isolated source and spectral tests, not
 measurements from a loadable plugin, and they do not prove alias-free audio.
+`test_generated_pwm.py` compiles and executes the generated PWM C++ in GNU
+C++11/C++17 regular and strict fast-math modes. It checks that 50% duty
+is numerically equivalent to the legacy fixed pulse, that polyphonic PW CV
+maps 2.5 V into 25 percentage points, bipolar non-50% duty produces the
+expected mean, the alias-bin energy at a static 25% duty is at least 6 dB
+below a naive pulse, and that polyphony retirement and extreme/nonfinite
+modulation remain safe. These are source-only synthetic measurements; they
+do not establish the spectral behavior under fast audio-rate PWM.
 `test_generated_triangle.py` runs the *actual generated* polyBLAMP triangle
 under GNU C++11 and C++17 optimization profiles. At a coherent 9.28 kHz
 fundamental, it requires at least 8 dB lower aggregate alias power in odd
@@ -208,12 +236,12 @@ shipping.
 
 ### Fresh generated modules against pinned real Rack headers
 
-A separate Linux/HEADLESS compatibility gate generates five oscillator
-waveform/effect variants (sine, opt-in polyBLEP saw, opt-in polyBLEP pulse,
-opt-in polyBLAMP triangle and stereo TPT low-pass)
+A separate Linux/HEADLESS compatibility gate generates six oscillator
+waveform/effect variants (sine, opt-in polyBLEP saw, opt-in fixed pulse,
+opt-in voltage-controlled PWM, opt-in polyBLAMP triangle and stereo TPT low-pass)
 into a temporary directory, validates each output, and syntax-checks each
 actual `.cpp` against the **real pinned Rack/DPF/Jansson headers** in both
-GNU C++11 and GNU C++17 modes (five modules × two dialects). It shares
+GNU C++11 and GNU C++17 modes (six modules × two dialects). It shares
 the exact Gitlink/dependency preflight and Cardinal C++ definitions of
 `tools/ci/check_real_rack_headers.py`; it does **not** fall back to
 `tests/rack_stub` when dependencies are unavailable. No generated file is
@@ -231,10 +259,10 @@ The dedicated
 [`Module Forge pinned Rack header syntax`](../.github/workflows/module-forge-real-headers.yml)
 workflow runs this gate and its fail-closed orchestration unit tests on relevant
 changes. A successful hosted run means **the default sine oscillator, all
-three opt-in polyBLEP/polyBLAMP waveforms, and the stereo TPT effect HEADLESS
+four opt-in polyBLEP/polyBLAMP waveforms, and the stereo TPT effect HEADLESS
 translation units compile at the C++ syntax/API layer** against that pinned SDK.
 The orchestration tests verify
-that the saw, pulse and triangle sources contain their respective corrections,
+that the saw, pulse, PWM and triangle sources contain their respective corrections,
 reject tampered generated outputs before compilation, and fail if any
 waveform's compiler step fails.
 These mocked orchestration tests alone are **not** a real SDK compile; the separate

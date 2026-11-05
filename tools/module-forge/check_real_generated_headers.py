@@ -26,10 +26,11 @@ import check_real_rack_headers as sdk  # noqa: E402 -- shared pinned SDK preflig
 
 STARTERS = (
     # Keep the default sine and effect starters; compile all opt-in
-    # polyBLEP/polyBLAMP waveforms with the same genuine Rack/DPF API checks.
+    # polyBLEP/polyBLAMP waveforms (including PWM control ports) against real API.
     ("ForgeRealOsc", "Forge Real Osc", "oscillator", "sine"),
     ("ForgeRealSaw", "Forge Real Saw", "oscillator", "saw"),
     ("ForgeRealPulse", "Forge Real Pulse", "oscillator", "pulse"),
+    ("ForgeRealPWM", "Forge Real PWM", "oscillator", "pwm"),
     ("ForgeRealTriangle", "Forge Real Triangle", "oscillator", "triangle"),
     ("ForgeRealLP", "Forge Real LP", "effect", "sine"),
 )

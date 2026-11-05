@@ -29,6 +29,8 @@ from verified_routes import verified_routes_report
 from route_report import build_route_report, text_route_report
 from control_report import build_control_report, text_control_report
 from instrument_diff import compare_verified_bundles, text_diff_report
+from morph_preview import (MorphPreviewError, build_morph_preview,
+                           text_morph_preview)
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -645,6 +647,20 @@ def compare_bundles(previous_path: Path, current_path: Path) -> dict:
         old_manifest, old_patch, new_manifest, new_patch)
 
 
+def morph(bundle_path: Path, *, source: str, destination: str,
+          elapsed_seconds: float, sample_rate: int = 48000,
+          module_id: int | None = None) -> dict:
+    """Estimate a saved Macro8 scene recall without running a Rack engine."""
+    manifest = inspect(bundle_path)  # Recompute source-derived manifest first.
+    try:
+        return build_morph_preview(
+            manifest, source=source, destination=destination,
+            elapsed_seconds=elapsed_seconds, sample_rate=sample_rate,
+            module_id=module_id)
+    except MorphPreviewError as exc:
+        raise InstrumentError(f"scene morph preview: {exc}") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest="command", required=True)
@@ -670,6 +686,21 @@ def main(argv: list[str] | None = None) -> int:
     controls.add_argument(
         "--json", action="store_true",
         help="deterministic source-only saved performance inventory")
+    transition = subs.add_parser(
+        "morph", help="estimate a saved Macro8 snapshot transition (NOT audio)")
+    transition.add_argument("bundle", type=Path)
+    transition.add_argument("--from", dest="from_scene", choices=("LIVE", "A", "B", "C", "D"),
+                            required=True, help="assumed fully settled starting scene")
+    transition.add_argument("--to", dest="to_scene", choices=("LIVE", "A", "B", "C", "D"),
+                            required=True, help="requested target scene")
+    transition.add_argument("--at", type=float, required=True,
+                            help="elapsed seconds after scene change (0..3600)")
+    transition.add_argument("--sample-rate", type=int, default=48000,
+                            help="simulation sample rate in Hz (8000..384000)")
+    transition.add_argument("--module-id", type=int,
+                            help="required when patch contains multiple Macro8 modules")
+    transition.add_argument("--json", action="store_true",
+                            help="machine-readable source-only estimate")
     difference = subs.add_parser(
         "diff", help="compare validated saved patch, Macro8 and routing state")
     difference.add_argument("old_bundle", type=Path)
@@ -728,6 +759,15 @@ def main(argv: list[str] | None = None) -> int:
                 print(_canonical_json(report).decode("utf-8"), end="")
             else:
                 print(text_control_report(report), end="")
+        elif args.command == "morph":
+            report = morph(
+                args.bundle, source=args.from_scene, destination=args.to_scene,
+                elapsed_seconds=args.at, sample_rate=args.sample_rate,
+                module_id=args.module_id)
+            if args.json:
+                print(_canonical_json(report).decode("utf-8"), end="")
+            else:
+                print(text_morph_preview(report), end="")
         elif args.command == "diff":
             report = compare_bundles(args.old_bundle, args.new_bundle)
             if args.json:

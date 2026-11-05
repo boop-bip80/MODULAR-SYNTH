@@ -106,7 +106,8 @@ class FMVoiceWavTests(unittest.TestCase):
         cls.temp.cleanup()
 
     def render(self, name: str, rate: int, filename: str,
-               *, reference: bool = False, unison: int = 1) -> tuple[Path, dict]:
+               *, reference: bool = False, unison: int = 1,
+               harmony: str | None = None) -> tuple[Path, dict]:
         path = self.directory / filename
         cmd = [str(self.binaries[name]), "--sample-rate", str(rate),
                "--output", str(path)]
@@ -114,12 +115,15 @@ class FMVoiceWavTests(unittest.TestCase):
             cmd.append("--sine-reference")
         if unison != 1:
             cmd.extend(("--unison", str(unison)))
+        if harmony is not None:
+            cmd.extend(("--harmony", harmony))
         finished = subprocess.run(cmd, capture_output=True, text=True,
                                   check=False, timeout=60)
         self.assertEqual(finished.returncode, 0,
                          finished.stdout + finished.stderr)
         self.assertIn(f"mode={'sine' if reference else 'fm'}", finished.stdout)
         self.assertIn(f"unison={unison}", finished.stdout)
+        self.assertIn(f"harmony={harmony or 'off'}", finished.stdout)
         self.assertIn(f"rate={rate}", finished.stdout)
         self.assertIn(f"frames={rate * SECONDS}", finished.stdout)
         match = re.search(r"pcm_fnv1a64=([0-9a-f]{16})", finished.stdout)
@@ -215,6 +219,95 @@ class FMVoiceWavTests(unittest.TestCase):
         self.assertTrue(0.02 < metrics["peak"] < 0.75)
         self.assertTrue(0.008 < metrics["rms"] < 0.3)
 
+    def test_harmony_off_is_exactly_backward_compatible(self) -> None:
+        for unison in (1, 2, 4):
+            with self.subTest(unison=unison):
+                implicit, original = self.render(
+                    "normal", 48000, f"harmony-default-{unison}.wav",
+                    unison=unison)
+                explicit, inactive = self.render(
+                    "normal", 48000, f"harmony-off-{unison}.wav",
+                    harmony="off", unison=unison)
+                self.assertEqual(implicit.read_bytes(), explicit.read_bytes())
+                self.assertEqual(original["hash"], inactive["hash"])
+
+    def test_four_tone_chords_have_distinct_deterministic_stereo_audio(self) -> None:
+        for rate in RATES:
+            with self.subTest(rate=rate):
+                fingerprints = []
+                for harmony in ("minor7", "quartal"):
+                    for unison in (1, 4):
+                        with self.subTest(harmony=harmony, unison=unison):
+                            first, a = self.render(
+                                "normal", rate,
+                                f"harmony-{harmony}-{unison}-{rate}.wav",
+                                harmony=harmony, unison=unison)
+                            second, b = self.render(
+                                "normal", rate,
+                                f"harmony-{harmony}-{unison}-{rate}-again.wav",
+                                harmony=harmony, unison=unison)
+                            self.assertEqual(first.read_bytes(), second.read_bytes())
+                            self.assertEqual(a["hash"], b["hash"])
+                            self.assertGreater(a["stereo_diff"], rate // 3)
+                            self.assertTrue(0.015 < a["peak"] < 0.75)
+                            self.assertTrue(0.008 < a["rms"] < 0.3)
+                            self.assertGreater(min(a["note_rms"]), 0.005)
+                            self.assertLess(max(a["boundary_jumps"]), 0.05)
+                            self.assertGreaterEqual(a["distinct_note_windows"], 12)
+                            fingerprints.append(a["hash"])
+                self.assertEqual(len(set(fingerprints)), 4)
+
+    def test_harmony_sine_reference_contains_expected_chord_tones(self) -> None:
+        # Verify audible-frequency content from the actual four independent
+        # FMVoice sine cores, not just different PCM hashes or file sizes.
+        rate = 48000
+        _, off = self.render("normal", rate, "harmony-sine-off.wav",
+                             reference=True)
+        _, minor7 = self.render("normal", rate, "harmony-sine-minor7.wav",
+                                reference=True, harmony="minor7")
+        _, quartal = self.render("normal", rate, "harmony-sine-quartal.wav",
+                                reference=True, harmony="quartal")
+
+        def tone_strength(measurements: dict, semitones: int) -> float:
+            # Hann window avoids leakage from the base C3 note. The 120-ms
+            # window starts after all four 15-ms-staggered attacks finish.
+            left = measurements["samples"][::2]
+            start = int(0.095 * rate)
+            frames = int(0.12 * rate)
+            frequency = 130.81278265 * (2 ** (semitones / 12))
+            angular = 2 * math.pi * frequency / rate
+            real = 0.0
+            imaginary = 0.0
+            for n in range(frames):
+                window = 0.5 - 0.5 * math.cos(2 * math.pi * n / (frames - 1))
+                value = left[start + n] * window
+                real += value * math.cos(angular * n)
+                imaginary += value * math.sin(angular * n)
+            return 4 * math.hypot(real, imaginary) / (frames * 32768.0)
+
+        for semitones in (3, 7):
+            self.assertGreater(tone_strength(minor7, semitones), 0.018)
+            self.assertGreater(
+                tone_strength(minor7, semitones),
+                4 * tone_strength(off, semitones))
+        for semitones in (5, 15):
+            self.assertGreater(tone_strength(quartal, semitones), 0.014)
+            self.assertGreater(
+                tone_strength(quartal, semitones),
+                4 * tone_strength(off, semitones))
+        self.assertNotEqual(minor7["hash"], quartal["hash"])
+
+    def test_harmony_fastmath_is_finite_with_full_unison(self) -> None:
+        for harmony in ("minor7", "quartal"):
+            with self.subTest(harmony=harmony):
+                _, measurements = self.render(
+                    "fastmath", 48000,
+                    f"harmony-{harmony}-fastmath.wav",
+                    harmony=harmony, unison=4)
+                self.assertTrue(0.015 < measurements["peak"] < 0.75)
+                self.assertTrue(0.008 < measurements["rms"] < 0.3)
+                self.assertGreater(min(measurements["note_rms"]), 0.005)
+
     def test_cli_validation_existing_file_and_dangling_symlink(self) -> None:
         binary = str(self.binaries["normal"])
         help_result = subprocess.run([binary, "--help"], capture_output=True,
@@ -226,6 +319,8 @@ class FMVoiceWavTests(unittest.TestCase):
             ["--sample-rate", "12345", "--output", "invalid.wav"],
             ["--unison"], ["--unison", "0"],
             ["--unison", "3"], ["--unison", "-1"],
+            ["--harmony"], ["--harmony", "major"],
+            ["--harmony", "MINOR7"],
         ):
             with self.subTest(args=args):
                 finished = subprocess.run([binary, *args], capture_output=True,
