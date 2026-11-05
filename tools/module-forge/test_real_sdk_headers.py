@@ -84,6 +84,19 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
             with self.subTest(flags=bad), self.assertRaises(gate.sdk.PreflightError):
                 gate.syntax_commands("c++", bad, paths)
 
+    def test_generated_dialects_include_cardinal_cpp11_without_duplicate_standard(self) -> None:
+        flags = ["-std=gnu++17", "-DHEADLESS", "-fsyntax-only"]
+        self.assertEqual(gate.dialect_flags(flags, "gnu++11"),
+                         ["-std=gnu++11", "-DHEADLESS", "-fsyntax-only"])
+        self.assertEqual(gate.dialect_flags(flags, "gnu++17"), flags)
+        for bad_flags in ([], ["-std=gnu++11"],
+                          ["-std=gnu++17", "-std=gnu++11"]):
+            with self.subTest(bad_flags=bad_flags), self.assertRaises(
+                    gate.sdk.PreflightError):
+                gate.dialect_flags(bad_flags, "gnu++11")
+        with self.assertRaises(gate.sdk.PreflightError):
+            gate.dialect_flags(flags, "gnu++20")
+
     @unittest.skipUnless(shutil.which("c++"), "C++ compiler unavailable")
     def test_quote_header_priority_over_rack_i_path(self) -> None:
         """GCC must choose first-party plugin.hpp despite earlier Rack -I."""
@@ -135,7 +148,7 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                   mock.patch.object(gate.sdk, "render_linux_speex_types",
                                     return_value="#pragma once\n"),
                   mock.patch.object(gate.sdk, "compiler_flags",
-                                    return_value=["-DHEADLESS", "-fsyntax-only",
+                                    return_value=["-std=gnu++17", "-DHEADLESS", "-fsyntax-only",
                                                   "-I", "/pinned/rack/include"]),
                   mock.patch.object(gate.shutil, "which", return_value="c++"),
                   mock.patch.object(gate.subprocess, "run", side_effect=fake_run)):
@@ -144,12 +157,14 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                     result = gate.main(["--rack-root", str(rack),
                                         "--dpf-root", str(Path(temp) / "dpf")])
             self.assertEqual(result, 0)
-            self.assertEqual(len(calls), 5)
-            self.assertTrue(calls[0][-1].endswith("/ForgeRealOsc/ForgeRealOsc.cpp"))
-            self.assertTrue(calls[1][-1].endswith("/ForgeRealSaw/ForgeRealSaw.cpp"))
-            self.assertTrue(calls[2][-1].endswith("/ForgeRealPulse/ForgeRealPulse.cpp"))
-            self.assertTrue(calls[3][-1].endswith("/ForgeRealTriangle/ForgeRealTriangle.cpp"))
-            self.assertTrue(calls[4][-1].endswith("/ForgeRealLP/ForgeRealLP.cpp"))
+            self.assertEqual(len(calls), 10)
+            for index, dialect in ((0, "-std=gnu++11"), (5, "-std=gnu++17")):
+                self.assertTrue(calls[index][-1].endswith("/ForgeRealOsc/ForgeRealOsc.cpp"))
+                self.assertTrue(calls[index + 1][-1].endswith("/ForgeRealSaw/ForgeRealSaw.cpp"))
+                self.assertTrue(calls[index + 2][-1].endswith("/ForgeRealPulse/ForgeRealPulse.cpp"))
+                self.assertTrue(calls[index + 3][-1].endswith("/ForgeRealTriangle/ForgeRealTriangle.cpp"))
+                self.assertTrue(calls[index + 4][-1].endswith("/ForgeRealLP/ForgeRealLP.cpp"))
+                self.assertTrue(all(dialect in call for call in calls[index:index + 5]))
             self.assertTrue(all("rack_stub" not in " ".join(c) for c in calls))
 
 
@@ -198,7 +213,7 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                   mock.patch.object(gate.sdk, "render_linux_speex_types",
                                     return_value="#pragma once\\n"),
                   mock.patch.object(gate.sdk, "compiler_flags",
-                                    return_value=["-DHEADLESS", "-fsyntax-only",
+                                    return_value=["-std=gnu++17", "-DHEADLESS", "-fsyntax-only",
                                                   "-I", "/pinned/rack/include"]),
                   mock.patch.object(gate.shutil, "which", return_value="c++"),
                   mock.patch.object(gate.subprocess, "run", side_effect=fake_run)):
@@ -230,7 +245,7 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                   mock.patch.object(gate.sdk, "render_linux_speex_types",
                                     return_value="#pragma once\n"),
                   mock.patch.object(gate.sdk, "compiler_flags",
-                                    return_value=["-DHEADLESS", "-fsyntax-only",
+                                    return_value=["-std=gnu++17", "-DHEADLESS", "-fsyntax-only",
                                                   "-I", "/pinned/rack/include"]),
                   mock.patch.object(gate.shutil, "which", return_value="c++"),
                   mock.patch.object(gate.subprocess, "run", side_effect=fake_run)):

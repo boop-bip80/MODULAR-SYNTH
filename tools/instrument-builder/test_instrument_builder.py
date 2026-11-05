@@ -8,13 +8,14 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest import mock
 import warnings
 import zipfile
 
 from instrument_builder import (
     FORMAT, FORMAT_VERSION, InstrumentError, MANIFEST_MEMBER, MAX_BUNDLE_BYTES,
     MAX_PATCH_BYTES, PATCH_MEMBER, ZIP_TIMESTAMP, build_manifest, create_bundle,
-    inspect, main, pack, patch_performance, read_bundle, unpack,
+    _read_limited, inspect, main, pack, patch_performance, read_bundle, unpack,
 )
 
 
@@ -207,6 +208,10 @@ class InstrumentBuilderTests(unittest.TestCase):
                 value=float("nan"))),
             ("nonfinite snapshot", lambda x: x["modules"][0]["data"]["snapshots"][0].__setitem__(
                 0, float("inf"))),
+            ("extremely large integer param", lambda x: x["modules"][0]["params"][0].update(
+                value=10 ** 1000)),
+            ("extremely large integer snapshot", lambda x: x["modules"][0]["data"]["snapshots"][0].__setitem__(
+                0, 10 ** 1000)),
         ]
         for label, mutation in cases:
             with self.subTest(case=label):
@@ -328,6 +333,45 @@ class InstrumentBuilderTests(unittest.TestCase):
             with self.assertRaises((InstrumentError, OSError)):
                 unpack(bundle, link / "new")
             self.assertFalse((actual / "new").exists())
+
+    def test_input_file_swap_to_symlink_is_rejected_atomically(self):
+        if os.name != "posix" or not hasattr(os, "O_NOFOLLOW"):
+            self.skipTest("requires POSIX O_NOFOLLOW")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "patch.vcv"
+            source.write_bytes(patch_bytes())
+            original = root / "original.vcv"
+            unrelated = root / "unrelated-private-data"
+            unrelated.write_bytes(b"do not read outside the checked file")
+            real_open = os.open
+            swapped = False
+
+            def replace_before_open(path, flags, *args, **kwargs):
+                nonlocal swapped
+                if os.fspath(path) == os.fspath(source) and not swapped:
+                    source.rename(original)
+                    source.symlink_to(unrelated)
+                    swapped = True
+                return real_open(path, flags, *args, **kwargs)
+
+            # The read must reject the raced-in symlink, not follow it.  A
+            # pathname stat-then-open implementation silently reads unrelated.
+            with mock.patch("instrument_builder.os.open", side_effect=replace_before_open):
+                with self.assertRaisesRegex(InstrumentError, "non-symlink"):
+                    _read_limited(source, MAX_PATCH_BYTES, "VCV patch")
+            self.assertTrue(swapped)
+            self.assertEqual(original.read_bytes(), patch_bytes())
+            self.assertEqual(unrelated.read_bytes(), b"do not read outside the checked file")
+
+    def test_reject_fifo_as_bundle_input_without_blocking(self):
+        if os.name != "posix" or not hasattr(os, "mkfifo"):
+            self.skipTest("requires POSIX FIFO")
+        with tempfile.TemporaryDirectory() as temporary:
+            fifo = Path(temporary) / "fifo.msinstrument"
+            os.mkfifo(fifo)
+            with self.assertRaisesRegex(InstrumentError, "regular non-symlink"):
+                _read_limited(fifo, MAX_BUNDLE_BYTES, "instrument bundle")
 
 
 if __name__ == "__main__":

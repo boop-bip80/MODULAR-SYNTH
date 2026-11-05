@@ -327,6 +327,108 @@ void smokeChance(const rack::ProcessArgs& args) {
     outputsFinite(module, ModularSynthChanceHold::NUM_OUTPUTS, 1, "Chance reset");
 }
 
+template <typename ModuleT>
+void verifyDeferredHostReset(const rack::ProcessArgs& args, int inputId,
+                             int outputCount, const char* label) {
+    // Rack may dispatch reset on the editor thread while an engine callback
+    // owns oscillator/filter/delay state. The callbacks must only publish an
+    // atomic request; process() performs the first actual DSP reset.
+    auto playing = std::make_unique<ModuleT>();
+    auto pristine = std::make_unique<ModuleT>();
+    for (ModuleT* module : {playing.get(), pristine.get()}) {
+        module->inputs[static_cast<std::size_t>(inputId)].setChannels(4);
+        for (int lane = 0; lane < 4; ++lane)
+            module->inputs[static_cast<std::size_t>(inputId)].setVoltage(
+                static_cast<float>(lane) * 0.125f, lane);
+    }
+
+    for (int n = 0; n < 512; ++n)
+        playing->process(args);
+    require(playing->previousChannels == 4,
+            std::string(label) + " polyphonic setup did not activate 4 lanes");
+
+    // Test both the legacy Rack reset callback and the modern event dispatch.
+    // Either may be invoked on the host/UI thread. Neither may directly write
+    // process-owned channel history or mutate DSP state.
+    playing->onReset();
+    require(playing->pendingReset.load(std::memory_order_acquire),
+            std::string(label) + " legacy onReset did not publish a request");
+    require(playing->previousChannels == 4,
+            std::string(label) + " legacy onReset raced with channel history");
+    playing->onReset(rack::ResetEvent{});
+    require(playing->pendingReset.load(std::memory_order_acquire),
+            std::string(label) + " event onReset did not publish a request");
+    require(playing->previousChannels == 4,
+            std::string(label) + " event onReset raced with channel history");
+
+    const std::size_t before = heapAllocations.load(std::memory_order_relaxed);
+    playing->process(args);
+    const std::size_t after = heapAllocations.load(std::memory_order_relaxed);
+    require(before == after,
+            std::string(label) + " deferred reset audio tick allocated");
+    pristine->process(args);
+    require(!playing->pendingReset.load(std::memory_order_acquire),
+            std::string(label) + " deferred reset request not consumed");
+    require(playing->previousChannels == 4,
+            std::string(label) + " reset did not restore active channel count");
+    outputsFinite(*playing, outputCount, 4, label);
+
+    // After a reset the very next audio sample must agree with an otherwise
+    // identical fresh module; no old phase, envelope, PRNG or delay tail.
+    for (int port = 0; port < outputCount; ++port) {
+        for (int lane = 0; lane < 4; ++lane) {
+            const float got = playing->outputs[static_cast<std::size_t>(port)].getVoltage(lane);
+            const float expected = pristine->outputs[static_cast<std::size_t>(port)].getVoltage(lane);
+            require(std::abs(got - expected) < 5.0e-5f,
+                    std::string(label) + " reset did not replay first sample");
+        }
+    }
+
+    std::atomic<bool> finite{true};
+    std::thread engine([&] {
+        for (int n = 0; n < 9000; ++n) {
+            playing->process(args);
+            for (int port = 0; port < outputCount; ++port)
+                for (int lane = 0; lane < 4; ++lane)
+                    if (!std::isfinite(playing->outputs[static_cast<std::size_t>(port)].getVoltage(lane)))
+                        finite.store(false, std::memory_order_relaxed);
+        }
+    });
+    std::thread host([&] {
+        for (int n = 0; n < 1800; ++n) {
+            if (n & 1)
+                playing->onReset();
+            else
+                playing->onReset(rack::ResetEvent{});
+        }
+    });
+    engine.join();
+    host.join();
+    require(finite.load(std::memory_order_relaxed),
+            std::string(label) + " threaded reset emitted nonfinite audio/CV");
+}
+
+void regressionDeferredHostResets(const rack::ProcessArgs& args) {
+    verifyDeferredHostReset<ModularSynthMorphVCO>(
+        args, ModularSynthMorphVCO::PITCH_INPUT,
+        ModularSynthMorphVCO::NUM_OUTPUTS, "MorphVCO host reset");
+    verifyDeferredHostReset<ModularSynthStateFilter>(
+        args, ModularSynthStateFilter::AUDIO_INPUT,
+        ModularSynthStateFilter::NUM_OUTPUTS, "StateFilter host reset");
+    verifyDeferredHostReset<ModularSynthStereoEcho>(
+        args, ModularSynthStereoEcho::LEFT_INPUT,
+        ModularSynthStereoEcho::NUM_OUTPUTS, "StereoEcho host reset");
+    verifyDeferredHostReset<ModularSynthClockedLFO>(
+        args, ModularSynthClockedLFO::RATE_CV_INPUT,
+        ModularSynthClockedLFO::NUM_OUTPUTS, "ClockedLFO host reset");
+    verifyDeferredHostReset<ModularSynthFMVoice>(
+        args, ModularSynthFMVoice::PITCH_INPUT,
+        ModularSynthFMVoice::NUM_OUTPUTS, "FMVoice host reset");
+    verifyDeferredHostReset<ModularSynthChanceHold>(
+        args, ModularSynthChanceHold::RATE_CV_INPUT,
+        ModularSynthChanceHold::NUM_OUTPUTS, "ChanceHold host reset");
+}
+
 } // namespace
 
 int main() {
@@ -343,8 +445,9 @@ int main() {
         smokeClock(args);
         smokeFM(args);
         smokeChance(args);
+        regressionDeferredHostResets(args);
         std::cout << "PASS: 7 HEADLESS wrapper compile/process/port/reset smokes "
-                     "and Macro8 lifecycle regressions (test shim)\n";
+                     "and Macro8/six-wrapper deferred host reset regressions (test shim)\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

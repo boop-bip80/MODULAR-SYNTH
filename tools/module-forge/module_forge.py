@@ -79,7 +79,10 @@ struct MS@@SLUG@@Module final : Module {
                 + inputs[PITCH_INPUT].getNormalPolyVoltage(0.f, voice);
             if (!finite(pitch))
                 pitch = 0.f;
-            pitch = std::clamp(pitch, -8.f, 8.f);
+            // Cardinal's default plugin compiler dialect is gnu++11.
+            // Inputs are finite by this point, so min/max are equivalent
+            // to C++17 std::clamp without requiring a newer toolchain.
+            pitch = std::max(-8.f, std::min(8.f, pitch));
 
             const float frequency = std::min(
                 261.625565f * std::exp2(pitch), sampleRate * 0.45f);
@@ -337,7 +340,7 @@ struct MS@@SLUG@@Module final : Module {
                 + inputs[CUTOFF_CV_INPUT].getNormalPolyVoltage(0.f, voice);
             if (!moduleforge::MS@@SLUG@@OnePole::finite(octave))
                 octave = 0.f;
-            octave = std::clamp(octave, -8.f, 8.f);
+            octave = std::max(-8.f, std::min(8.f, octave));
             const float cutoffHz = 1000.f * std::exp2(octave);
             const float coefficient =
                 moduleforge::MS@@SLUG@@OnePole::coefficient(cutoffHz, sampleRate);
@@ -400,7 +403,7 @@ namespace moduleforge {
 struct MS@@SLUG@@OnePole {
     float state = 0.f;
 
-    // C++17 IEEE-754 binary32 guard. std::isfinite may be folded to true
+    // C++11 IEEE-754 binary32 guard. std::isfinite may be folded to true
     // by production -ffast-math; inspect exponent bits through memcpy instead.
     static bool finite(float value) noexcept {
         static_assert(sizeof(float) == sizeof(std::uint32_t),
@@ -418,9 +421,8 @@ struct MS@@SLUG@@OnePole {
     static float coefficient(float cutoffHz, float sampleRate) noexcept {
         const float sr = (finite(sampleRate) && sampleRate >= 1000.f)
             ? sampleRate : 48000.f;
-        const float cutoff = std::clamp(
-            finite(cutoffHz) ? cutoffHz : 1000.f,
-            5.f, 0.45f * sr);
+        const float cutoff = std::max(5.f, std::min(0.45f * sr,
+            finite(cutoffHz) ? cutoffHz : 1000.f));
         constexpr float kPi = 3.14159265358979323846f;
         const float g = std::tan(kPi * cutoff / sr);
         return g / (1.f + g);
@@ -429,10 +431,10 @@ struct MS@@SLUG@@OnePole {
     float process(float input, float coefficient) noexcept {
         if (!finite(input))
             input = 0.f;
-        input = std::clamp(input, -100.f, 100.f);
+        input = std::max(-100.f, std::min(100.f, input));
         if (!finite(coefficient))
             coefficient = 0.f;
-        const float c = std::clamp(coefficient, 0.f, 1.f);
+        const float c = std::max(0.f, std::min(1.f, coefficient));
         const float v = (input - state) * c;
         const float output = state + v;
         state = output + v;

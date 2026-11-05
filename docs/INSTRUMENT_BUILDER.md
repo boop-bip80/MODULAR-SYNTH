@@ -435,7 +435,8 @@ was produced.
 ### Safety and limits
 
 - The source `.vcv` is parsed as strict JSON: duplicate keys, NaN/Inf,
-  nonfinite exponent overflow, inconsistent cable module endpoints, bad module
+  nonfinite exponent overflow, enormous integer numeric values that cannot be
+  represented as finite floats, inconsistent cable module endpoints, bad module
   IDs, unsupported Macro8 state versions, malformed names/snapshots/ranges,
   and missing Macro8 modules are rejected before output is created. This is
   **structural/schema/graph validation**, not a Rack loader: the tool does
@@ -448,6 +449,13 @@ was produced.
   filesystem targets.
 - Limits: patch 8 MiB; manifest 128 KiB; 256 modules; 4096 cables; eight
   Macro8 modules. These are prototype caps, not Rack host capacities.
+- Input files are checked through their opened file descriptors, including a
+  regular-file check and a bounded read. On POSIX platforms with `O_NOFOLLOW`,
+  the final path component cannot be switched to a symlink between the open
+  check and read; `O_NONBLOCK` also avoids hanging on a raced-in FIFO. On
+  platforms without no-follow opens, the existing symlink check is only a
+  best-effort fallback against hostile concurrent path replacement. Ancestor
+  path components of input filenames are not constrained to non-symlink paths.
 - Both commands refuse to overwrite a file or directory. POSIX extraction
   uses component-wise no-follow directory handles and exclusive file creation;
   other platforms reject known symlink parents but are not hardened against

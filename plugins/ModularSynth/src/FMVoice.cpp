@@ -7,6 +7,7 @@
 #include "FMVoice.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
 
 struct ModularSynthFMVoice : Module {
@@ -36,6 +37,7 @@ struct ModularSynthFMVoice : Module {
 
     modular_synth::dsp::FMVoice voices[16];
     int previousChannels = 0;
+    std::atomic<bool> pendingReset{false};
 
     ModularSynthFMVoice() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -60,12 +62,21 @@ struct ModularSynthFMVoice : Module {
     }
 
     void onReset() override {
-        for (auto& voice : voices)
-            voice.reset();
-        previousChannels = 0;
+        pendingReset.store(true, std::memory_order_release);
+    }
+
+    void onReset(const ResetEvent& event) override {
+        Module::onReset(event);
+        pendingReset.store(true, std::memory_order_release);
     }
 
     void process(const ProcessArgs& args) override {
+        if (pendingReset.load(std::memory_order_acquire) &&
+                pendingReset.exchange(false, std::memory_order_acq_rel)) {
+            for (auto& voice : voices)
+                voice.reset();
+            previousChannels = 0;
+        }
         int channels = std::max(1, inputs[PITCH_INPUT].getChannels());
         channels = std::max(channels, inputs[RATIO_CV_INPUT].getChannels());
         channels = std::max(channels, inputs[INDEX_CV_INPUT].getChannels());

@@ -122,8 +122,11 @@ public:
     double effectiveMaxMs(double sampleRate) const noexcept {
         if (!finite(sampleRate) || sampleRate < 1000.0)
             return kMinDelayMs;
-        return std::min(kMaxDelayMs,
-                        1000.0 * (kCapacityFrames - 2u) / sampleRate);
+        const double capacityMs = 1000.0 * (kCapacityFrames - 2u) / sampleRate;
+        // std::min(const T&, const T&) ODR-uses kMaxDelayMs in C++11 debug
+        // builds. This value-only comparison keeps this DSP header linkable
+        // without an out-of-line constant definition in every plugin target.
+        return capacityMs < kMaxDelayMs ? capacityMs : kMaxDelayMs;
     }
 
     Sample process(double inputL, double inputR, double sampleRate,

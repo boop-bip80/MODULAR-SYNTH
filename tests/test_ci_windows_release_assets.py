@@ -71,6 +71,31 @@ class WindowsReleaseAssetsTests(unittest.TestCase):
         self.assertIn("fail_on_unmatched_files: true", release)
         self.assertIn("if: startsWith(github.ref, 'refs/tags/')", release)
 
+    def test_windows_wine_metadata_keeps_default_seccomp_and_stable_host(self) -> None:
+        """Older 32-bit Wine needs socketcall, denied by Docker 29.4.2.
+
+        This test guards the temporary runner pin and, importantly, ensures
+        the fix cannot silently bypass LV2 metadata generation or security.
+        """
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        match = WINDOWS_JOB.search(workflow)
+        self.assertIsNotNone(match, "Windows cross-build job is required")
+        job = match.group(1)
+
+        self.assertIn("    runs-on: ubuntu-24.04\n", job)
+        self.assertIn("    container:\n      image: ubuntu:22.04\n", job)
+        self.assertIn("target: [win32, win64]", job)
+        self.assertIn("xvfb-run make NOOPT=true -j $(nproc)", job)
+        self.assertIn("xvfb-run ./utils/create-windows-installer.sh", job)
+        self.assertNotIn("seccomp=unconfined", job)
+        self.assertNotIn("privileged:", job)
+        self.assertNotIn("CROSS_COMPILING=true", job)
+        # The original LV2 .ttl generator must still run, not be replaced by
+        # an unconditional success or skipped because Wine is unavailable.
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertRegex(makefile, r"(?m)^gen: cardinal resources dpf/utils/lv2_ttl_generator$")
+        self.assertIn("@$(CURDIR)/dpf/utils/generate-ttl.sh", makefile)
+
     def test_installer_source_matches_its_target_specific_release_pattern(self) -> None:
         for target in ("win32", "win64"):
             with self.subTest(target=target):

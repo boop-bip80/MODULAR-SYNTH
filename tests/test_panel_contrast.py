@@ -196,8 +196,11 @@ class PanelContrastTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("SVG OUTLINE #9AACCC vs fill #20243B: 6.64:1 (x3", result.stdout)
         self.assertIn("SVG OUTLINE #BB96F0 vs fill #261F41: 6.45:1 (x2", result.stdout)
-        self.assertIn("SVG OUTLINE #8169AA vs fill #27213F: 3.30:1 (x5", result.stdout)
-        self.assertIn("SVG OUTLINE #8267B5 vs fill #29233C: 3.25:1 (x1", result.stdout)
+        self.assertIn("SVG OUTLINE #9AACCC vs fill #232A42: 6.17:1 (x9", result.stdout)
+        self.assertIn("SVG OUTLINE #65AEC3 vs fill #172738: 6.07:1 (x8", result.stdout)
+        self.assertIn("SVG OUTLINE #BB96F0 vs fill #27213F: 6.35:1 (x5", result.stdout)
+        self.assertIn("SVG OUTLINE #BB96F0 vs fill #29233C: 6.24:1 (x1", result.stdout)
+        self.assertIn("SVG OUTLINE #9AACCC vs fill #20243B: 6.64:1 (x3", result.stdout)
         self.assertIn("0 low outline swatches", result.stdout)
         strict = self.run_cli(REPO, "--fail-on-low-contrast")
         self.assertEqual(strict.returncode, 0, strict.stdout + strict.stderr)
@@ -205,7 +208,11 @@ class PanelContrastTests(unittest.TestCase):
     def test_degraded_snapshot_ring_still_triggers_strict_warning(self) -> None:
         root = self.fixture()
         source = root / "plugins/ModularSynth/res/Macro8.svg"
-        self.replace_once(source, 'stroke="#8169AA"', 'stroke="#755D9E"')
+        self.replace_once(
+            source,
+            '<g stroke="#BB96F0" stroke-width="1.1" fill="#27213F">',
+            '<g stroke="#755D9E" stroke-width="1.1" fill="#27213F">',
+        )
         strict = self.run_cli(root, "--fail-on-low-contrast")
         self.assertEqual(strict.returncode, 2, strict.stdout + strict.stderr)
         self.assertIn("WARN SVG OUTLINE #755D9E vs fill #27213F: 2.77:1 (x5",

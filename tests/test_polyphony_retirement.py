@@ -15,6 +15,9 @@ from pathlib import Path
 
 SOURCES = Path(__file__).resolve().parents[1] / "plugins" / "ModularSynth" / "src"
 RETIRING_MODULES = ("MorphVCO", "StateFilter")
+DEFERRED_RESET_MODULES = (
+    "MorphVCO", "StateFilter", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold",
+)
 
 
 def method_body(source: str, signature: str) -> str:
@@ -49,9 +52,11 @@ class PolyphonyRetirementTests(unittest.TestCase):
                 source = (SOURCES / f"{module}.cpp").read_text(encoding="utf-8")
                 self.assertRegex(source, r"\bint\s+previousChannels\s*=\s*0\s*;")
                 reset = method_body(source, r"\bvoid\s+onReset\s*\(\s*\)\s*override")
-                self.assertRegex(reset, r"\bpreviousChannels\s*=\s*0\s*;")
+                self.assertIn("pendingReset.store(true, std::memory_order_release);", reset)
+                self.assertNotIn("previousChannels = 0;", reset)
 
                 process = method_body(source, r"\bvoid\s+process\s*\(\s*const\s+ProcessArgs&\s+args\s*\)\s*override")
+                self.assertIn("previousChannels = 0;", process)
                 match = retirement.search(process)
                 self.assertIsNotNone(match, "retired lanes must reset and update the previous count")
                 self.assertLess(
@@ -64,6 +69,34 @@ class PolyphonyRetirementTests(unittest.TestCase):
                     match.end(), first_output,
                     "retired lanes must reset before the wrapper publishes output channels",
                 )
+
+    def test_six_host_resets_only_publish_atomic_requests(self):
+        for module in DEFERRED_RESET_MODULES:
+            with self.subTest(module=module):
+                source = (SOURCES / f"{module}.cpp").read_text(encoding="utf-8")
+                self.assertRegex(source, r"std::atomic<bool>\s+pendingReset\{false\};")
+                legacy = method_body(source, r"\bvoid\s+onReset\s*\(\s*\)\s*override")
+                event = method_body(
+                    source,
+                    r"\bvoid\s+onReset\s*\(\s*const\s+ResetEvent&\s+event\s*\)\s*override",
+                )
+                for callback in (legacy, event):
+                    self.assertIn("pendingReset.store(true, std::memory_order_release);", callback)
+                    self.assertNotIn("voice.reset()", callback)
+                    self.assertNotIn("previousChannels = 0;", callback)
+                    self.assertNotIn("setBrightness", callback)
+                self.assertIn("Module::onReset(event);", event)
+
+                process = method_body(
+                    source, r"\bvoid\s+process\s*\(\s*const\s+ProcessArgs&\s+args\s*\)\s*override"
+                )
+                self.assertRegex(
+                    process,
+                    r"pendingReset\.load\(std::memory_order_acquire\)\s*&&\s*"
+                    r"pendingReset\.exchange\(false, std::memory_order_acq_rel\)",
+                )
+                self.assertRegex(process, r"for\s*\(auto&\s+voice\s*:\s*voices\)\s*voice\.reset\(\);")
+                self.assertIn("previousChannels = 0;", process)
 
 
 if __name__ == "__main__":

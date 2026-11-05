@@ -6,6 +6,17 @@
 
 **Start here:** [Musician getting-started and MIDI wiring](docs/GETTING_STARTED.md) · [Nine-module quick reference](docs/MODULE_QUICK_REFERENCE.md) · [Seventeen example patches](docs/FACTORY_PATCHES.md) · [Source build instructions](docs/BUILDING.md). The examples and guides are usable as **source references** now; playing them requires a successfully built and manually checked fork binary.
 
+## Twelve-agent engineering continuation — 2026-11-05
+
+The latest source checkpoint adds release and host-integration hardening alongside new musical tooling. These are **implemented and locally tested changes**, not a declaration of a finished plugin or product:
+
+- **Host safety and compiler compatibility:** Six original Rack wrappers defer host reset requests to the audio thread; StereoEcho's C++11 debug linker regression is fixed. The nine original real-Rack header checks and all five generated Module Forge variants now require C++11 **and** C++17 compatibility. The actual pinned-header gates must pass for each published revision.
+- **Musical workflows:** Conservative per-HostAudio2-input signal verification distinguishes confirmed first-party paths from opaque third-party or CV routes. An optional standalone FMVoice → DualVCA → StereoEcho renderer produces reproducible stereo WAV demonstrations at 48/96 kHz, without changing historical renders. It is not a live patch/DAW audition.
+- **Instrument and DSP engineering:** `.msinstrument` source inputs reject POSIX final-symlink swaps, non-regular files and unbounded numeric conversions, preserving historical v1/v2 bundle bytes. A standalone C++11 benchmark reports four DSP engines at 48/96 kHz with 1/8/16 voices and detects audio-loop allocations, but **not host CPU/latency**.
+- **Usability and release correctness:** Macro8/FMVoice control outlines have measurable source contrast improvements without geometry changes. The ELF collection gate checks loaded binary segments and requires all nine original identifiers. Source archives explicitly use XZ and require XZ file signatures; Windows Wine cross-builds use a compatible pinned runner without weakening container security. External MOD toolchain archive failures remain unresolved.
+
+**Integrated local verification:** **337/337** repository Python tests, **69/69** Module Forge tests, **127/127** Instrument Builder tests and **60/60** standalone DSP runs (15 suites × four compiler profiles, UBSan fallback) passed. The strict first-party license preflight reported **0 errors / 0 warnings**, all nine SVG panels and 121 widget centers passed source geometry checks, and the strict contrast audit found no measured low-contrast swatches. Local source tests do **not** establish a host-loadable release; consult the [live Actions matrix](https://github.com/boop-bip80/MODULAR-SYNTH/actions) for hosted status and download artifacts.
+
 ## Latest six-agent source integration — 2026-11-05
 
 Six independently developed changes have been integrated and source-tested:

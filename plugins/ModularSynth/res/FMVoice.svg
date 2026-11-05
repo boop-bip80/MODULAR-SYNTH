@@ -16,11 +16,11 @@
   <rect width="180" height="380" fill="url(#base)"/>
   <path d="M0 0h180v3H0z" fill="url(#stripe)"/>
   <path d="M12 44h156 M12 119h156 M12 191h156 M12 253h156 M12 315h156" fill="none" stroke="#42455D"/>
-  <circle cx="50" cy="83" r="28" fill="#20243B" stroke="#61768F" stroke-width="1.5"/>
-  <circle cx="130" cy="83" r="28" fill="#20243B" stroke="#61768F" stroke-width="1.5"/>
-  <circle cx="50" cy="164" r="28" fill="#27213F" stroke="#8169AA" stroke-width="1.5"/>
-  <circle cx="130" cy="164" r="28" fill="#27213F" stroke="#8169AA" stroke-width="1.5"/>
-  <circle cx="90" cy="228" r="24" fill="#20243B" stroke="#61768F" stroke-width="1.5"/>
+  <circle cx="50" cy="83" r="28" fill="#20243B" stroke="#9AACCC" stroke-width="1.5"/>
+  <circle cx="130" cy="83" r="28" fill="#20243B" stroke="#9AACCC" stroke-width="1.5"/>
+  <circle cx="50" cy="164" r="28" fill="#27213F" stroke="#BB96F0" stroke-width="1.5"/>
+  <circle cx="130" cy="164" r="28" fill="#27213F" stroke="#BB96F0" stroke-width="1.5"/>
+  <circle cx="90" cy="228" r="24" fill="#20243B" stroke="#9AACCC" stroke-width="1.5"/>
   <path d="M20 280h140" stroke="#47C8E1" stroke-width="2"/>
   <path d="M34 335h112" stroke="#AE8BF7" stroke-width="2"/>
   <path d="M0 377h180" stroke="url(#stripe)" stroke-width="3"/>

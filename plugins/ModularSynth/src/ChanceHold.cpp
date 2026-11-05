@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <memory>
 
 struct ModularSynthChanceHold : Module {
@@ -27,6 +28,7 @@ struct ModularSynthChanceHold : Module {
 
     std::array<modular_synth::dsp::ChanceHold, 16> voices;
     int previousChannels = 0;
+    std::atomic<bool> pendingReset{false};
 
     ModularSynthChanceHold() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -60,13 +62,22 @@ struct ModularSynthChanceHold : Module {
     }
 
     void onReset() override {
-        for (auto& voice : voices)
-            voice.reset();
-        previousChannels = 0;
-        lights[EXTERNAL_CLOCK_LIGHT].setBrightness(0.0f);
+        pendingReset.store(true, std::memory_order_release);
+    }
+
+    void onReset(const ResetEvent& event) override {
+        Module::onReset(event);
+        pendingReset.store(true, std::memory_order_release);
     }
 
     void process(const ProcessArgs& args) override {
+        if (pendingReset.load(std::memory_order_acquire) &&
+                pendingReset.exchange(false, std::memory_order_acq_rel)) {
+            for (auto& voice : voices)
+                voice.reset();
+            previousChannels = 0;
+            lights[EXTERNAL_CLOCK_LIGHT].setBrightness(0.0f);
+        }
         int channels = 1;
         for (int id = 0; id < NUM_INPUTS; ++id)
             channels = std::max(channels, inputs[id].getChannels());

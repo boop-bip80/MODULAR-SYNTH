@@ -44,23 +44,29 @@ class RackWrapperSmokeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="modular-synth-wrapper-smoke-") as temp:
             # The production Makefile compiles these as separate translation
             # units and renames pluginInstance at preprocessing time.
-            for name in WRAPPER_SOURCES:
-                source = ROOT / "plugins" / "ModularSynth" / "src" / name
-                checked = subprocess.run(
-                    [
-                        "c++", "-std=c++17", "-O1", "-Wall", "-Wextra",
-                        "-Wpedantic", "-DHEADLESS",
-                        "-DpluginInstance=pluginInstance__ModularSynth",
-                        "-I", str(STUBS), "-fsyntax-only", str(source),
-                    ],
-                    cwd=ROOT, capture_output=True, text=True, timeout=90,
-                    check=False,
-                )
-                self.assertEqual(
-                    checked.returncode, 0,
-                    f"{name} failed isolated HEADLESS shim compilation:\n"
-                    + checked.stdout + checked.stderr,
-                )
+            # Cardinal's production Makefile still compiles some wrappers in
+            # GNU C++11 mode. The shim smoke harness itself uses newer test
+            # utilities, so independently check every wrapper in both source
+            # dialects instead of assuming a C++17-only smoke is sufficient.
+            for dialect in ("gnu++11", "c++17"):
+                for name in WRAPPER_SOURCES:
+                    with self.subTest(dialect=dialect, wrapper=name):
+                        source = ROOT / "plugins" / "ModularSynth" / "src" / name
+                        checked = subprocess.run(
+                            [
+                                "c++", f"-std={dialect}", "-O1", "-Wall", "-Wextra",
+                                "-Wpedantic", "-DHEADLESS",
+                                "-DpluginInstance=pluginInstance__ModularSynth",
+                                "-I", str(STUBS), "-fsyntax-only", str(source),
+                            ],
+                            cwd=ROOT, capture_output=True, text=True, timeout=90,
+                            check=False,
+                        )
+                        self.assertEqual(
+                            checked.returncode, 0,
+                            f"{name} failed isolated {dialect} HEADLESS shim compilation:\n"
+                            + checked.stdout + checked.stderr,
+                        )
             profiles = (
                 ("strict", ["-O1"]),
                 ("production", ["-O3", "-ffast-math", "-fno-finite-math-only"]),

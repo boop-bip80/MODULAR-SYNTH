@@ -25,6 +25,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = ROOT / "plugins" / "ModularSynth" / "src"
 MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA")
+# Cardinal's production plugin builds still use gnu++11 on several targets.
+# Keep the newer dialect as a second independent compatibility check: a
+# successful gnu++17 syntax test alone does not demonstrate production ABI.
+CXX_STANDARDS = ("gnu++11", "gnu++17")
 RACK_SUBMODULE_HEADERS = {
     "dep/glfw": "include/GLFW/glfw3.h",
     "dep/nanosvg": "src/nanosvg.h",
@@ -126,8 +130,13 @@ def check_dependencies(rack: Path, dpf: Path, jansson: Path) -> None:
     require_header(rack / "dep" / "speexdsp" / "include" / "speex" / "speexdsp_config_types.h.in")
 
 
-def compiler_flags(rack: Path, dpf: Path, jansson: Path, temp_types: Path) -> list[str]:
+def compiler_flags(
+    rack: Path, dpf: Path, jansson: Path, temp_types: Path,
+    standard: str = "gnu++11",
+) -> list[str]:
     """Mirror the relevant Cardinal Linux HEADLESS module build definitions."""
+    if standard not in CXX_STANDARDS:
+        raise PreflightError(f"Unsupported real-Rack C++ dialect: {standard!r}")
     include_dirs = (
         jansson,
         temp_types,  # pinned SpeexDSP generated config types, not a fake Rack API
@@ -145,7 +154,7 @@ def compiler_flags(rack: Path, dpf: Path, jansson: Path, temp_types: Path) -> li
         dpf / "dgl" / "src" / "nanovg", dpf / "distrho",
     )
     flags = [
-        "-std=gnu++17", "-fsyntax-only", "-pthread",
+        f"-std={standard}", "-fsyntax-only", "-pthread",
         "-DHEADLESS", "-DARCH_LIN", "-DUSING_CARDINAL_NOT_RACK",
         "-DpluginInstance=pluginInstance__ModularSynth",
         "-DSIMDE_ACCURACY_PREFERENCE=0", "-DSIMDE_FAST_CONVERSION_RANGE",
@@ -255,7 +264,9 @@ def validate_linked_model_symbols(
         raise PreflightError(f"Unresolved first-party model symbols: {unresolved!r}")
 
 
-def run_link_smoke(compiler: str, flags: list[str], output_dir: Path) -> None:
+def run_link_smoke(
+    compiler: str, flags: list[str], output_dir: Path, standard: str,
+) -> None:
     """Compile genuine SDK wrappers and link a temporary ELF with host imports.
 
     The result is NOT a loadable Cardinal/Rack plugin: no host library, entry
@@ -263,6 +274,8 @@ def run_link_smoke(compiler: str, flags: list[str], output_dir: Path) -> None:
     """
     if sys.platform != "linux":
         raise PreflightError("The first-party object-link smoke supports Linux only")
+    if [flag for flag in flags if flag.startswith("-std=")] != [f"-std={standard}"]:
+        raise PreflightError(f"Link smoke dialect/flags mismatch for {standard}")
     nm = shutil.which("nm")
     if nm is None:
         raise PreflightError("nm (binutils) is required to inspect linked model symbols")
@@ -278,9 +291,11 @@ def run_link_smoke(compiler: str, flags: list[str], output_dir: Path) -> None:
             stderr=subprocess.STDOUT, check=False,
         )
         if result.returncode or not output.is_file():
-            raise PreflightError(f"Cannot compile real-Rack object {module}:\n{result.stdout}")
+            raise PreflightError(
+                f"Cannot compile real-Rack object {module} ({standard}):\n{result.stdout}"
+            )
         objects.append(output)
-        print(f"PASS: compiled {module} real-Rack HEADLESS object")
+        print(f"PASS: compiled {module} real-Rack HEADLESS object ({standard})")
 
     library = output_dir / "libModularSynthFirstPartyLinkSmoke.so"
     result = subprocess.run(
@@ -289,7 +304,7 @@ def run_link_smoke(compiler: str, flags: list[str], output_dir: Path) -> None:
         stderr=subprocess.STDOUT, check=False,
     )
     if result.returncode or not library.is_file() or library.stat().st_size < 4:
-        raise PreflightError(f"Cannot link first-party HEADLESS smoke ELF:\n{result.stdout}")
+        raise PreflightError(f"Cannot link first-party HEADLESS smoke ELF ({standard}):\n{result.stdout}")
     if library.read_bytes()[:4] != b"\x7fELF":
         raise PreflightError("First-party link smoke did not produce an ELF file")
 
@@ -304,8 +319,8 @@ def run_link_smoke(compiler: str, flags: list[str], output_dir: Path) -> None:
         results.append(symbols.stdout)
     validate_linked_model_symbols(*results)
     print(
-        f"PASS: {len(objects)} pinned-Rack HEADLESS objects linked into one "
-        "temporary ELF, with nine defined first-party models; "
+        f"PASS: {len(objects)} pinned-Rack HEADLESS objects ({standard}) "
+        "linked into one temporary ELF, with nine defined first-party models; "
         "Rack/host imports intentionally unresolved. NOT a Cardinal plugin."
     )
 
@@ -339,22 +354,37 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="modular-real-rack-types-") as temporary:
             types = Path(temporary)
             (types / "speexdsp_config_types.h").write_text(render_linux_speex_types(template))
-            flags = compiler_flags(rack, dpf, jansson, types)
             if args.link_smoke:
                 check_registration_contract()
-                run_link_smoke(compiler, flags, types)
-                return 0
-            for module in MODULES:
-                source = MODULE_DIR / f"{module}.cpp"
-                completed = subprocess.run(
-                    [compiler, *flags, str(source)], cwd=ROOT, text=True,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                for standard in CXX_STANDARDS:
+                    objects = types / standard
+                    objects.mkdir()
+                    flags = compiler_flags(rack, dpf, jansson, types, standard)
+                    run_link_smoke(compiler, flags, objects, standard)
+                print(
+                    f"PASS: {len(MODULES)} originals linked separately under "
+                    f"both {', '.join(CXX_STANDARDS)}; temporary ELF only, not a host plugin"
                 )
-                if completed.returncode:
-                    print(f"FAIL: {module} (real pinned Rack headers)\n{completed.stdout}", file=sys.stderr)
-                    return 1
-                print(f"PASS: {module} (real pinned Rack headers)")
-        print(f"PASS: {len(MODULES)}/{len(MODULES)} original HEADLESS translation units; syntax only, no link/host test")
+                return 0
+            for standard in CXX_STANDARDS:
+                flags = compiler_flags(rack, dpf, jansson, types, standard)
+                for module in MODULES:
+                    source = MODULE_DIR / f"{module}.cpp"
+                    completed = subprocess.run(
+                        [compiler, *flags, str(source)], cwd=ROOT, text=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                    )
+                    if completed.returncode:
+                        print(
+                            f"FAIL: {module} ({standard}; real pinned Rack headers)\n"
+                            f"{completed.stdout}", file=sys.stderr,
+                        )
+                        return 1
+                    print(f"PASS: {module} ({standard}; real pinned Rack headers)")
+        print(
+            f"PASS: {len(MODULES)} original HEADLESS translation units under "
+            f"both {', '.join(CXX_STANDARDS)}; syntax only, no link/host test"
+        )
         return 0
     except (PreflightError, OSError) as exc:
         print(f"Real Rack header preflight unavailable: {exc}\n\n{SETUP}", file=sys.stderr)

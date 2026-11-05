@@ -211,7 +211,7 @@ class GeneratedTriangleTests(unittest.TestCase):
             self.assertEqual(len(edits), 6)
             self.assertFalse((ROOT / "plugins/ModularSynth/src/ForgeTriangle.cpp").exists())
 
-    @unittest.skipUnless(shutil.which("c++"), "C++17 compiler unavailable")
+    @unittest.skipUnless(shutil.which("c++"), "C++ compiler unavailable")
     def test_triangle_compiles_and_reduces_folded_odd_harmonics(self):
         with tempfile.TemporaryDirectory(prefix="module-forge-triangle-dsp-") as tmp:
             folder = generate("ForgeTriangle", "Forge Triangle", Path(tmp),
@@ -219,7 +219,7 @@ class GeneratedTriangleTests(unittest.TestCase):
             probe = Path(tmp) / "triangle_probe.cpp"
             probe.write_text(PROBE, encoding="utf-8")
             common = [
-                shutil.which("c++"), "-std=c++17", "-O2", "-Wall", "-Wextra",
+                shutil.which("c++"), "-O2", "-Wall", "-Wextra",
                 "-Wpedantic", "-Werror", "-DHEADLESS",
                 "-DpluginInstance=pluginInstance__ModularSynth",
                 "-I", str(ROOT / "tests/rack_stub"),
@@ -227,9 +227,12 @@ class GeneratedTriangleTests(unittest.TestCase):
                 "-I", str(folder),
             ]
             modes = (
-                ("o2", ()),
-                ("production_fast_math", ("-ffast-math", "-fno-finite-math-only")),
-                ("strict_fast_math", ("-ffast-math",)),
+                ("cxx11_o2", ("-std=gnu++11",)),
+                ("cxx11_strict_fast_math", ("-std=gnu++11", "-ffast-math")),
+                ("cxx17_o2", ("-std=gnu++17",)),
+                ("cxx17_production_fast_math", ("-std=gnu++17", "-ffast-math",
+                                                 "-fno-finite-math-only")),
+                ("cxx17_strict_fast_math", ("-std=gnu++17", "-ffast-math")),
             )
             for name, flags in modes:
                 with self.subTest(mode=name):

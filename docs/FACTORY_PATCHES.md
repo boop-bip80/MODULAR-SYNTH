@@ -48,6 +48,15 @@ The original three patches were initially parsed as JSON and checked for:
 
 **Current offline checks:** `tools/patches/patch_inspector.py` validates structural graph integrity, source-backed original-module ports and checked-in Cardinal HostMIDI/HostTime/HostAudio2 port contracts; `tools/patches/factory_patch_coverage.py` confirms every original `ModularSynth` model is represented and each original preset's advertised routes/settings exist. Other bundled modules' ports remain unverified. This is saved-source evidence only.
 
+**Per-host-channel routing scrutiny:** `tools/patches/patch_audio_routes.py` now reports `source_verified_host_inputs` and `unverified_wired_host_inputs` separately for every connected HostAudio2 jack. This closes an evidence gap: a known MorphVCO signal path into **Left** must not be counted as evidence for a different **Right** cable carrying control CV or going through an opaque third-party processor. The existing `--require-source-verified-signal-route` checks whether each known first-party generator reaches *some* HostAudio2 input; it does not require source-level proof for all host jacks. The new independent **opt-in** `--require-source-verified-host-inputs` returns 1 when no HostAudio2 input is wired or when any wired host jack lacks a complete source-verified first-party signal-port chain (invalid saved patches still return 2).
+
+```sh
+python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Morph_VCO_Performance.vcv --require-source-verified-host-inputs
+python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Aurora_Glass_Bells.vcv --json
+```
+
+In the checked-in source, Morph VCO Performance has **2/2 wired host inputs** supported by a typed MorphVCO → DualVCA → HostAudio2 chain. Aurora Glass Bells has **0/2** under this deliberately narrow first-party gate because the audio passes through bundled **Fundamental/VCA-1**, whose internal audio-port transfer is not covered by the verified first-party contracts. Its two saved host cables and patch structure are valid; **0/2 is not evidence of silence or a malfunction**. Nor does 2/2 prove an audible signal, independent stereo content, gain safety, or DAW compatibility. Do not apply this strict gate as a blanket rejection of factory patches using legitimate but opaque bundled modules.
+
 **Not yet verified:** loading the patches in a compiled MODULAR-SYNTH binary, rendering audio, listening for expected sonic results, clipping/CPU profiling, and loading/saving from real DAWs. Those are explicit acceptance checks before these patches are described as production-validated.
 
 ## Manual acceptance test

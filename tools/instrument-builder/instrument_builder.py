@@ -59,7 +59,12 @@ def _is_int(value: object) -> bool:
 def _number(value: object, minimum: float, maximum: float, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise InstrumentError(f"{field} must be a number")
-    numeric = float(value)
+    try:
+        numeric = float(value)
+    except (OverflowError, ValueError) as exc:
+        # Rack patches are untrusted JSON. A finite-looking integer token may
+        # still be too large to convert to an IEEE float (e.g. 10**1000).
+        raise InstrumentError(f"{field} outside {minimum:g}..{maximum:g}") from exc
     if not math.isfinite(numeric) or not minimum <= numeric <= maximum:
         raise InstrumentError(f"{field} outside {minimum:g}..{maximum:g}")
     return numeric
@@ -450,9 +455,26 @@ def read_bundle(bundle_bytes: bytes) -> tuple[dict, bytes]:
 
 
 def _read_limited(path: Path, maximum: int, description: str) -> bytes:
-    if path.is_symlink() or not path.is_file():
+    # Check the *opened descriptor*, not a pathname followed by a later open.
+    # An adversary could otherwise replace a checked regular file with a
+    # symlink between is_symlink()/is_file() and Path.open().
+    flags = os.O_RDONLY
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY  # Windows must preserve raw ZIP/JSON bytes.
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    elif path.is_symlink():
+        # Best-effort fallback for platforms without no-follow descriptor opens.
         raise InstrumentError(f"{description} must be a regular non-symlink file")
-    with path.open("rb") as source:
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK  # Do not hang on a raced-in FIFO.
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise InstrumentError(f"{description} must be a regular non-symlink file") from exc
+    with os.fdopen(descriptor, "rb") as source:
+        if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+            raise InstrumentError(f"{description} must be a regular non-symlink file")
         data = source.read(maximum + 1)
     if len(data) > maximum:
         raise InstrumentError(f"{description} exceeds size limit")

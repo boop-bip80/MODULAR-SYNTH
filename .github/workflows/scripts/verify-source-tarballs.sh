@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Validate both source archives before a fork-owned release can publish them.
-# GNU tar --lzma matches the existing Makefile recipe despite the .tar.xz names.
+# Both source archives use standard XZ streams, matching their .tar.xz names.
 set -euo pipefail
 
 if [[ $# -ne 1 || ! "$1" =~ ^[0-9][0-9A-Za-z._+-]*$ ]]; then
@@ -38,10 +38,18 @@ for archive in "../cardinal-${version}.tar.xz" "../cardinal+deps-${version}.tar.
         exit 1
     fi
 
+    # xz -t auto-detects the legacy LZMA-alone format, so requiring a
+    # successful decompression is not enough to certify a .tar.xz payload.
+    # Pin the 6-byte XZ container magic before parsing the tar stream.
+    if [[ "$(od -An -tx1 -N6 "$archive" | tr -d '[:space:]')" != "fd377a585a00" ]]; then
+        echo "Source release archive is not an XZ container: $archive (legacy LZMA encoding is not accepted)" >&2
+        exit 1
+    fi
+
     # A readable tar stream can still be stale, mis-rooted or missing modules.
     # Reject incomplete first-party source and panels before upload.
     # The versioned root follows Makefile's existing tar --transform rules.
-    if ! tar --lzma -tf "$archive" | awk -v root="cardinal-${version}" -v module_names="$module_slugs" '
+    if ! tar --xz -tf "$archive" | awk -v root="cardinal-${version}" -v module_names="$module_slugs" '
         BEGIN {
             required["LICENSE"] = 1
             required["README.md"] = 1
@@ -93,7 +101,7 @@ for archive in "../cardinal-${version}.tar.xz" "../cardinal+deps-${version}.tar.
         exit 1
     fi
     # A same-named but stale manifest can otherwise masquerade as current.
-    if ! cmp -s "plugins/ModularSynth/plugin.json" <(tar --lzma -xOf "$archive" "cardinal-${version}/plugins/ModularSynth/plugin.json" 2>/dev/null); then
+    if ! cmp -s "plugins/ModularSynth/plugin.json" <(tar --xz -xOf "$archive" "cardinal-${version}/plugins/ModularSynth/plugin.json" 2>/dev/null); then
         echo "Source archive manifest differs from current checkout: $archive" >&2
         exit 1
     fi

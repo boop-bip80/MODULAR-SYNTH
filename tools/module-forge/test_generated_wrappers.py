@@ -227,7 +227,7 @@ class GeneratedWrapperTests(unittest.TestCase):
                           kind="effect")
         return oscillator, effect
 
-    @unittest.skipUnless(shutil.which("c++"), "C++17 compiler unavailable")
+    @unittest.skipUnless(shutil.which("c++"), "C++ compiler unavailable")
     def test_generated_wrappers_compile_and_process_with_headless_test_shim(self) -> None:
         with tempfile.TemporaryDirectory(prefix="module-forge-wrapper-test-") as temp:
             root = Path(temp)
@@ -235,12 +235,15 @@ class GeneratedWrapperTests(unittest.TestCase):
             self.assertEqual(check_module(oscillator), [])
             self.assertEqual(check_module(effect), [])
             modes = (
-                ("o2", ()),
-                ("production_fast_math", ("-ffast-math", "-fno-finite-math-only")),
-                ("strict_fast_math", ("-ffast-math",)),
+                ("cxx11_o2", ("-std=gnu++11",)),
+                ("cxx11_production_fast_math", ("-std=gnu++11", "-ffast-math",
+                                                "-fno-finite-math-only")),
+                ("cxx11_strict_fast_math", ("-std=gnu++11", "-ffast-math")),
+                ("cxx17_o2", ("-std=gnu++17",)),
+                ("cxx17_strict_fast_math", ("-std=gnu++17", "-ffast-math")),
             )
             common = [
-                shutil.which("c++"), "-std=c++17", "-O2", "-Wall", "-Wextra",
+                shutil.which("c++"), "-O2", "-Wall", "-Wextra",
                 "-Wpedantic", "-Werror", "-DHEADLESS",
                 "-DpluginInstance=pluginInstance__ModularSynth",
                 "-I", str(STUB), "-I", str(COLLECTION),
