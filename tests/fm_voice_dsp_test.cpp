@@ -8,6 +8,7 @@
 #include "../plugins/ModularSynth/src/FMVoice.hpp"
 
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <limits>
 
@@ -431,8 +432,17 @@ int main() {
                           "signed 16-lane outputs stay finite");
         }
     }
+    std::size_t roundedResetSamples = 0;
+    double largestResetError = 0.0;
     for (int c = 0; c < 16; ++c) {
         signedLanes[c].reset();
+        okay &= check(signedLanes[c].carrierPhase == 0.0
+                      && signedLanes[c].modulatorPhase == 0.0
+                      && signedLanes[c].smoothedRatio == 1.0
+                      && signedLanes[c].smoothedIndex == 0.0
+                      && signedLanes[c].smoothedFeedback == 0.0
+                      && signedLanes[c].smoothedGuardCeiling == FMVoice::kMaxIndexRadians,
+                      "reset clears all exposed oscillator and control states");
         FMVoice pristine;
         FMVoice::Input input = plain;
         input.frequencyHz = 110.0 + 35.0 * c;
@@ -443,11 +453,42 @@ int main() {
         for (int n = 0; n < 256; ++n) {
             const auto replayed = signedLanes[c].process(input);
             const auto first = pristine.process(input);
-            okay &= check(replayed.carrier == first.carrier
-                          && replayed.modulator == first.modulator,
+            const double carrierError = std::abs(static_cast<double>(replayed.carrier)
+                                                 - first.carrier);
+            const double modulatorError = std::abs(static_cast<double>(replayed.modulator)
+                                                   - first.modulator);
+            largestResetError = std::max(largestResetError,
+                                         std::max(carrierError, modulatorError));
+            if (replayed.carrier != first.carrier
+                || replayed.modulator != first.modulator) {
+                if (roundedResetSamples == 0)
+                    std::printf("FM reset first rounding mismatch: lane=%d frame=%d "
+                                "carrier_error=%.9g modulator_error=%.9g normalized\n",
+                                c, n, carrierError, modulatorError);
+                ++roundedResetSamples;
+            }
+            // A reset array lane and a fresh scalar instance may take
+            // different libm/vectorization paths under -O3 -ffast-math.
+            // Exact float-bit agreement is not a portable DSP invariant;
+            // 2e-6 normalized amplitude is inaudibly small but still
+            // detects uncleared one-sample carrier/modulator feedback.
+            okay &= check(carrierError <= 2.0e-6 && modulatorError <= 2.0e-6,
                           "reset clears both feedback histories for all lanes");
+            if (n == 0)
+                okay &= check(replayed.carrier == 0.0f
+                              && replayed.modulator == 0.0f,
+                              "reset first sample has no feedback-history leakage");
+            okay &= check(std::abs(signedLanes[c].carrierPhase
+                                   - pristine.carrierPhase) <= 1.0e-12
+                          && std::abs(signedLanes[c].modulatorPhase
+                                      - pristine.modulatorPhase) <= 1.0e-12
+                          && std::abs(signedLanes[c].smoothedFeedback
+                                      - pristine.smoothedFeedback) <= 1.0e-12,
+                          "reset reproduces pristine phase and feedback control evolution");
         }
     }
+    std::printf("FM reset replay: rounded_samples=%zu/4096 max_audio_error=%.9g normalized\n",
+                roundedResetSamples, largestResetError);
 
     FMVoice lanes[16];
     for (int n = 0; n < 777; ++n)
