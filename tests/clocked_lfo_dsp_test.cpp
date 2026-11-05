@@ -224,6 +224,86 @@ void testClockBounceTimeoutAndFallback() {
            "disconnecting clock must preserve oscillator phase");
 }
 
+void testMissingExternalBeatKeepsTempoAndDividedPhase() {
+    ClockedLFO lfo;
+    ClockedLFO::Input in;
+    in.sampleRateHz = 1000.0;
+    in.log2RateHz = 0.0;
+    in.clockConnected = true;
+    in.ratioIndex = 0.0; // one divided cycle per four external beats
+
+    // A 120 BPM pulse stream drops one beat at t=1.5 seconds, then recovers.
+    // A single missing trigger is not evidence that the music halved tempo.
+    for (int frame = 0; frame <= 3000; ++frame) {
+        in.clockVoltage = frame == 0 || frame == 500 || frame == 1000 ||
+                          frame == 2000 || frame == 2500 || frame == 3000
+            ? 5.0 : 0.0;
+        const auto v = lfo.process(in);
+        if (frame == 1000)
+            expect(v.clockLocked && std::abs(v.unshiftedPhase - 0.5) < 1e-9,
+                   "baseline quarter-rate lock must reach beat two");
+        if (frame == 2000)
+            expect(v.clockLocked && std::abs(v.frequencyHz - 0.5) < 1e-9 &&
+                   std::abs(v.unshiftedPhase) < 1e-9,
+                   "one lost beat must preserve 120 BPM and advance two quarter beats");
+        if (frame == 2500)
+            expect(v.clockLocked && std::abs(v.frequencyHz - 0.5) < 1e-9 &&
+                   std::abs(v.unshiftedPhase - 0.25) < 1e-9,
+                   "beat after dropout must resume its correct divided phase");
+    }
+
+    // Two missed triggers (a three-beat interval) also preserve the original
+    // beat grid without reducing the divided oscillator's frequency.
+    ClockedLFO tripled;
+    for (int frame = 0; frame <= 2500; ++frame) {
+        in.clockVoltage = frame == 0 || frame == 500 || frame == 1000 || frame == 2500
+            ? 5.0 : 0.0;
+        const auto v = tripled.process(in);
+        if (frame == 2500)
+            expect(v.clockLocked && std::abs(v.frequencyHz - 0.5) < 1e-9 &&
+                   std::abs(v.unshiftedPhase - 0.25) < 1e-9,
+                   "two lost beats must advance three quarter beats at prior tempo");
+    }
+}
+
+void testSustainedHalfTempoBeatsEventuallyRelock() {
+    ClockedLFO lfo;
+    ClockedLFO::Input in;
+    in.sampleRateHz = 1000.0;
+    in.log2RateHz = 0.0;
+    in.clockConnected = true;
+    in.ratioIndex = 2.0; // 1 oscillator cycle per beat
+
+    // Transition from 120 BPM to 60 BPM after one full beat. The first 2x
+    // interval could be a packet loss; the second confirms the new tempo.
+    for (int frame = 0; frame <= 4000; ++frame) {
+        in.clockVoltage = frame == 0 || frame == 500 || frame == 1000 ||
+                          frame == 2000 || frame == 3000 || frame == 4000
+            ? 5.0 : 0.0;
+        const auto v = lfo.process(in);
+        if (frame == 2000)
+            expect(v.clockLocked && std::abs(v.frequencyHz - 2.0) < 1e-9,
+                   "first half-tempo gap must be conservatively treated as a missing beat");
+        if (frame == 3000)
+            expect(v.clockLocked && std::abs(v.frequencyHz - 1.0) < 1e-9,
+                   "second consecutive slow interval must accept deliberate half tempo");
+        if (frame == 4000)
+            expect(v.clockLocked && std::abs(v.frequencyHz - 1.0) < 1e-9,
+                   "confirmed slower tempo must remain stable on subsequent beats");
+    }
+
+    // Non-integral tempo changes should still acquire immediately.
+    ClockedLFO nonIntegral;
+    for (int frame = 0; frame <= 1600; ++frame) {
+        in.clockVoltage = frame == 0 || frame == 500 || frame == 1000 || frame == 1600
+            ? 5.0 : 0.0;
+        const auto v = nonIntegral.process(in);
+        if (frame == 1600)
+            expect(v.clockLocked && std::abs(v.frequencyHz - 1.0 / 0.6) < 1e-9,
+                   "non-integral slowing must not be delayed by dropout heuristic");
+    }
+}
+
 void testSampleRateChangesAndFractionalPeriod() {
     ClockedLFO lfo;
     ClockedLFO::Input in;
@@ -354,6 +434,8 @@ int main() {
     testPhaseAndResetSchmitt();
     testExternalClockRatiosAndTempo();
     testClockBounceTimeoutAndFallback();
+    testMissingExternalBeatKeepsTempoAndDividedPhase();
+    testSustainedHalfTempoBeatsEventuallyRelock();
     testSampleRateChangesAndFractionalPeriod();
     testInvalidRatesAndHostileCVUnderFastMath();
     testSixteenIndependentPolyphonicLanesAndNoAllocation();

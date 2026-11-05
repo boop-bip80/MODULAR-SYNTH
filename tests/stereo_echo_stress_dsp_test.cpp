@@ -175,6 +175,42 @@ void testOneMillisecondLongFeedbackTail() {
                 lastNonzeroSample, subnormalSamples, peak);
 }
 
+void testSmoothedControlsReachExactSilentTargets() {
+    // The feedback ring already silences tiny *audio* samples. However the
+    // separate one-pole FEEDBACK/WET/PING-PONG controls could asymptotically
+    // decay into double subnormals and stay nonzero indefinitely after their
+    // host controls moved to exact zero. That costs CPU on long quiet patches.
+    StereoEchoDSP echo;
+    constexpr int rate = 48000;
+    const auto initialized = echo.process(0.0, 0.0, rate, 7.0, 0.9, 1.0, 1.0);
+    expect(initialized.left == 0.0f && initialized.right == 0.0f,
+           "zero-input controls must not synthesize phantom output");
+    const auto before = allocationCalls;
+    for (int frame = 0; frame < rate * 2; ++frame) {
+        const auto out = echo.process(0.0, 0.0, rate, 7.0, 0.0, 0.0, 0.0);
+        if (out.left != 0.0f || out.right != 0.0f) {
+            expect(false, "smoothed zero controls must stay audibly silent");
+            break;
+        }
+    }
+    expect(echo.currentFeedback() == 0.0
+           && echo.currentWet() == 0.0
+           && echo.currentCrossfeed() == 0.0,
+           "all smoothed zero targets must converge exactly, not persist as denormals");
+    expect(allocationCalls == before,
+           "control convergence must remain allocation-free in audio process");
+
+    // Host/automation callbacks may submit finite but microscopic positive
+    // control values. Reject an unmusically tiny target before it enters the
+    // DSP's state, including on the first frame and after a sample-rate reset.
+    StereoEchoDSP tiny;
+    tiny.process(0.0, 0.0, rate, 7.0, 1.0e-310, 1.0e-310, 1.0e-310);
+    expect(tiny.currentFeedback() == 0.0
+           && tiny.currentWet() == 0.0
+           && tiny.currentCrossfeed() == 0.0,
+           "microscopic host control targets must not inject subnormal state");
+}
+
 void testLongSlewsAtExtremeRates() {
     for (int rate : {48000, 192000, 384000}) {
         StereoEchoDSP echo;
@@ -348,6 +384,7 @@ void testDeterministicSixteenLaneRateAndCvStress() {
 int main() {
     testDryInputAndOutputDenormalFloor();
     testOneMillisecondLongFeedbackTail();
+    testSmoothedControlsReachExactSilentTargets();
     testLongSlewsAtExtremeRates();
     testChangingSampleRateInvalidatesHistory();
     testDeterministicSixteenLaneRateAndCvStress();
@@ -355,7 +392,7 @@ int main() {
         std::fprintf(stderr, "StereoEcho long-run stress: %d failure(s)\n", failures);
         return 1;
     }
-    std::puts("PASS: StereoEcho dry/output denormal floor, 16-lane CV/rate stress, bounded tail, "
-              "denormal extinction and zero process/reset allocations");
+    std::puts("PASS: StereoEcho dry/output/control denormal floors, 16-lane CV/rate stress, "
+              "bounded tail, exact-zero control convergence and zero audio-thread allocations");
     return 0;
 }

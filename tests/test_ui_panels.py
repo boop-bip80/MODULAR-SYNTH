@@ -11,6 +11,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "validate_panels.py"
+RAIL_CHECKER = REPO / "tools" / "ui-check" / "port_rail_audit.py"
 MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA")
 
 
@@ -33,6 +34,12 @@ class PanelGeometryTests(unittest.TestCase):
             capture_output=True, text=True, check=False
         )
 
+    def run_rail_checker(self, root: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(RAIL_CHECKER), "--root", str(root)],
+            capture_output=True, text=True, check=False
+        )
+
     def replace_one(self, path: Path, before: str, after: str) -> None:
         source = path.read_text(encoding="utf-8")
         self.assertIn(before, source, f"fixture changed unexpectedly: {path}")
@@ -44,6 +51,83 @@ class PanelGeometryTests(unittest.TestCase):
         self.assertIn("PASS: 9 SVG panels", result.stdout)
         self.assertIn("121 conservative candidate widget centers", result.stdout)
         self.assertIn("visual rendering/overlap not verified", result.stdout)
+
+    def test_source_signal_rails_cover_real_ports_and_labels(self) -> None:
+        result = self.run_rail_checker(REPO)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("5 rails, 14 jacks and 14 labels", result.stdout)
+        self.assertIn("DualVCA/dualInputRail: 4 ports", result.stdout)
+        self.assertIn("StereoEcho/echoMixCvRail: 1 ports", result.stdout)
+        self.assertIn("StereoEcho/echoOutputRail: 2 ports", result.stdout)
+        self.assertIn("no rendered contrast", result.stdout)
+
+    def test_signal_rail_catches_port_relocation_inside_panel(self) -> None:
+        root = self.fixture()
+        cpp = root / "plugins/ModularSynth/src/DualVCA.cpp"
+        self.replace_one(cpp, "Vec(156.0f, 268.0f)", "Vec(174.0f, 268.0f)")
+        # 174 is inside the 180-px physical panel but outside the input rail.
+        self.assertEqual(self.run_checker(root).returncode, 0)
+        result = self.run_rail_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CV_B_INPUT center (174, 268) outside", result.stderr)
+
+    def test_signal_rail_catches_removed_input_zone(self) -> None:
+        root = self.fixture()
+        svg = root / "plugins/ModularSynth/res/StereoEcho.svg"
+        self.replace_one(svg, 'id="echoMixCvRail"', 'id="oldMixCvRail"')
+        result = self.run_rail_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("echoMixCvRail: expected exactly one", result.stderr)
+
+    def test_signal_rail_catches_input_retyped_as_output(self) -> None:
+        root = self.fixture()
+        cpp = root / "plugins/ModularSynth/src/StereoEcho.cpp"
+        self.replace_one(
+            cpp,
+            "addInput(createInputCentered<PJ301MPort>(Vec(35.0f, 340.0f)",
+            "addOutput(createOutputCentered<PJ301MPort>(Vec(35.0f, 340.0f)"
+        )
+        result = self.run_rail_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing=['Input:MIX_CV_INPUT']", result.stderr)
+        self.assertIn("unexpected=['Output:MIX_CV_INPUT']", result.stderr)
+
+    def test_signal_rail_catches_moved_label(self) -> None:
+        root = self.fixture()
+        cpp = root / "plugins/ModularSynth/src/StereoEcho.cpp"
+        self.replace_one(
+            cpp,
+            'nvgText(args.vg, 35.0f, 306.0f, "MIX CV", nullptr);',
+            'nvgText(args.vg, 35.0f, 291.0f, "MIX CV", nullptr);'
+        )
+        result = self.run_rail_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("label 'MIX CV' outside solid rail", result.stderr)
+
+    def test_signal_rail_catches_low_contrast_label_and_border(self) -> None:
+        root = self.fixture()
+        svg = root / "plugins/ModularSynth/res/DualVCA.svg"
+        self.replace_one(svg, 'stroke="#78D5DB"', 'stroke="#182D3B"')
+        result = self.run_rail_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("border/fill", result.stderr)
+
+        root = self.fixture()
+        cpp = root / "plugins/ModularSynth/src/DualVCA.cpp"
+        self.replace_one(cpp, "nvgRGB(0x9F, 0xE9, 0xF8)",
+                         "nvgRGB(0x16, 0x2D, 0x3C)")
+        result = self.run_rail_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("label 'A IN' palette", result.stderr)
+
+    def test_signal_rail_catches_port_decoration_clipping(self) -> None:
+        root = self.fixture()
+        svg = root / "plugins/ModularSynth/res/DualVCA.svg"
+        self.replace_one(svg, 'cx="24" cy="268" r="13.5"',
+                         'cx="24" cy="268" r="19"')
+        result = self.run_rail_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("AUDIO_A_INPUT jack ring protrudes", result.stderr)
 
     def test_stereo_echo_bad_16hp_width_rejected(self) -> None:
         root = self.fixture()

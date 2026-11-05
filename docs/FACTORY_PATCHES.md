@@ -12,6 +12,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_Chance_Hold_FM_Drift.vcv` | Seeded probabilistic random CV glides the FM Voice modulation index during MIDI performance | Play MIDI with the 1 Hz, 75% Chance Hold source; adjust chance, glide and quantize to vary timbre |
 | `MODULAR_-_Aurora_Glass_Bells.vcv` | Eight-voice FM bell patch with envelope-gated notes, attenuated random filter drift, LP/BP spectral stereo split and five Macro8 scene controls | Hold MIDI chords; recall Dawn/Prism/Halo/Dusk A–D scenes; Chance Hold wanders freely without DAW transport |
 | `MODULAR_-_Night_Lanterns_Dual_Timbre.vcv` | Eight-voice dark MorphVCO/FoldDrive/StateFilter left layer opposite a near-harmonic FMVoice right layer, independently envelope-gated by DualVCA, through crossfeeding StereoEcho | Play MIDI chords; start the host transport for four-beat LFO pulse-width/fold-bias motion; recall Ember/Lantern/Flare/Dusk Macro8 A–D scenes |
+| `MODULAR_-_Reed_Chamber_Organ.vcv` | Original eight-voice two-manual combo-organ *sketch*: detuned 8-foot and octave-up 4-foot MorphVCO voices, per-note ADSR/DualVCA, gentle low-pass tone shaping, 3 Hz free-running vibrato and two source-verified stereo echo paths | Play held MIDI chords or detached organ stabs; recall Chapel/Reed/Swirl/Shimmer A–D tone-color scenes; no transport necessary, and this is **not** a tonewheel or rotary-speaker physical model |
 | `MODULAR_-_Morphing_State_Pad.vcv` | First-party Morph VCO → StateFilter, with three Macro8 CV routes | Recall A/B macro snapshots while holding a note |
 | `MODULAR_-_Cinematic_Drift_Pad.vcv` | Long ADSR performance pad and four macros including bipolar cutoff CV | Alternate 4-second Macro8 A/B transitions |
 | `MODULAR_-_Rhythmic_Grit_Bass.vcv` | Tightly gated bass with Macro8 cutoff modulation | Play short external MIDI rhythms; recall 0.20-second transitions |
@@ -27,7 +28,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 
 1. Use a recent MODULAR-SYNTH/Cardinal **main** or **Synth** build with its packaged modules and example patches.
 2. If the examples folder is packaged, choose **File → Open demo / example project** and select the `MODULAR_-` patch; otherwise load the `.vcv` directly from `patches/examples/`.
-3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad, Clocked Modulation Studio, Fold Drive Cinematic Motion, Aurora Glass Bells and Night Lanterns save eight MIDI channels.
+3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad, Clocked Modulation Studio, Fold Drive Cinematic Motion, Aurora Glass Bells, Night Lanterns and Reed Chamber Organ save eight MIDI channels.
 4. For Clockwork Pulses, start the DAW transport; it uses **Host Time** without live MIDI notes. For Clocked Modulation Studio and Night Lanterns, use transport **and MIDI** if testing external beat lock (their LFOs free-run without transport). Cinematic Pulse Score needs **MIDI only**: its LFO CLOCK/RESET jacks are unplugged and it does not follow BPM. Noir Expressive Lead also needs MIDI notes; MIDI channel pressure and CC1 mod wheel are optional expressive controls, subject to the keyboard/DAW's MIDI routing.
 5. Begin with low speaker or headphone volume. The output gain is intentionally conservative, but patch signal levels are not yet perceptually validated.
 
@@ -270,6 +271,52 @@ python3 -m unittest discover -s tests -p 'test_night_lanterns_patch.py' -v
 ```
 
 Acceptance still requires opening the patch in a fork-built Cardinal/DAW host, auditioning 1/2/4/8 notes with transport start/stop, verifying stereo levels and release tails, and save/reopen at 44.1/48/96 kHz. The source checks do not exercise any of that.
+
+## Reed Chamber Organ — two manuals, gentle vibrato and four tone-color scenes
+
+[Open the source preset](../patches/examples/MODULAR_-_Reed_Chamber_Organ.vcv).
+The **11-module, 23-cable** sketch is intended for eight-voice keyboard chords
+and short detached stabs, rather than cinematic pads or FM bells. Both original
+MorphVCOs receive the same per-note 1 V/oct HostMIDI signal, but their saved
+octave controls are 0 and +1 (nominal **8-foot and 4-foot manuals**), with −2
+and +4 cents of fine tuning. Both have deliberately mild waveform morph and
+small FM-depth settings. This is an *original generic combo-organ study*;
+it does **not** physically model Hammond tonewheels, drawbars or a Leslie cabinet.
+
+The lower manual follows a gentle StateFilter low-pass path into DualVCA A;
+the upper manual goes directly into DualVCA B. Both gates receive the same
+Fundamental ADSR triggered by HostMIDI gate and retrigger. Gain maxima are
+**0.16** and **0.10**, respectively; their paths reach individual StereoEcho
+input jacks, then separate HostAudio2 L/R inputs with a stored host output
+level of **0.17**. This is a conservative *intention*, not a measurement of
+eight-note summing or clipping. The free-running ClockedLFO is set to exactly
+3 Hz, with no host clock/transport cables. Its sine wave drives both MorphVCO
+exponential FM inputs at just 0.8% and 1.2% depth for small coherent vibrato.
+
+Macro8 changes the two wave morphs, filter cutoff and resonance, echo wet/time/
+feedback and upper-manual pulse width. Four unipolar source snapshots morph
+smoothly over a saved **1.2 s** interval. Representative settings inferred
+from first-party source mappings are:
+
+| Snapshot | Lower/upper morph | Filter cutoff (approx.) | Echo wet | Echo time | Echo feedback |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A — Chapel | 0.16 / 0.24 | 1.62 kHz | 9% | 180 ms | 11.5% |
+| B — Reed | 0.35 / 0.42 | 2.38 kHz | 13% | 200 ms | 13% |
+| C — Swirl | 0.26 / 0.34 | 1.93 kHz | 20% | 280 ms | 19% |
+| D — Shimmer | 0.21 / 0.50 | 2.93 kHz | 16% | 360 ms | 16% |
+
+The table is **not a rendered-sound or dynamic-CV measurement**. Verify
+the source graph and full stereo generator-to-host provenance with:
+
+```sh
+python3 tools/patches/patch_inspector.py validate patches/examples/MODULAR_-_Reed_Chamber_Organ.vcv
+python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Reed_Chamber_Organ.vcv --show-signal-traces --require-source-verified-stereo
+python3 -m unittest discover -s tests -p 'test_reed_chamber_organ.py' -v
+```
+
+Before performance use, load in a fork-built host at low monitor volume,
+audition 1/2/4/8 polyphonic note events, verify actual timbre and release
+tails at 44.1/48/96 kHz, then save/reopen in the DAW. Those gates remain open.
 
 ## Future work
 

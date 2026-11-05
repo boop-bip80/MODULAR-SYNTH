@@ -43,6 +43,10 @@ public:
     // Wet, feedback and stereo crossfeed reach 99.9% of a new setting in 10 ms.
     // Initialization/reset keep the first requested setting immediate.
     static constexpr double kControlSlewSecondsTo99Point9Percent = 0.010;
+    // Unitless controls below 1e-24 make at most 2e-23 V of feedback at the
+    // ring's 20 V safety clamp, safely below its 1e-20 V silence floor. Snap
+    // to the target before double one-pole tails enter denormal territory.
+    static constexpr double kControlConvergenceEpsilon = 1.0e-24;
 
     static_assert(sizeof(float) == 4 && sizeof(double) == 8
                   && std::numeric_limits<float>::is_iec559
@@ -73,6 +77,20 @@ public:
         if (!finite(value))
             return fallback;
         return std::min(maxValue, std::max(minValue, value));
+    }
+
+    static double boundedControl(double value, double maxValue) noexcept {
+        const double bounded = clampFinite(value, 0.0, 0.0, maxValue);
+        return bounded <= kControlConvergenceEpsilon ? 0.0 : bounded;
+    }
+
+    static double advanceControl(double current, double target,
+                                 double slewAmount) noexcept {
+        if (current == target)
+            return target;
+        const double next = current + slewAmount * (target - current);
+        return std::abs(target - next) <= kControlConvergenceEpsilon
+            ? target : next;
     }
 
     // Reject microscopic input energy before arithmetic in both the dry path
@@ -157,9 +175,9 @@ public:
         const double maxMs = effectiveMaxMs(sampleRate);
         const double ms = clampFinite(delayMs, 250.0, kMinDelayMs, maxMs);
         const double targetSamples = ms * sampleRate / 1000.0;
-        const double targetFeedback = clampFinite(feedback, 0.0, 0.0, kMaxFeedback);
-        const double targetWet = clampFinite(wet, 0.0, 0.0, 1.0);
-        const double targetCrossfeed = clampFinite(crossfeed, 0.0, 0.0, 1.0);
+        const double targetFeedback = boundedControl(feedback, kMaxFeedback);
+        const double targetWet = boundedControl(wet, 1.0);
+        const double targetCrossfeed = boundedControl(crossfeed, 1.0);
         if (!controlsInitialized_) {
             currentFeedback_ = targetFeedback;
             currentWet_ = targetWet;
@@ -168,9 +186,12 @@ public:
         } else {
             // One-pole smoothing is bounded by the already-clamped targets,
             // and introduces no buffers, locks or allocations on the audio path.
-            currentFeedback_ += controlSlewAmount_ * (targetFeedback - currentFeedback_);
-            currentWet_ += controlSlewAmount_ * (targetWet - currentWet_);
-            currentCrossfeed_ += controlSlewAmount_ * (targetCrossfeed - currentCrossfeed_);
+            currentFeedback_ = advanceControl(
+                currentFeedback_, targetFeedback, controlSlewAmount_);
+            currentWet_ = advanceControl(
+                currentWet_, targetWet, controlSlewAmount_);
+            currentCrossfeed_ = advanceControl(
+                currentCrossfeed_, targetCrossfeed, controlSlewAmount_);
         }
         const double fb = currentFeedback_;
         const double blend = currentWet_;

@@ -233,18 +233,17 @@ int main() {
                 highOldAlias, highNewAlias,
                 20.0 * std::log10(highOldAlias / highNewAlias));
 
-    // Abrupt pitch+ratio CV changes cannot cause an instantaneous guard
-    // index step: the ceiling itself slews ~2 ms. The oscillator phase
-    // remains continuous. This is a control continuity check; a pitch
-    // jump can still cause wideband transient energy or an audible click.
+    // A new higher frequency must immediately lower the *effective* PM
+    // index. Delaying that protection for two milliseconds leaves an alias
+    // burst; allowing a downward timbre step is preferable to extra
+    // Nyquist-folded sidebands on the already-discontinuous pitch jump.
+    // Returning to the low note still restores brightness over ~2 ms.
     FMVoice swept;
     FMVoice::Input sweep = plain;
     sweep.ratio = 2.0;
     sweep.indexRadians = 6.0;
     for (int n = 0; n < 256; ++n)
         swept.process(sweep);
-    double previousIndex = std::min(swept.smoothedIndex,
-                                    swept.smoothedGuardCeiling);
     const double phaseBeforeJump = swept.carrierPhase;
     sweep.frequencyHz = 6000.0;
     sweep.ratio = 4.0;
@@ -252,8 +251,11 @@ int main() {
         const auto output = swept.process(sweep);
         const double effective = std::min(swept.smoothedIndex,
                                           swept.smoothedGuardCeiling);
-        okay &= check(std::abs(effective - previousIndex) <= 0.085,
-                      "guard threshold crossing cannot step index abruptly");
+        const double instantaneousCeiling = FMVoice::bandwidthIndexCeiling(
+            sweep.frequencyHz, sweep.frequencyHz * swept.smoothedRatio,
+            sweep.sampleRateHz);
+        okay &= check(swept.smoothedGuardCeiling <= instantaneousCeiling + 1.0e-10,
+                      "high-note FM index ceiling never exceeds immediate bandwidth limit");
         okay &= check(FMVoice::finite(output.carrier) &&
                       FMVoice::finite(output.modulator),
                       "steep pitch CV must preserve bounded finite output");
@@ -261,10 +263,79 @@ int main() {
             okay &= check(std::abs(swept.carrierPhase -
                 std::fmod(phaseBeforeJump + 6000.0 / 48000.0, 1.0)) < 1.0e-9,
                 "pitch CV jump must preserve carrier phase accumulator");
-        previousIndex = effective;
+        if (n == 0)
+            okay &= check(std::abs(swept.smoothedGuardCeiling
+                                    - instantaneousCeiling) < 1.0e-10
+                          && effective <= instantaneousCeiling + 1.0e-10,
+                          "first high-note sample immediately protects Nyquist index");
     }
-    okay &= check(previousIndex < 0.001,
-                  "slewed high-frequency ceiling converges to index zero");
+    okay &= check(swept.smoothedGuardCeiling == 0.0,
+                  "high-frequency ceiling stays at safe zero index");
+    sweep.frequencyHz = 440.0;
+    sweep.ratio = 2.0;
+    const double beforeRelease = swept.smoothedGuardCeiling;
+    swept.process(sweep);
+    okay &= check(swept.smoothedGuardCeiling > beforeRelease
+                  && swept.smoothedGuardCeiling < 0.085,
+                  "returning to low note restores guard brightness gradually");
+    for (int n = 0; n < 4096; ++n)
+        swept.process(sweep);
+    okay &= check(std::abs(swept.smoothedGuardCeiling - 8.0) < 1.0e-9,
+                  "low-note release reaches full index ceiling");
+
+    // Coherent first-2-ms alias analysis after a pitch CV jump. The old
+    // symmetric one-pole guard remains at the former 8-radian ceiling for
+    // this whole 96-frame window and therefore permits a full index of 3.
+    // The new one-sided guard clamps to 0.55 on the first high-pitch frame.
+    // This tests a measured *selected* folded sideband, not all aliases.
+    FMVoice attackSafe;
+    FMVoice::Input instantJump = plain;
+    instantJump.ratio = 4.0;
+    instantJump.indexRadians = 3.0;
+    // 1,200 samples of 440/1,760 Hz complete integer phase cycles before
+    // the jump, so the 21 kHz DFT bins are coherent rather than phase-canceled.
+    for (int n = 0; n < 1200; ++n)
+        attackSafe.process(instantJump);
+    double legacyCarrierPhase = attackSafe.carrierPhase;
+    double legacyModulatorPhase = attackSafe.modulatorPhase;
+    double legacyGuardCeiling = 8.0;
+    instantJump.frequencyHz = 3000.0;
+    constexpr int kAttackSamples = 96;
+    double legacyAttackRe = 0.0, legacyAttackIm = 0.0;
+    double safeAttackRe = 0.0, safeAttackIm = 0.0;
+    for (int n = 0; n < kAttackSamples; ++n) {
+        legacyGuardCeiling += (0.55 - legacyGuardCeiling) / 96.0;
+        const double legacySample = std::sin(
+            FMVoice::kTwoPi * legacyCarrierPhase
+            + std::min(3.0, legacyGuardCeiling)
+              * std::sin(FMVoice::kTwoPi * legacyModulatorPhase));
+        const auto safer = attackSafe.process(instantJump);
+        if (n == 0)
+            okay &= check(std::abs(attackSafe.smoothedGuardCeiling - 0.55) < 1.0e-12,
+                          "first sample after upward pitch jump clamps to safe ceiling");
+        const double phase = FMVoice::kTwoPi * 21000.0 * n / 48000.0;
+        legacyAttackRe += legacySample * std::cos(phase);
+        legacyAttackIm -= legacySample * std::sin(phase);
+        safeAttackRe += safer.carrier * std::cos(phase);
+        safeAttackIm -= safer.carrier * std::sin(phase);
+        legacyCarrierPhase += 3000.0 / 48000.0;
+        legacyModulatorPhase += 12000.0 / 48000.0;
+        if (legacyCarrierPhase >= 1.0)
+            legacyCarrierPhase -= 1.0;
+        if (legacyModulatorPhase >= 1.0)
+            legacyModulatorPhase -= 1.0;
+    }
+    const double legacyAttackAlias = 2.0 * std::hypot(legacyAttackRe,
+                                                       legacyAttackIm) / kAttackSamples;
+    const double safeAttackAlias = 2.0 * std::hypot(safeAttackRe,
+                                                     safeAttackIm) / kAttackSamples;
+    const double attackReductionDb = 20.0 * std::log10(
+        legacyAttackAlias / std::max(1.0e-12, safeAttackAlias));
+    okay &= check(legacyAttackAlias > 0.50 && safeAttackAlias < 0.14
+                  && attackReductionDb > 14.0,
+                  "pitch-jump folded 21 kHz sideband attenuated in first 2 ms");
+    std::printf("FM first-2ms jump 21k alias: old=%.6f, safe=%.6f, %.2f dB lower\n",
+                legacyAttackAlias, safeAttackAlias, attackReductionDb);
 
     FMVoice lowVoice;
     FMVoice::Input low = plain;

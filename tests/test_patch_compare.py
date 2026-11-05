@@ -308,6 +308,63 @@ class PatchCompareTests(unittest.TestCase):
         self.assertFalse(report["summary"]["changed"])
         self.assertEqual(report["summary"]["matched_modules"], 2)
 
+    def test_unique_saved_state_reidentifies_duplicate_models_after_id_regeneration(self) -> None:
+        # Rack can regenerate every module ID when reloading a project.
+        # Distinct saved knob/snapshot state is strong enough to pair the two
+        # same-model instances without guessing from their new IDs or layout.
+        before = patch([
+            module(1, "Fundamental", "VCA-1", {0: 0.2}, {"mode": "left"}),
+            module(2, "Fundamental", "VCA-1", {0: 0.8}, {"mode": "right"}),
+            module(3, "Cardinal", "HostAudio2"),
+        ], [cable(10, 1, 0, 3, 0), cable(11, 2, 0, 3, 1)])
+        after = copy.deepcopy(before)
+        mapping = {1: 101, 2: 102, 3: 103}
+        for entry in after["modules"]:
+            entry["id"] = mapping[entry["id"]]
+            entry["pos"] = [999, 0]
+        for entry in after["cables"]:
+            entry["outputModuleId"] = mapping[entry["outputModuleId"]]
+            entry["inputModuleId"] = mapping[entry["inputModuleId"]]
+        after["modules"].reverse()
+        after["cables"].reverse()
+        report = compare_patches(before, after)
+        self.assertFalse(report["summary"]["changed"])
+        self.assertEqual(report["summary"]["matched_modules"], 3)
+        self.assertEqual(report["summary"]["id_remaps_ignored"], 3)
+
+        # With identities recovered, a genuine cable rewire is still visible.
+        altered = copy.deepcopy(after)
+        for wire in altered["cables"]:
+            wire["inputId"] = 1 - wire["inputId"]
+        changed = compare_patches(before, altered)
+        self.assertEqual(changed["summary"]["cables_added"], 2)
+        self.assertEqual(changed["summary"]["cables_removed"], 2)
+        self.assertEqual(changed["summary"]["modules_added"], 0)
+
+        # One regenerated duplicate also has an edited parameter. After the
+        # exact-state peer is paired, the remaining model is unambiguous and
+        # must be reported as an edit, not a module removal/reinsertion.
+        edited = copy.deepcopy(after)
+        next(entry for entry in edited["modules"] if entry["id"] == 101)["params"][0]["value"] = 0.3
+        edited_report = compare_patches(before, edited)
+        self.assertEqual(edited_report["summary"]["matched_modules"], 3)
+        self.assertEqual(edited_report["summary"]["parameters_changed"], 1)
+        self.assertEqual(edited_report["summary"]["modules_added"], 0)
+
+    def test_duplicate_model_matching_remains_conservative_if_state_ambiguous(self) -> None:
+        before = patch([
+            module(1, "Fundamental", "VCA-1", {0: 0.5}),
+            module(2, "Fundamental", "VCA-1", {0: 0.5}),
+        ], [])
+        after = patch([
+            module(11, "Fundamental", "VCA-1", {0: 0.5}),
+            module(12, "Fundamental", "VCA-1", {0: 0.5}),
+        ], [])
+        report = compare_patches(before, after)
+        self.assertEqual(report["summary"]["matched_modules"], 0)
+        self.assertEqual(report["summary"]["modules_added"], 2)
+        self.assertEqual(report["summary"]["modules_removed"], 2)
+
     def test_module_replacement_is_added_removed_not_mispaired(self) -> None:
         before = patch([module(1, "A", "One")], [])
         after = patch([module(1, "A", "Two")], [])
@@ -358,6 +415,9 @@ class PatchCompareTests(unittest.TestCase):
         case = fixture()
         case["modules"][0]["params"] = [{"id": 0, "value": 0}, {"id": 0, "value": 1}]
         cases.append(case)
+        case = fixture()
+        case["modules"][0]["params"] = [{"id": 0, "value": 10**400}]
+        cases.append(case)
         for case in cases:
             with self.subTest(case=case):
                 with self.assertRaises(PatchComparisonError):
@@ -400,6 +460,13 @@ class PatchCompareTests(unittest.TestCase):
             nonfinite = call()
             self.assertEqual(nonfinite.returncode, 2)
             self.assertIn("non-finite JSON literal", nonfinite.stderr)
+            huge = fixture()
+            huge["modules"][0]["params"] = [{"id": 0, "value": 10**400}]
+            new_path.write_text(json.dumps(huge), encoding="utf-8")
+            huge_result = call()
+            self.assertEqual(huge_result.returncode, 2)
+            self.assertIn("finite numeric", huge_result.stderr)
+            self.assertNotIn("Traceback", huge_result.stderr)
 
     def test_real_cinematic_vs_bass_graph_on_checkout(self) -> None:
         samples = ROOT / "patches" / "examples"

@@ -306,7 +306,14 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
             if pid in seen_params:
                 errors.append(f"{label}: duplicate parameter index {pid}")
             seen_params.add(pid)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            # A syntactically valid JSON integer can exceed the largest
+            # finite double. math.isfinite(big_int) raises OverflowError;
+            # reject it as an invalid Rack parameter, not a tool crash.
+            try:
+                finite = type(value) in (int, float) and math.isfinite(value)
+            except OverflowError:
+                finite = False
+            if not finite:
                 errors.append(f"{label}: value must be a finite number")
                 continue
             if schema is not None:

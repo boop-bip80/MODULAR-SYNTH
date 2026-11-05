@@ -23,7 +23,19 @@
   <circle cx="132" cy="99" r="30" fill="#293044" stroke="#9DB5F8" stroke-width="1.5"/>
   <circle cx="48" cy="179" r="29" fill="#1B3340" stroke="#58C4CC" stroke-width="1.5"/>
   <circle cx="132" cy="179" r="29" fill="#293044" stroke="#9DB5F8" stroke-width="1.5"/>
-  <path d="M12 233h156" stroke="#3A7D94" stroke-width="2"/>
-  <path d="M12 309h156" stroke="#8A6BBA" stroke-width="2"/>
+  <!-- Distinct, full-depth input and output lanes surround the actual Rack jack centers. -->
+  <rect id="dualInputRail" x="9" y="229" width="162" height="72" rx="7"
+        fill="#122E3E" stroke="#78D5DB" stroke-width="1.8"/>
+  <rect id="dualOutputRail" x="9" y="307" width="162" height="66" rx="7"
+        fill="#28243F" stroke="#D1AAF1" stroke-width="1.8"/>
+  <g fill="none" stroke-width="1.4">
+    <circle cx="24" cy="268" r="13.5" stroke="#86E5E2"/>
+    <circle cx="68" cy="268" r="13.5" stroke="#86E5E2"/>
+    <circle cx="112" cy="268" r="13.5" stroke="#9BBFFB"/>
+    <circle cx="156" cy="268" r="13.5" stroke="#9BBFFB"/>
+    <circle cx="35" cy="347" r="13.5" stroke="#A9D9FA"/>
+    <circle cx="90" cy="347" r="13.5" stroke="#C7B1FA"/>
+    <circle cx="145" cy="347" r="13.5" stroke="#E1BEFF"/>
+  </g>
   <rect y="377" width="180" height="3" fill="url(#vcaAccent)"/>
 </svg>

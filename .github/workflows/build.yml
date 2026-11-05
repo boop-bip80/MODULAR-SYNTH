@@ -228,8 +228,19 @@ jobs:
     # Release uploads need write access; all other jobs stay read-only.
     permissions:
       contents: write
-    runs-on: macos-14
+    # GitHub Actions retired macOS 14 on 2026-11-02:
+    # https://github.com/actions/runner-images/issues/13518
+    # Use an explicitly Intel host for PawPaw's x86_64-hosted universal build;
+    # the unsuffixed macos-15 runner label selects Apple Silicon in 2026.
+    runs-on: macos-15-intel
     steps:
+      - name: Verify available Intel macOS build host
+        shell: bash
+        run: |
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = x86_64
+          sw_vers -productVersion
+          xcodebuild -version
       - name: Verify SpeexDSP Git mirror before recursive checkout
         shell: bash
         run: |
@@ -901,40 +912,52 @@ jobs:
           mv bin/CardinalFX.lv2 bin/CardinalSynth.lv2 ${LV2_PATH}
           cp -r /usr/lib/lv2/{atom,buf-size,core,data-access,kx-control-input-port-change-request,kx-programs,instance-access,midi,mod,modgui,parameters,port-groups,port-props,options,patch,presets,resize-port,state,time,ui,units,urid,worker}.lv2 ${LV2_PATH}
           xvfb-run lv2lint -s lv2_generate_ttl -l ld-linux-x86-64.so.2 -M nopack $(lv2ls)
+      - name: Verify all plugin host-bridge targets exist
+        run: python3 -B tools/ci/verify_plugin_bridge_inventory.py --bin-dir bin --lv2-dir /tmp/lv2-path
       - name: Test LV2 plugin
         run: |
-            export LV2_PATH=/tmp/lv2-path
-            for p in $(lv2ls); do \
-                env CARLA_BRIDGE_DUMMY=1 CARLA_BRIDGE_TESTING=native \
-                    xvfb-run valgrind \
-                    --error-exitcode=255 \
-                    --leak-check=no \
-                    --track-origins=yes \
-                    --keep-debuginfo=yes \
-                    --suppressions=./dpf/utils/valgrind-dpf.supp \
-                    /usr/lib/carla/carla-bridge-native lv2 "" ${p}; \
-            done
+          set -euo pipefail
+          export LV2_PATH=/tmp/lv2-path
+          for uri in \
+              "https://distrho.kx.studio/plugins/cardinal#fx" \
+              "https://distrho.kx.studio/plugins/cardinal#synth"; do
+            lv2ls | grep -Fx -- "$uri" > /dev/null
+            env CARLA_BRIDGE_DUMMY=1 CARLA_BRIDGE_TESTING=native \
+                xvfb-run valgrind \
+                --error-exitcode=255 \
+                --leak-check=no \
+                --track-origins=yes \
+                --keep-debuginfo=yes \
+                --suppressions=./dpf/utils/valgrind-dpf.supp \
+                /usr/lib/carla/carla-bridge-native lv2 "" "$uri"
+          done
       - name: Test VST2 plugin
         run: |
-            for p in $(ls bin/*.vst/*.so); do \
-                env CARLA_BRIDGE_DUMMY=1 CARLA_BRIDGE_TESTING=native \
-                    xvfb-run valgrind \
-                    --error-exitcode=255 \
-                    --leak-check=no \
-                    --track-origins=yes \
-                    --keep-debuginfo=yes \
-                    --suppressions=./dpf/utils/valgrind-dpf.supp \
-                    /usr/lib/carla/carla-bridge-native vst2 ./${p} ""; \
-            done
+          set -euo pipefail
+          for variant in CardinalFX CardinalSynth; do
+            p="./bin/Cardinal.vst/${variant}.so"
+            test -s "$p"
+            env CARLA_BRIDGE_DUMMY=1 CARLA_BRIDGE_TESTING=native \
+                xvfb-run valgrind \
+                --error-exitcode=255 \
+                --leak-check=no \
+                --track-origins=yes \
+                --keep-debuginfo=yes \
+                --suppressions=./dpf/utils/valgrind-dpf.supp \
+                /usr/lib/carla/carla-bridge-native vst2 "$p" ""
+          done
       - name: Test VST3 plugin
         run: |
-            for p in $(ls bin/ | grep vst3); do \
-                env CARLA_BRIDGE_DUMMY=1 CARLA_BRIDGE_TESTING=native \
-                    xvfb-run valgrind \
-                    --error-exitcode=255 \
-                    --leak-check=no \
-                    --track-origins=yes \
-                    --keep-debuginfo=yes \
-                    --suppressions=./dpf/utils/valgrind-dpf.supp \
-                    /usr/lib/carla/carla-bridge-native vst3 ./bin/${p} ""; \
-            done
+          set -euo pipefail
+          for variant in Cardinal CardinalFX CardinalSynth; do
+            p="./bin/${variant}.vst3"
+            test -d "$p"
+            env CARLA_BRIDGE_DUMMY=1 CARLA_BRIDGE_TESTING=native \
+                xvfb-run valgrind \
+                --error-exitcode=255 \
+                --leak-check=no \
+                --track-origins=yes \
+                --keep-debuginfo=yes \
+                --suppressions=./dpf/utils/valgrind-dpf.supp \
+                /usr/lib/carla/carla-bridge-native vst3 "$p" ""
+          done

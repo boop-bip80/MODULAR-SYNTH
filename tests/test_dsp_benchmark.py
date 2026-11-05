@@ -65,12 +65,24 @@ class DSPBenchmarkTests(unittest.TestCase):
             self.assertEqual(int(row["frames"]), frames)
             self.assertEqual(int(row["cpp_new_calls"]), 0)
             self.assertGreater(int(row["prepared_bytes_hint"]), 0)
+            # Real C++ new request sizes observed during engine construction;
+            # does not include libc malloc, allocator metadata or RSS.
+            self.assertGreaterEqual(int(row["prepared_cpp_new_bytes"]), 0)
+            self.assertIn(int(row["repetitions"]), range(1, 10))
             self.assertGreater(float(row["elapsed_ms"]), 0.0)
             self.assertGreater(float(row["ns_per_voice_sample"]), 0.0)
             self.assertGreater(float(row["realtime_factor"]), 0.0)
             energy = float(row["mean_output_energy"])
             self.assertTrue(math.isfinite(energy))
             self.assertGreater(energy, 0.0)
+            self.assertLessEqual(float(row["min_elapsed_ms"]),
+                                 float(row["elapsed_ms"]))
+            self.assertLessEqual(float(row["elapsed_ms"]),
+                                 float(row["max_elapsed_ms"]))
+            self.assertLessEqual(float(row["min_elapsed_ms"]),
+                                 float(row["p90_elapsed_ms"]))
+            self.assertLessEqual(float(row["p90_elapsed_ms"]),
+                                 float(row["max_elapsed_ms"]))
             if row["engine"] == "StereoEcho":
                 # Fixed-capacity stereo ring memory is preallocated outside
                 # the timed section, never on an audio-process iteration.
@@ -97,9 +109,22 @@ class DSPBenchmarkTests(unittest.TestCase):
         for left, right in zip(a, b):
             for field in (
                 "engine", "voices", "sample_rate_hz", "frames", "cpp_new_calls",
-                "prepared_bytes_hint", "mean_output_energy",
+                "prepared_bytes_hint", "prepared_cpp_new_bytes", "mean_output_energy",
             ):
                 self.assertEqual(left[field], right[field], (field, left, right))
+
+    def test_repeated_warm_state_measurement_has_quantile_bounds(self) -> None:
+        result = self.invoke("production", "--frames", "1024", "--repeats", "3", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = json.loads(result.stdout)
+        self.assert_valid_rows(rows, frames=1024)
+        self.assertEqual({row["repetitions"] for row in rows}, {3})
+        self.assertTrue(all(row["min_elapsed_ms"] <= row["elapsed_ms"]
+                            <= row["max_elapsed_ms"] for row in rows))
+        self.assertTrue(all(row["prepared_cpp_new_bytes"] > 0 for row in rows))
+        # For three samples nearest-rank p90 selects the maximum observation.
+        self.assertTrue(all(row["p90_elapsed_ms"] == row["max_elapsed_ms"]
+                            for row in rows))
 
     def test_cli_rejects_invalid_frames(self) -> None:
         for arguments in (
@@ -107,6 +132,10 @@ class DSPBenchmarkTests(unittest.TestCase):
             ("--frames", "1000001"),
             ("--frames", "123garbage"),
             ("--frames",),
+            ("--repeats", "0"),
+            ("--repeats", "10"),
+            ("--repeats", "2.5"),
+            ("--repeats",),
             ("--unknown",),
         ):
             with self.subTest(arguments=arguments):

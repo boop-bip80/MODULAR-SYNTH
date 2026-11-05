@@ -57,6 +57,13 @@ class PatchInspectorTests(unittest.TestCase):
         report = self.check()
         self.assertTrue(report["ok"], report["errors"])
 
+    def test_huge_numeric_parameter_is_rejected_without_inspector_crash(self) -> None:
+        self.patch["modules"][0]["params"] = [{"id": 0, "value": 10**400}]
+        report = self.check()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("finite number" in error for error in report["errors"]),
+                        report["errors"])
+
     def test_checked_in_cardinal_host_port_contracts(self) -> None:
         # These host models are part of this checkout, unlike arbitrary
         # bundled third-party modules whose port boundaries remain unknown.

@@ -31,6 +31,9 @@ from control_report import build_control_report, text_control_report
 from instrument_diff import compare_verified_bundles, text_diff_report
 from morph_preview import (MorphPreviewError, build_morph_preview,
                            text_morph_preview)
+from sequence_preview import (SequencePreviewError, build_sequence_preview,
+                              parse_events, parse_query_times,
+                              text_sequence_preview)
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -661,6 +664,20 @@ def morph(bundle_path: Path, *, source: str, destination: str,
         raise InstrumentError(f"scene morph preview: {exc}") from exc
 
 
+def sequence(bundle_path: Path, *, source: str, event_spec: str,
+             time_spec: str, sample_rate: int = 48000,
+             module_id: int | None = None) -> dict:
+    """Preview successive saved scene changes without resetting morph state."""
+    manifest = inspect(bundle_path)  # Recompute and verify source-derived state.
+    try:
+        return build_sequence_preview(
+            manifest, source=source, events=parse_events(event_spec),
+            query_times=parse_query_times(time_spec), sample_rate=sample_rate,
+            module_id=module_id)
+    except SequencePreviewError as exc:
+        raise InstrumentError(f"scene sequence preview: {exc}") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest="command", required=True)
@@ -701,6 +718,21 @@ def main(argv: list[str] | None = None) -> int:
                             help="required when patch contains multiple Macro8 modules")
     transition.add_argument("--json", action="store_true",
                             help="machine-readable source-only estimate")
+    timeline = subs.add_parser(
+        "sequence", help="preview unfinished, successive Macro8 scene morphs (NOT audio)")
+    timeline.add_argument("bundle", type=Path)
+    timeline.add_argument("--from", dest="from_scene", choices=("LIVE", "A", "B", "C", "D"),
+                          required=True, help="assumed fully settled starting scene")
+    timeline.add_argument("--events", required=True,
+                          help="ordered target changes as seconds:SCENE,seconds:SCENE")
+    timeline.add_argument("--at", required=True,
+                          help="ordered sample times in seconds, comma-separated")
+    timeline.add_argument("--sample-rate", type=int, default=48000,
+                          help="simulation rate 8000..384000 Hz")
+    timeline.add_argument("--module-id", type=int,
+                          help="required if the patch contains multiple Macro8 modules")
+    timeline.add_argument("--json", action="store_true",
+                          help="machine-readable source-only CV estimates")
     difference = subs.add_parser(
         "diff", help="compare validated saved patch, Macro8 and routing state")
     difference.add_argument("old_bundle", type=Path)
@@ -768,6 +800,15 @@ def main(argv: list[str] | None = None) -> int:
                 print(_canonical_json(report).decode("utf-8"), end="")
             else:
                 print(text_morph_preview(report), end="")
+        elif args.command == "sequence":
+            report = sequence(
+                args.bundle, source=args.from_scene, event_spec=args.events,
+                time_spec=args.at, sample_rate=args.sample_rate,
+                module_id=args.module_id)
+            if args.json:
+                print(_canonical_json(report).decode("utf-8"), end="")
+            else:
+                print(text_sequence_preview(report), end="")
         elif args.command == "diff":
             report = compare_bundles(args.old_bundle, args.new_bundle)
             if args.json:
