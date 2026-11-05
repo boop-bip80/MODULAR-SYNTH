@@ -358,11 +358,67 @@ jobs:
           sudo apt-get install -yqq pandoc texlive-latex-recommended texlive-latex-extra
           sudo apt-get clean
       - name: Bootstrap toolchain
+        id: mpb_bootstrap
         if: steps.mpb-cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth=1 https://github.com/moddevices/mod-plugin-builder.git deps/mod-plugin-builder
           sed -i "s/CT_LOG_PROGRESS_BAR=y/CT_LOG_PROGRESS_BAR=n/" deps/mod-plugin-builder/toolchain/*.config
           $(pwd)/deps/mod-plugin-builder/bootstrap.sh ${{ matrix.target }} minimal && $(pwd)/deps/mod-plugin-builder/.clean-install.sh ${{ matrix.target }}
+      - name: Diagnose failed toolchain bootstrap
+        if: ${{ failure() && steps.mpb_bootstrap.outcome == 'failure' }}
+        shell: bash
+        run: |
+          # Diagnostics only. Never suppress the original bootstrap failure.
+          # Limit discovery to the MOD toolchain's working directories.
+          diagnostic_roots=()
+          for root in "$HOME/mod-workdir" "$GITHUB_WORKSPACE/deps/mod-plugin-builder"; do
+            if [[ -d "$root" ]]; then
+              diagnostic_roots+=("$root")
+            fi
+          done
+          if (( ${#diagnostic_roots[@]} == 0 )); then
+            echo "MOD toolchain diagnostic directories were not created"
+            exit 0
+          fi
+
+          mapfile -d '' build_logs < <(find "${diagnostic_roots[@]}" -type f -name build.log -print0)
+          if (( ${#build_logs[@]} == 0 )); then
+            echo "No crosstool-NG build.log found in MOD toolchain directories"
+          fi
+          shown=0
+          for build_log in "${build_logs[@]}"; do
+            if (( shown >= 3 )); then break; fi
+            echo "Error-oriented tail of crosstool-NG $(basename "$build_log") (last 200 lines inspected):"
+            # Avoid raw command/environment dumps and lines likely to contain
+            # credentials; print at most 40 relevant lines per log.
+            tail -n 200 "$build_log" \
+              | grep -Ei 'tar:|xz:|fatal error:|error:|failed|corrupt|unexpected|file format|no such file' \
+              | grep -Eiv 'token|password|secret|credential|authorization|api[_-]?key|https?://|@' \
+              | tail -n 40 || true
+            shown=$((shown + 1))
+          done
+
+          mapfile -d '' archives < <(find "${diagnostic_roots[@]}" -type f -name 'gcc-linaro-7.5-2019.12.tar.xz' -print0)
+          if (( ${#archives[@]} == 0 )); then
+            echo "GCC Linaro source archive not present for integrity diagnosis"
+          fi
+          checked=0
+          for archive in "${archives[@]}"; do
+            if (( checked >= 3 )); then break; fi
+            echo "Checking downloaded $(basename "$archive") integrity"
+            if xz -t -- "$archive"; then
+              echo "XZ stream integrity: PASS"
+              if tar -tJf "$archive" >/dev/null 2>&1; then
+                echo "Tar member listing: PASS"
+              else
+                echo "Tar member listing: FAIL (bad or unsupported archive)"
+              fi
+            else
+              echo "XZ stream integrity: FAIL (truncated or non-XZ content)"
+            fi
+            checked=$((checked + 1))
+          done
+          exit 0
       - name: Build for modaudio
         run: |
           make HEADLESS=true ${{ matrix.name }}-features
