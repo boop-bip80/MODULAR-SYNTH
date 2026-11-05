@@ -91,6 +91,15 @@
         "Polyphonic",
         "Utility"
       ]
+    },
+    {
+      "slug": "SlewGlide",
+      "name": "Slew Glide",
+      "description": "Original 16-lane asymmetrical CV slew with independent rise/fall time and CV, simultaneous linear and exponential outputs and motion gate. Input/output limited to +/-10 V.",
+      "tags": [
+        "Polyphonic",
+        "Utility"
+      ]
     }
   ]
 }

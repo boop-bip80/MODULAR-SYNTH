@@ -34,10 +34,147 @@ class PatchInspectorTests(unittest.TestCase):
             ]
         }
 
-    def check(self, patch: dict | None = None, *, strict_unknown: bool = False) -> dict:
+    def check(self, patch: dict | None = None, *, strict_unknown: bool = False,
+              require_acyclic: bool = False) -> dict:
         path = Path(self.tmp.name) / "test.vcv"
         path.write_text(json.dumps(patch or self.patch, indent=2), encoding="utf-8")
-        return inspector.inspect_patch(path, ROOT, strict_unknown=strict_unknown)
+        return inspector.inspect_patch(path, ROOT, strict_unknown=strict_unknown,
+                                       require_acyclic=require_acyclic)
+
+    def test_feedback_scan_does_not_confuse_undirected_connections_with_cycles(self) -> None:
+        self.patch["modules"].append(
+            {"id": 3, "plugin": "ModularSynth", "model": "StateFilter", "params": []})
+        self.patch["cables"].extend([
+            {"id": 4, "outputModuleId": 1, "outputId": 0,
+             "inputModuleId": 3, "inputId": 0},
+            {"id": 5, "outputModuleId": 3, "outputId": 0,
+             "inputModuleId": 2, "inputId": 1},
+        ])
+        report = self.check()
+        self.assertTrue(report["ok"], report["errors"])
+        self.assertEqual(report["feedback_groups"], [])
+        self.assertEqual(report["feedback_skipped_cables"], 0)
+        self.assertEqual(len(report["components"]), 1)
+
+    def test_feedback_self_loop_is_advisory_by_default_and_opt_in_error(self) -> None:
+        self.patch["cables"].append(
+            {"id": 4, "outputModuleId": 1, "outputId": 0,
+             "inputModuleId": 1, "inputId": 0})
+        report = self.check()
+        self.assertTrue(report["ok"], report["errors"])
+        self.assertEqual(len(report["feedback_groups"]), 1)
+        cycle = report["feedback_groups"][0]
+        self.assertEqual(cycle["module_ids"], [1])
+        self.assertEqual(cycle["cable_ids"], [4])
+        self.assertEqual(cycle["port_contracts"], "source-bounded")
+        self.assertEqual(cycle["timing_proof"], "not-established")
+        self.assertEqual(cycle["delay_candidates"], [])
+        gated = self.check(require_acyclic=True)
+        self.assertFalse(gated["ok"])
+        self.assertTrue(any("--require-acyclic" in e for e in gated["errors"]))
+
+    def test_feedback_multi_module_cycle_tracks_only_internal_cables(self) -> None:
+        self.patch["modules"].append(
+            {"id": 3, "plugin": "ModularSynth", "model": "StateFilter", "params": []})
+        self.patch["cables"].extend([
+            {"id": 4, "outputModuleId": 1, "outputId": 0,
+             "inputModuleId": 3, "inputId": 0},
+            {"id": 5, "outputModuleId": 3, "outputId": 0,
+             "inputModuleId": 1, "inputId": 0},
+        ])
+        report = self.check()
+        self.assertTrue(report["ok"], report["errors"])
+        cycle = report["feedback_groups"][0]
+        self.assertEqual(cycle["module_ids"], [1, 3])
+        self.assertEqual(cycle["cable_ids"], [4, 5])  # HostAudio2 branch not in loop.
+        self.assertEqual(cycle["modules"], ["ModularSynth/MorphVCO[1]",
+                                            "ModularSynth/StateFilter[3]"])
+
+    def test_feedback_echo_presence_is_not_a_buffering_certificate(self) -> None:
+        self.patch["modules"][0]["model"] = "StereoEcho"
+        self.patch["modules"][0]["params"] = []
+        self.patch["cables"].append(
+            {"id": 4, "outputModuleId": 1, "outputId": 0,
+             "inputModuleId": 1, "inputId": 0})
+        report = self.check()
+        self.assertTrue(report["ok"], report["errors"])
+        cycle = report["feedback_groups"][0]
+        self.assertEqual(cycle["delay_candidates"], [1])
+        self.assertEqual(cycle["timing_proof"], "not-established")
+
+    def test_feedback_unverified_ports_and_invalid_edges_remain_explicit(self) -> None:
+        self.patch["modules"][0]["plugin"] = "UnknownThirdParty"
+        self.patch["modules"][0]["model"] = "ExperimentalCV"
+        self.patch["cables"].append(
+            {"id": 4, "outputModuleId": 1, "outputId": 0,
+             "inputModuleId": 1, "inputId": 0})
+        report = self.check()
+        self.assertTrue(report["ok"], report["errors"])
+        self.assertEqual(report["feedback_groups"][0]["port_contracts"],
+                         "contains-unverified-ports")
+        self.patch["cables"][-1]["outputId"] = -1
+        invalid = self.check()
+        self.assertFalse(invalid["ok"])
+        self.assertEqual(invalid["feedback_groups"], [])
+        self.assertEqual(invalid["feedback_skipped_cables"], 1)
+
+    def test_feedback_scan_is_iterative_for_long_cycles(self) -> None:
+        # Module graph may have long CV daisy chains; recursive SCC algorithms
+        # would hit Python's recursion limit on this valid, unknown-port patch.
+        nodes = 1200
+        self.patch["modules"] = [
+            {"id": mid, "plugin": "UnknownThirdParty", "model": "CVPass", "params": []}
+            for mid in range(nodes)
+        ]
+        self.patch["cables"] = [
+            {"id": mid, "outputModuleId": mid, "outputId": 0,
+             "inputModuleId": (mid + 1) % nodes, "inputId": 0}
+            for mid in range(nodes)
+        ]
+        report = self.check()
+        self.assertTrue(report["ok"], report["errors"])
+        self.assertEqual(len(report["feedback_groups"]), 1)
+        self.assertEqual(len(report["feedback_groups"][0]["module_ids"]), nodes)
+
+    def test_feedback_separates_sccs_connected_by_one_way_cable(self) -> None:
+        # A directed link between two closed CV loops does not merge their
+        # independent feedback structures, even though the graph is connected.
+        self.patch["modules"] = [
+            {"id": mid, "plugin": "UnknownThirdParty", "model": "CVPass", "params": []}
+            for mid in (10, 20)
+        ]
+        self.patch["cables"] = [
+            {"id": 1, "outputModuleId": 10, "outputId": 0,
+             "inputModuleId": 10, "inputId": 0},
+            {"id": 2, "outputModuleId": 20, "outputId": 0,
+             "inputModuleId": 20, "inputId": 0},
+            {"id": 3, "outputModuleId": 10, "outputId": 1,
+             "inputModuleId": 20, "inputId": 1},
+        ]
+        report = self.check()
+        self.assertTrue(report["ok"], report["errors"])
+        self.assertEqual(len(report["components"]), 1)
+        self.assertEqual([group["module_ids"] for group in report["feedback_groups"]],
+                         [[10], [20]])
+        self.assertEqual([group["cable_ids"] for group in report["feedback_groups"]],
+                         [[1], [2]])
+
+    def test_feedback_cli_flag_and_human_readable_summary(self) -> None:
+        self.patch["cables"].append(
+            {"id": 4, "outputModuleId": 1, "outputId": 0,
+             "inputModuleId": 1, "inputId": 0})
+        self.check()
+        path = Path(self.tmp.name) / "test.vcv"
+        cli = [sys.executable, str(ROOT / "tools" / "patches" / "patch_inspector.py")]
+        normal = subprocess.run([*cli, "inspect", str(path)], cwd=ROOT,
+                                capture_output=True, text=True, check=False)
+        self.assertEqual(normal.returncode, 0, normal.stderr)
+        self.assertIn("Potential directed cable feedback groups: 1", normal.stdout)
+        self.assertIn("timing NOT established", normal.stdout)
+        gated = subprocess.run([*cli, "validate", str(path), "--require-acyclic", "--json"],
+                               cwd=ROOT, capture_output=True, text=True, check=False)
+        self.assertEqual(gated.returncode, 1, gated.stderr)
+        self.assertFalse(json.loads(gated.stdout)[0]["ok"])
 
     def test_morph_example_is_structurally_valid(self) -> None:
         self.assertTrue(self.example.is_file())

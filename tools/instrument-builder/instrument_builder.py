@@ -34,6 +34,8 @@ from morph_preview import (MorphPreviewError, build_morph_preview,
 from sequence_preview import (SequencePreviewError, build_sequence_preview,
                               parse_events, parse_query_times,
                               text_sequence_preview)
+from automation_export import (AutomationExportError, build_automation_export,
+                               text_automation_csv)
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -678,6 +680,20 @@ def sequence(bundle_path: Path, *, source: str, event_spec: str,
         raise InstrumentError(f"scene sequence preview: {exc}") from exc
 
 
+def automation(bundle_path: Path, *, source: str, event_spec: str,
+               time_spec: str, sample_rate: int = 48000,
+               module_id: int | None = None) -> dict:
+    """Estimate sparse, verified direct-cable CV rows from an inspected v2 ZIP."""
+    manifest = inspect(bundle_path)  # Re-derived manifest, saved patch and SHA.
+    try:
+        return build_automation_export(
+            manifest, source=source, events=parse_events(event_spec),
+            query_times=parse_query_times(time_spec), sample_rate=sample_rate,
+            module_id=module_id)
+    except (AutomationExportError, SequencePreviewError) as exc:
+        raise InstrumentError(f"source-only CV automation export: {exc}") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest="command", required=True)
@@ -733,6 +749,21 @@ def main(argv: list[str] | None = None) -> int:
                           help="required if the patch contains multiple Macro8 modules")
     timeline.add_argument("--json", action="store_true",
                           help="machine-readable source-only CV estimates")
+    cv_export = subs.add_parser(
+        "automation", help="export sparse source-verified CV route estimates (NOT DAW automation)")
+    cv_export.add_argument("bundle", type=Path)
+    cv_export.add_argument("--from", dest="from_scene", choices=("LIVE", "A", "B", "C", "D"),
+                           required=True, help="assumed fully settled starting scene")
+    cv_export.add_argument("--events", required=True,
+                           help="ordered scene changes as seconds:SCENE,seconds:SCENE")
+    cv_export.add_argument("--at", required=True,
+                           help="ordered sample times in seconds, comma-separated")
+    cv_export.add_argument("--sample-rate", type=int, default=48000,
+                           help="estimation rate 8000..384000 Hz")
+    cv_export.add_argument("--module-id", type=int,
+                           help="required if the patch contains multiple Macro8 modules")
+    cv_export.add_argument("--format", choices=("json", "csv"), default="json",
+                           help="machine-readable source-only CV rows (default: json)")
     difference = subs.add_parser(
         "diff", help="compare validated saved patch, Macro8 and routing state")
     difference.add_argument("old_bundle", type=Path)
@@ -809,6 +840,15 @@ def main(argv: list[str] | None = None) -> int:
                 print(_canonical_json(report).decode("utf-8"), end="")
             else:
                 print(text_sequence_preview(report), end="")
+        elif args.command == "automation":
+            report = automation(
+                args.bundle, source=args.from_scene, event_spec=args.events,
+                time_spec=args.at, sample_rate=args.sample_rate,
+                module_id=args.module_id)
+            if args.format == "json":
+                print(_canonical_json(report).decode("utf-8"), end="")
+            else:
+                print(text_automation_csv(report), end="")
         elif args.command == "diff":
             report = compare_bundles(args.old_bundle, args.new_bundle)
             if args.json:

@@ -1236,6 +1236,7 @@ static void initStatic__ModularSynth()
         p->addModel(modelFMVoice);
         p->addModel(modelChanceHold);
         p->addModel(modelDualVCA);
+        p->addModel(modelSlewGlide);
     }
 }
 

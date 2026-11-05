@@ -1,7 +1,8 @@
-# Module Forge — first-party oscillator and effect scaffolding
+# Module Forge — first-party oscillator, effect and envelope scaffolding
 
 **Status:** developer tooling with oscillator (sine, opt-in polyBLEP saw,
-fixed-duty pulse, CV-controlled PWM or polyBLAMP triangle) and stereo low-pass effect starters,
+fixed-duty pulse, CV-controlled PWM or polyBLAMP triangle), stereo low-pass effect
+and polyphonic linear ADSR envelope starters,
 not a live module forge. This is not yet an in-app source editor,
 just-in-time DSP compiler, module hot loader, or standalone
 plugin exporter. The separate `plugins/ModularSynth` collection is the home
@@ -10,7 +11,7 @@ collection.
 
 ## What is available
 
-`tools/module-forge/module_forge.py` supports oscillator and effect starters
+`tools/module-forge/module_forge.py` supports oscillator, effect and ADSR envelope starters
 written for Cardinal's baseline GNU C++11 plugin compiler dialect (also
 checked under C++17). Generation alone does not establish host compatibility:
 
@@ -53,13 +54,22 @@ checked under C++17). Generation alone does not establish host compatibility:
   Rack-independent, standard-library-only DSP core; `<Slug>.cpp` supplies
   Rack module metadata and GUI/headless widgets. When polyphony contracts,
   both filter states for retired channels are cleared before reuse.
-- **Audio-thread-safe reset requests:** all generated oscillator and effect
+- **`--kind envelope` (opt-in):** a four-file, 16-voice linear ADSR control
+  envelope with polyphonic gate input and 0–10 V output. Four panel knobs set
+  attack, decay, sustain and release; A/D/R range from 1 ms to 20 s,
+  sustain from 0 to 100%. Hysteresis treats gate ≥1 V as on and gate ≤0.1 V
+  as off. Retriggered attack continues from the current level, while release
+  captures its linear slope at gate fall; zero-input output is one silent
+  channel. Voice retirement clears stale state on polyphony contraction.
+  These are sample-rate-aware **linear** envelope stages—not exponential
+  emulation, analog accuracy, or evidence of audio quality inside a DAW.
+- **Audio-thread-safe reset requests:** all generated oscillator, effect and ADSR
   wrappers defer Rack `onReset()` and `ResetEvent` requests via a single C++11
-  atomic flag. Only the next audio `process()` call clears phase or filter
+  atomic flag. Only the next audio `process()` call clears phase, filter or envelope
   memory, preventing host/UI-thread writes racing with audio-owned DSP state.
   This changes the timing of the internal reset, not the starter's saved
   parameters, port identities, oscillator math or audio-thread allocation.
-- Both generate an SVG panel, **single-module JSON manifest fragment**, and
+- All variants generate an SVG panel, **single-module JSON manifest fragment**, and
   `INTEGRATION.md` outlining the exact first-party build/registration edits.
 
 It creates a new directory and refuses to overwrite a preexisting generated
@@ -124,14 +134,25 @@ python3 tools/module-forge/module_forge.py new \
 python3 tools/module-forge/module_forge.py check module-forge-output/ForgeTriangle
 ```
 
+Generate a polyphonic ADSR control envelope:
+
+```bash
+python3 tools/module-forge/module_forge.py new \
+    --kind envelope \
+    --slug ForgeADSR --name "Forge ADSR" --out module-forge-output
+python3 tools/module-forge/module_forge.py check module-forge-output/ForgeADSR
+```
+
 The outputs will be `module-forge-output/OrbitSine/` and
 `module-forge-output/StereoTPT/` for the initial examples, and
 `module-forge-output/ForgeSaw/`, `module-forge-output/ForgePulse/`,
 `module-forge-output/ForgePWM/` and `module-forge-output/ForgeTriangle/`
 for the opt-in corrected waveforms.
+The ADSR option creates `module-forge-output/ForgeADSR/` independently.
 With no waveform option,
 the generator's sine files and manifest remain byte-for-byte unchanged.
-Non-default `--waveform` values are rejected for `--kind effect`. Read each generated
+Non-default `--waveform` values are rejected for `--kind effect` and
+`--kind envelope`. Read each generated
 `INTEGRATION.md` **before** moving source/artwork into
 `plugins/ModularSynth` or registering the model in the static loader.
 Generated sources are not automatically built or installed.
@@ -148,7 +169,7 @@ python3 -m unittest discover -s tools/module-forge \
     -p "test_*.py" -v
 ```
 
-Tests cover both original starter kinds and the opt-in waveforms, backward-compatible default oscillator
+Tests cover all three starter kinds and the opt-in waveforms, backward-compatible default oscillator
 output, manifest and port metadata, C++ model/panel/DSP header references,
 refusal to overwrite user-edited files, and invalid identifiers. Integration
 fixtures exercise ordinary and effect dry-runs and applies, header collisions,
@@ -184,6 +205,13 @@ harmonics 3, 5, 7 and 9 than an uncorrected triangle using the **same phase**.
 It also checks low-frequency bipolar amplitude/DC centering, port counts,
 polyphony retirement, invalid host rates and nonfinite CV. This does not
 establish full-range spectrum quality, alias-free output or DAW audio.
+`test_generated_envelope.py` compiles and executes the *actual generated*
+ADSR wrapper against the test-only Rack stand-in under GNU C++11/C++17 and
+strict fast-math. Its time-domain probe checks two-lane attack/decay/sustain/
+release timing, gate hysteresis, release interruption/retrigger, pending
+audio-thread reset, 16-channel bounds and lane retirement, and nonfinite
+CV/parameter/sample-rate handling. No physical hardware, host automation,
+GUI, or DAW audio was exercised by this source test.
 
 When a C++ compiler is available, `test_effect_core.py` also builds and
 executes standalone GNU C++11/C++17 probes against the generated Rack-free filter header:
@@ -198,7 +226,7 @@ load the Rack/Cardinal module.
 
 ### Generated wrapper compile/process gate (HEADLESS test shim)
 
-The developer gate now generates **both** fresh starters and checks their
+The developer gate generates fresh oscillator, effect and ADSR starters and checks their
 *actual generated* `.cpp` wrappers against the repository's small test-only
 Rack stand-in, without installing modules or editing registry files:
 
@@ -243,12 +271,13 @@ shipping.
 
 ### Fresh generated modules against pinned real Rack headers
 
-A separate Linux/HEADLESS compatibility gate generates six oscillator
-waveform/effect variants (sine, opt-in polyBLEP saw, opt-in fixed pulse,
-opt-in voltage-controlled PWM, opt-in polyBLAMP triangle and stereo TPT low-pass)
+A separate Linux/HEADLESS compatibility gate generates seven
+oscillator/effect/envelope variants (sine, opt-in polyBLEP saw, opt-in fixed pulse,
+opt-in voltage-controlled PWM, opt-in polyBLAMP triangle, stereo TPT low-pass,
+and polyphonic linear ADSR)
 into a temporary directory, validates each output, and syntax-checks each
 actual `.cpp` against the **real pinned Rack/DPF/Jansson headers** in both
-GNU C++11 and GNU C++17 modes (six modules × two dialects). It shares
+GNU C++11 and GNU C++17 modes (seven modules × two dialects). It shares
 the exact Gitlink/dependency preflight and Cardinal C++ definitions of
 `tools/ci/check_real_rack_headers.py`; it does **not** fall back to
 `tests/rack_stub` when dependencies are unavailable. No generated file is
@@ -269,7 +298,7 @@ changes. A successful hosted run means **the default sine oscillator, all
 four opt-in polyBLEP/polyBLAMP waveforms, and the stereo TPT effect HEADLESS
 translation units compile at the C++ syntax/API layer** against that pinned SDK.
 The orchestration tests verify
-that the saw, pulse, PWM and triangle sources contain their respective corrections,
+that the saw, pulse, PWM, triangle and ADSR sources contain their respective algorithms,
 reject tampered generated outputs before compilation, and fail if any
 waveform's compiler step fails.
 These mocked orchestration tests alone are **not** a real SDK compile; the separate
@@ -295,7 +324,7 @@ Review its complete unified diff. Only then apply the same validated plan:
 python3 tools/module-forge/integrate.py module-forge-output/OrbitSine --repo-root . --apply
 ```
 
-The command prepares **six edits for oscillators** (C++ source and SVG plus
+The command prepares **six edits for oscillators and envelopes** (C++ source and SVG plus
 four collection registry files) or **seven for effects** (the same plus
 `plugins/ModularSynth/src/<Slug>.dsp.hpp`). The four registries are
 `plugins/Makefile`, `plugins/plugins.cpp`,

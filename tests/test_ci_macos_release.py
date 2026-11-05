@@ -118,6 +118,17 @@ class MacosReleasePayloadTests(unittest.TestCase):
         self.directory = Path(temp.name)
         self.pkg = self.directory / "MODULAR-SYNTH-macOS-universal-abc12345.pkg"
 
+    def populate_universal_bundles(self) -> Path:
+        root = self.directory / "bin"
+        for suffix in verifier.REQUIRED_BUNDLES:
+            executable = root / ("Cardinal." + suffix) / "Contents" / "MacOS" / "Cardinal"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(fat_binary())
+        native = root / "CardinalNative.app" / "Contents" / "MacOS" / "CardinalNative"
+        native.parent.mkdir(parents=True)
+        native.write_bytes(fat_binary())
+        return root
+
     def test_complete_xar_package_inventory_passes(self) -> None:
         self.pkg.write_bytes(xar_package())
         verifier.verify_package(self.pkg, self.pkg.name)
@@ -167,37 +178,53 @@ class MacosReleasePayloadTests(unittest.TestCase):
                     verifier.verify_package(self.pkg, self.pkg.name)
 
     def test_all_expected_bundle_types_have_universal_macho(self) -> None:
-        for suffix in verifier.REQUIRED_BUNDLES:
-            bundle = self.directory / "bin" / ("Cardinal." + suffix)
-            exe = bundle / "Contents" / "MacOS" / "Cardinal"
-            exe.parent.mkdir(parents=True)
-            exe.write_bytes(fat_binary())
-        native = self.directory / "bin" / "CardinalNative.app" / "Contents" / "MacOS" / "CardinalNative"
-        native.parent.mkdir(parents=True)
-        native.write_bytes(fat_binary())
-        verifier.verify_binaries(self.directory / "bin")
+        verifier.verify_binaries(self.populate_universal_bundles())
 
     def test_missing_or_thin_bundle_fails(self) -> None:
-        for suffix in verifier.REQUIRED_BUNDLES:
-            bundle = self.directory / "bin" / ("Cardinal." + suffix)
-            exe = bundle / "Contents" / "MacOS" / "Cardinal"
-            exe.parent.mkdir(parents=True)
-            exe.write_bytes(fat_binary())
-        native = self.directory / "bin" / "CardinalNative.app" / "Contents" / "MacOS" / "CardinalNative"
-        native.parent.mkdir(parents=True)
-        native.write_bytes(fat_binary())
-        wrong = self.directory / "bin" / "Cardinal.vst3" / "Contents" / "MacOS" / "Cardinal"
+        root = self.populate_universal_bundles()
+        wrong = root / "Cardinal.vst3" / "Contents" / "MacOS" / "Cardinal"
         wrong.write_bytes(fat_binary((0x01000007,)))
         with self.assertRaisesRegex(verifier.VerificationError, "universal"):
-            verifier.verify_binaries(self.directory / "bin")
+            verifier.verify_binaries(root)
         wrong.write_bytes(fat_binary())
-        (self.directory / "bin" / "Cardinal.clap" / "Contents" / "MacOS" / "Cardinal").unlink()
+        (root / "Cardinal.clap" / "Contents" / "MacOS" / "Cardinal").unlink()
         with self.assertRaisesRegex(verifier.VerificationError, "universal"):
-            verifier.verify_binaries(self.directory / "bin")
-        (self.directory / "bin" / "Cardinal.clap" / "Contents" / "MacOS" / "Cardinal").write_bytes(fat_binary())
+            verifier.verify_binaries(root)
+        (root / "Cardinal.clap" / "Contents" / "MacOS" / "Cardinal").write_bytes(fat_binary())
+        native = root / "CardinalNative.app" / "Contents" / "MacOS" / "CardinalNative"
         native.unlink()
         with self.assertRaisesRegex(verifier.VerificationError, "universal"):
-            verifier.verify_binaries(self.directory / "bin")
+            verifier.verify_binaries(root)
+
+    def test_valid_helper_cannot_hide_thin_executable(self) -> None:
+        root = self.populate_universal_bundles()
+        plugin_macos = root / "Cardinal.clap" / "Contents" / "MacOS"
+        (plugin_macos / "Cardinal").write_bytes(fat_binary((0x01000007,)))
+        (plugin_macos / "helper.dylib").write_bytes(fat_binary())
+        with self.assertRaisesRegex(verifier.VerificationError, "Cardinal.clap"):
+            verifier.verify_binaries(root)
+        (plugin_macos / "Cardinal").write_bytes(fat_binary())
+        (plugin_macos / "helper.dylib").write_bytes(fat_binary((0x0100000C,)))
+        with self.assertRaisesRegex(verifier.VerificationError, "helper.dylib"):
+            verifier.verify_binaries(root)
+
+    def test_healthy_unrelated_helper_cannot_replace_standalone_executable(self) -> None:
+        root = self.populate_universal_bundles()
+        macos = root / "Cardinal.app" / "Contents" / "MacOS"
+        (macos / "Cardinal").rename(macos / "OtherHealthyHelper")
+        with self.assertRaisesRegex(verifier.VerificationError, "standalone executable"):
+            verifier.verify_binaries(root)
+
+    def test_symlinked_bundle_or_binary_root_is_rejected(self) -> None:
+        root = self.populate_universal_bundles()
+        (root / "Cardinal.clap" / "Contents" / "MacOS" / "Cardinal").unlink()
+        (root / "Cardinal.clap").rename(root / "Cardinal.clap.real")
+        (root / "Cardinal.clap").symlink_to(root / "Cardinal.clap.real", target_is_directory=True)
+        with self.assertRaisesRegex(verifier.VerificationError, "not a directory"):
+            verifier.verify_binaries(root)
+        (self.directory / "bin-link").symlink_to(root, target_is_directory=True)
+        with self.assertRaisesRegex(verifier.VerificationError, "binary directory"):
+            verifier.verify_binaries(self.directory / "bin-link")
 
     def test_corrupt_fat_offsets_and_duplicate_arch_rejected(self) -> None:
         mach = self.directory / "Cardinal"

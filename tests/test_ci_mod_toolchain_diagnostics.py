@@ -26,7 +26,14 @@ seeder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(seeder)
 
 
-def sample_source_archive(names=("gcc-linaro-7.5-2019.12/", "gcc-linaro-7.5-2019.12/README")):
+def sample_source_archive(names=None, *, links=(), extra_types=()):
+    if names is None:
+        root = "gcc-linaro-7.5-2019.12"
+        names = (
+            f"{root}/", f"{root}/configure", f"{root}/gcc/",
+            f"{root}/gcc/config.gcc", f"{root}/libgcc/",
+            f"{root}/libgcc/config.host",
+        )
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w:xz") as archive:
         for name in names:
@@ -38,6 +45,15 @@ def sample_source_archive(names=("gcc-linaro-7.5-2019.12/", "gcc-linaro-7.5-2019
                 contents = b"source stub"
                 info.size = len(contents)
                 archive.addfile(info, io.BytesIO(contents))
+        for name, target, typecode in links:
+            info = tarfile.TarInfo(name)
+            info.type = typecode
+            info.linkname = target
+            archive.addfile(info)
+        for name, typecode in extra_types:
+            info = tarfile.TarInfo(name)
+            info.type = typecode
+            archive.addfile(info)
     return stream.getvalue()
 
 
@@ -175,6 +191,133 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
                 with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(content)):
                     with self.assertRaisesRegex(seeder.SourceArchiveError, problem):
                         seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp))
+                self.assertFalse((Path(temp) / seeder.ARCHIVE_NAME).exists())
+
+    def test_canonical_gcc_source_files_are_required(self) -> None:
+        # A two-entry XZ/tar with a convincing basename and a matching digest
+        # must not be mistaken for the full GCC source release.
+        fake = sample_source_archive(("gcc-linaro-7.5-2019.12/", "gcc-linaro-7.5-2019.12/README"))
+        digest = hashlib.sha256(fake).hexdigest()
+        with tempfile.TemporaryDirectory() as temp:
+            with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(fake)):
+                with self.assertRaisesRegex(seeder.SourceArchiveError, "canonical GCC 7 source"):
+                    seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp))
+            self.assertFalse((Path(temp) / seeder.ARCHIVE_NAME).exists())
+
+    def test_archive_links_must_resolve_inside_source_root(self) -> None:
+        root = seeder.ROOT_NAME
+        for links, problem in (
+            (((f"{root}/gcc/escape", "../../../outside", tarfile.SYMTYPE),), "escaping link"),
+            (((f"{root}/gcc/absolute", "/etc/passwd", tarfile.SYMTYPE),), "unsafe link"),
+            (((f"{root}/gcc/hard", "../../outside", tarfile.LNKTYPE),), "escaping link"),
+        ):
+            with self.subTest(links=links):
+                archive = sample_source_archive(links=links)
+                digest = hashlib.sha256(archive).hexdigest()
+                with tempfile.TemporaryDirectory() as temp:
+                    with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(archive)):
+                        with self.assertRaisesRegex(seeder.SourceArchiveError, problem):
+                            seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp))
+
+    def test_safe_relative_symlink_is_accepted(self) -> None:
+        archive = sample_source_archive(links=(
+            (f"{seeder.ROOT_NAME}/gcc/config-link", "config.gcc", tarfile.SYMTYPE),
+        ))
+        digest = hashlib.sha256(archive).hexdigest()
+        with tempfile.TemporaryDirectory() as temp:
+            with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(archive)):
+                self.assertEqual(
+                    seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp)),
+                    "downloaded and verified source",
+                )
+
+    def test_duplicate_files_and_special_members_fail_closed(self) -> None:
+        root = seeder.ROOT_NAME
+        for archive, problem in (
+            (sample_source_archive(names=(
+                f"{root}/", f"{root}/configure", f"{root}/configure",
+                f"{root}/gcc/config.gcc", f"{root}/libgcc/config.host",
+            )), "duplicate member path"),
+            (sample_source_archive(names=(
+                f"{root}/", f"{root}/configure", f"{root}/gcc/config.gcc",
+                f"{root}/gcc/./config.gcc", f"{root}/libgcc/config.host",
+            )), "duplicate member path"),
+            (sample_source_archive(extra_types=((f"{root}/fifo", tarfile.FIFOTYPE),)), "special member"),
+        ):
+            with self.subTest(problem=problem), tempfile.TemporaryDirectory() as temp:
+                digest = hashlib.sha256(archive).hexdigest()
+                with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(archive)):
+                    with self.assertRaisesRegex(seeder.SourceArchiveError, problem):
+                        seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp))
+
+    def test_local_source_seed_requires_digest_and_never_uses_network(self) -> None:
+        archive = sample_source_archive()
+        digest = hashlib.sha256(archive).hexdigest()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "verified-by-maintainer.tar.xz"
+            source.write_bytes(archive)
+            cache = root / "download"
+            with mock.patch.object(seeder, "urlopen", side_effect=AssertionError("no network allowed")):
+                self.assertEqual(seeder.seed_local_archive(source, digest, cache), "verified local source")
+                self.assertEqual(seeder.seed_local_archive(source, digest, cache), "verified cached source")
+            self.assertEqual(source.read_bytes(), archive)
+            self.assertEqual((cache / seeder.ARCHIVE_NAME).read_bytes(), archive)
+            source.write_bytes(b"replaced by unrelated content")
+            self.assertEqual(seeder.seed_local_archive(source, digest, cache), "verified cached source")
+
+    def test_local_source_rejects_bad_digest_without_mutating_cache(self) -> None:
+        archive = sample_source_archive()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source.tar.xz"
+            source.write_bytes(archive)
+            cache = root / "download"
+            cache.mkdir()
+            cached = cache / seeder.ARCHIVE_NAME
+            cached.write_bytes(b"uncertain prior download")
+            with self.assertRaisesRegex(seeder.SourceArchiveError, "SHA-256 mismatch"):
+                seeder.seed_local_archive(source, "0" * 64, cache)
+            self.assertEqual(cached.read_bytes(), b"uncertain prior download")
+            self.assertEqual(tuple(cache.iterdir()), (cached,))
+
+    def test_local_source_cli_runs_without_url_and_requires_authenticity_pin(self) -> None:
+        archive = sample_source_archive()
+        digest = hashlib.sha256(archive).hexdigest()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "local-source.tar.xz"
+            source.write_bytes(archive)
+            base_command = [
+                sys.executable, str(SEEDER_PATH), "--source-url", "", "--source-file", str(source),
+                "--cache-dir", str(root / "cache"),
+            ]
+            missing_pin = subprocess.run(
+                base_command + ["--sha256", ""], check=False, capture_output=True, text=True,
+            )
+            self.assertEqual(missing_pin.returncode, 1)
+            self.assertIn("requires a verified --sha256", missing_pin.stderr)
+            seeded = subprocess.run(
+                base_command + ["--sha256", digest], check=False, capture_output=True, text=True,
+            )
+            self.assertEqual(seeded.returncode, 0, seeded.stderr)
+            self.assertIn("verified local source", seeded.stdout)
+            self.assertEqual((root / "cache" / seeder.ARCHIVE_NAME).read_bytes(), archive)
+
+    def test_compressed_member_and_unpacked_size_limits_fail_closed(self) -> None:
+        archive = sample_source_archive()
+        digest = hashlib.sha256(archive).hexdigest()
+        for limit, value, problem in (
+            ("MAX_SOURCE_BYTES", len(archive) - 1, "compressed size bound"),
+            ("MAX_ARCHIVE_MEMBERS", 5, "member limit"),
+            ("MAX_UNPACKED_BYTES", 12, "unpacked size limit"),
+        ):
+            with self.subTest(limit=limit), tempfile.TemporaryDirectory() as temp:
+                candidate = Path(temp) / "candidate.tar.xz"
+                candidate.write_bytes(archive)
+                with mock.patch.object(seeder, limit, value):
+                    with self.assertRaisesRegex(seeder.SourceArchiveError, problem):
+                        seeder.validate_archive(candidate, digest)
                 self.assertFalse((Path(temp) / seeder.ARCHIVE_NAME).exists())
 
     def test_bad_cached_download_is_replaced_only_after_new_archive_verifies(self) -> None:

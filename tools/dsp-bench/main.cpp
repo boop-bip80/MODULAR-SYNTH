@@ -3,7 +3,7 @@
  * Copyright (C) 2026 boop-bip80 contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Four source DSP cores, deterministic control/audio stimuli, no host/Rack.
+ * Seven source DSP cores, deterministic control/audio stimuli, no host/Rack.
  * Time is informational; functional and allocation checks are acceptance gates.
  */
 
@@ -11,6 +11,9 @@
 #include "../../plugins/ModularSynth/src/StateFilter.hpp"
 #include "../../plugins/ModularSynth/src/FMVoice.hpp"
 #include "../../plugins/ModularSynth/src/StereoEcho.hpp"
+#include "../../plugins/ModularSynth/src/FoldDrive.hpp"
+#include "../../plugins/ModularSynth/src/ClockedLFO.hpp"
+#include "../../plugins/ModularSynth/src/ChanceHold.hpp"
 
 #include <array>
 #include <algorithm>
@@ -150,6 +153,57 @@ struct EchoStep {
             left, right, rate, delayMs, 0.4, 0.65, 0.2);
         return static_cast<double>(sample.left) * sample.left
              + static_cast<double>(sample.right) * sample.right;
+    }
+};
+
+struct FoldStep {
+    double operator()(dsp::FoldDrive& engine, int frame, int voice,
+                      double rate, float signal) const noexcept {
+        const double drive = (frame & 4095) < 2048 ? 0.63 : 0.81;
+        const double bias = (voice % 3 - 1) * 0.19;
+        const double output = engine.process(
+            5.0 * signal, rate, drive, bias, 0.8);
+        return output * output;
+    }
+};
+
+struct ClockStep {
+    double operator()(dsp::ClockedLFO& engine, int frame, int voice,
+                      double rate, float) const noexcept {
+        dsp::ClockedLFO::Input input;
+        input.sampleRateHz = rate;
+        input.log2RateHz = -1.0 + 0.08 * voice;
+        input.rateCvVolts = (frame & 8191) < 4096 ? 0.0 : 0.32;
+        input.ratioIndex = static_cast<double>(1 + voice % 3);
+        input.phaseOffset = voice * 0.02;
+        input.pulseWidth = 0.38 + voice * 0.01;
+        // Both free and externally clocked lanes are exercised. Clock periods
+        // are exact frame-count multiples at each rate, independent of CPU.
+        input.clockConnected = (voice & 1) != 0;
+        const int clockPeriodFrames = static_cast<int>(rate / 8.0);
+        input.clockVoltage = input.clockConnected &&
+            frame % clockPeriodFrames < 8 ? 10.0 : 0.0;
+        const dsp::ClockedLFO::Output output = engine.process(input);
+        return static_cast<double>(output.sine) * output.sine
+             + static_cast<double>(output.triangle) * output.triangle
+             + static_cast<double>(output.pulse) * output.pulse;
+    }
+};
+
+struct ChanceStep {
+    double operator()(dsp::ChanceHold& engine, int frame, int voice,
+                      double rate, float) const noexcept {
+        dsp::ChanceHold::Input input;
+        input.sampleRateHz = rate;
+        input.log2RateHz = 4.0;
+        input.rateCvVolts = voice * 0.03;
+        input.probability = 1.0;
+        input.glideSeconds = (frame & 8191) < 4096 ? 0.05 : 0.2;
+        input.semitoneQuantize = (voice & 1) != 0;
+        const dsp::ChanceHold::Output output = engine.process(input);
+        return static_cast<double>(output.held) * output.held
+             + static_cast<double>(output.glide) * output.glide
+             + static_cast<double>(output.trigger) * output.trigger;
     }
 };
 
@@ -343,7 +397,8 @@ int parseRepetitions(const char* text) {
 
 void usage(const char* command) {
     std::cout << "Usage: " << command << " [--frames 32768] [--repeats 1] [--json]\n"
-              << "Runs MorphVCO, StateFilter, FMVoice and StereoEcho at 48/96 kHz, "
+              << "Runs MorphVCO, StateFilter, FMVoice, StereoEcho, FoldDrive, "
+                 "ClockedLFO and ChanceHold at 48/96 kHz, "
                  "1/8/16 voices.\n"
               << "Source DSP timing only: no Cardinal, UI, drivers, host, or audio I/O.\n";
 }
@@ -389,6 +444,12 @@ int main(int argc, char** argv) {
                 rows.push_back(measure<dsp::StereoEchoDSP, EchoStep>(
                     "StereoEcho", count, sr, frames, repeats,
                     dsp::StereoEchoDSP::reservedBytesPerVoice()));
+                rows.push_back(measure<dsp::FoldDrive, FoldStep>(
+                    "FoldDrive", count, sr, frames, repeats));
+                rows.push_back(measure<dsp::ClockedLFO, ClockStep>(
+                    "ClockedLFO", count, sr, frames, repeats));
+                rows.push_back(measure<dsp::ChanceHold, ChanceStep>(
+                    "ChanceHold", count, sr, frames, repeats));
             }
         }
         if (json)

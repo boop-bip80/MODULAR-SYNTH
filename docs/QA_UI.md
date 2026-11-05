@@ -1,8 +1,8 @@
 # MODULAR-SYNTH — Manual UI and DAW State QA
 
 **Status: NOT EXECUTED.** This is a checklist for human verification of
-the nine first-party modules, including the introductory Morph VCO, State Filter
-and Macro8 voice as well as FMVoice, Chance Hold and Dual VCA. No desktop/DAW
+the ten first-party modules, including the introductory Morph VCO, State Filter
+and Macro8 voice as well as FMVoice, Chance Hold, Dual VCA and Slew Glide. No desktop/DAW
 UI run is claimed. All checkboxes intentionally remain unchecked.
 
 | Record before running | Value |
@@ -24,8 +24,8 @@ each supported host/plugin format.
 - [ ] Module browser offers exactly one each of **Morph VCO**,
   **State Filter**, **Fold Drive**, **Macro8 Performance Macros**,
   **Stereo Echo**, **Clocked LFO**, **FM Voice**, **Chance Hold** and
-  **Dual VCA** in the **MODULAR-SYNTH Originals** collection.
-  Search resolves all nine.
+  **Dual VCA** and **Slew Glide** in the **MODULAR-SYNTH Originals** collection.
+  Search resolves all ten.
 - [ ] Inspect each SVG panel, ports, labels, controls and lights at normal
   and HiDPI scaling; zoom, close/reopen the editor and check alignment.
 - [ ] Confirm the release package actually contains
@@ -37,7 +37,16 @@ each supported host/plugin format.
   `ModularSynth/res/ClockedLFO.svg`,
   `ModularSynth/res/FMVoice.svg`,
   `ModularSynth/res/ChanceHold.svg` and
-  `ModularSynth/res/DualVCA.svg`.
+  `ModularSynth/res/DualVCA.svg` and
+  `ModularSynth/res/SlewGlide.svg`.
+
+- [ ] Patch HostMIDI pitch → Slew Glide CV IN → LINEAR → Morph VCO PITCH.
+  Check RISE/FALL at zero and nonzero seconds and positive/negative modulation;
+  test both directions, including a 10 V test step, with an independent voltmeter.
+- [ ] Compare LINEAR and EXP outputs as separate curves; patch MOVING into a
+  voltage meter and verify it rises during a glide and falls after settling.
+  Retire/re-add polyphonic lanes and reset the module while transport runs;
+  record any stale previous pitch, clicks, host allocations or invalid CV.
 
 - [ ] With Fold Drive between Morph VCO and State Filter, verify dry
   transparency at zero DRIVE, audible fold changes with increasing DRIVE,
@@ -304,6 +313,51 @@ measurement. A host tester must therefore still verify:
   outputs in an active patch with ordinary colored cables.
 - [ ] The panel remains readable at practical display sizes and under common
   color-vision differences, without depending solely on the hue of a jack.
+
+### Extended I/O lanes and Macro8 scene grouping (2026-11-05)
+
+The preceding two-panel table records the first five-rail improvement. The
+current source checker now also recognizes four more original instruments:
+
+| New panel | Inputs | Outputs | Solid rail / border contrast | Worst label / rail contrast |
+| --- | ---: | ---: | ---: | ---: |
+| Morph VCO | 4 | 2 | 8.66:1 input / 7.09:1 output | 8.52:1 |
+| FM Voice | 4 | 2 | 8.66:1 / 7.09:1 | 9.01:1 |
+| Fold Drive | 4 | 1 | 8.66:1 / 7.09:1 | 8.52:1 |
+| State Filter | 4 | 3 | 8.66:1 / 7.09:1 | 8.52:1 |
+
+These four panels use an opaque cyan-framed input dock and violet-framed
+output dock. Their visual signal groups cover the exact saved Rack jack
+locations, with correspondingly colored under-jack rings; the actual Rack
+`PJ301MPort` widgets are still painted above the SVG. Morph VCO and FM Voice
+reuse terms such as “WAVE” or “RATIO” at both knob and CV-jack labels. The
+checker binds a repeated name to the *one label physically inside the expected
+rail* rather than accepting an unrelated knob label. Including the previous
+Dual VCA and Stereo Echo changes, the current audit checks **six panels,
+13 rails, 38 real jack centers and 38 NanoVG label positions**. It does not
+claim live Rack rendering or touch accessibility.
+
+Macro8 now groups its five **A/B/C/D/LIVE** recall controls in a violet
+scene dock. Source verification cross-checks both C++ slot arrays with the
+actual SVG circles, light positions and text placement. The source palette
+measures **7.50:1** between dock and frame and **11.60:1** between its solid
+background and label color. The on/off LED state remains drawn by Rack, not
+the static SVG; no conclusion about rendered status indicators follows.
+
+To reproduce the source checks and independent SVG renders:
+
+```sh
+python3 tools/ui-check/port_rail_audit.py
+python3 tools/ui-check/scene_rail_audit.py
+python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
+inkscape plugins/ModularSynth/res/StateFilter.svg --export-type=png --export-width=720 --export-filename=/tmp/StateFilter-review.png
+```
+
+- [ ] Confirm all **38** labels and jacks remain readable with actual Rack
+  controls/cables and common color-vision variations at normal and HiDPI
+  scale; verify no label/plug overlap in all six modules.
+- [ ] Confirm Macro8 scene labels and active LEDs remain distinguishable
+  through Rack's render/host theme and after live scene recall.
 
 ## 9. Parameter, port and tooltip discoverability (manual)
 

@@ -13,7 +13,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "tools/dsp-bench/main.cpp"
-ENGINE_NAMES = {"MorphVCO", "StateFilter", "FMVoice", "StereoEcho"}
+ENGINE_NAMES = {
+    "MorphVCO", "StateFilter", "FMVoice", "StereoEcho",
+    "FoldDrive", "ClockedLFO", "ChanceHold",
+}
 
 
 class DSPBenchmarkTests(unittest.TestCase):
@@ -51,7 +54,7 @@ class DSPBenchmarkTests(unittest.TestCase):
         )
 
     def assert_valid_rows(self, rows, frames: int) -> None:
-        self.assertEqual(len(rows), 24)
+        self.assertEqual(len(rows), 42)
         self.assertEqual({row["engine"] for row in rows}, ENGINE_NAMES)
         self.assertEqual({int(row["voices"]) for row in rows}, {1, 8, 16})
         self.assertEqual({int(row["sample_rate_hz"]) for row in rows}, {48000, 96000})
@@ -87,6 +90,26 @@ class DSPBenchmarkTests(unittest.TestCase):
                 # Fixed-capacity stereo ring memory is preallocated outside
                 # the timed section, never on an audio-process iteration.
                 self.assertGreater(int(row["prepared_bytes_hint"]), 1_500_000)
+
+    def test_new_dsp_engines_exercise_positive_deterministic_energy(self) -> None:
+        for profile in self.binaries:
+            first = self.invoke(profile, "--frames", "2048", "--json")
+            second = self.invoke(profile, "--frames", "2048", "--json")
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            left = {(row["engine"], row["voices"], row["sample_rate_hz"]): row
+                    for row in json.loads(first.stdout)}
+            right = {(row["engine"], row["voices"], row["sample_rate_hz"]): row
+                     for row in json.loads(second.stdout)}
+            for engine in ("FoldDrive", "ClockedLFO", "ChanceHold"):
+                for voices in (1, 8, 16):
+                    for rate in (48000, 96000):
+                        key = (engine, voices, rate)
+                        self.assertIn(key, left)
+                        self.assertEqual(left[key]["mean_output_energy"],
+                                         right[key]["mean_output_energy"])
+                        self.assertEqual(left[key]["cpp_new_calls"], 0)
+                        self.assertGreater(left[key]["mean_output_energy"], 0.0)
 
     def test_cpp11_debug_and_production_csv(self) -> None:
         for profile in self.binaries:

@@ -16,6 +16,7 @@
 #include "../plugins/ModularSynth/src/FMVoice.cpp"
 #include "../plugins/ModularSynth/src/ChanceHold.cpp"
 #include "../plugins/ModularSynth/src/DualVCA.cpp"
+#include "../plugins/ModularSynth/src/SlewGlide.cpp"
 
 #include <cmath>
 #include <atomic>
@@ -516,6 +517,35 @@ void smokeChance(const rack::ProcessArgs& args) {
     outputsFinite(module, ModularSynthChanceHold::NUM_OUTPUTS, 1, "Chance reset");
 }
 
+void smokeSlew(const rack::ProcessArgs& args) {
+    ModularSynthSlewGlide module;
+    require(module.params.size() == ModularSynthSlewGlide::NUM_PARAMS,
+            "SlewGlide param declarations");
+    require(module.inputs.size() == ModularSynthSlewGlide::NUM_INPUTS,
+            "SlewGlide input declarations");
+    module.inputs[ModularSynthSlewGlide::SIGNAL_INPUT].setChannels(16);
+    for (int c = 0; c < 16; ++c)
+        module.inputs[ModularSynthSlewGlide::SIGNAL_INPUT].setVoltage(
+            c % 2 ? -7.0f : 7.0f, c);
+    module.process(args);
+    const auto before = heapAllocations.load(std::memory_order_relaxed);
+    for (int n = 0; n < 512; ++n)
+        module.process(args);
+    const auto after = heapAllocations.load(std::memory_order_relaxed);
+    require(before == after, "SlewGlide process must never allocate");
+    outputsFinite(module, ModularSynthSlewGlide::NUM_OUTPUTS, 16, "SlewGlide");
+    require(module.outputs[ModularSynthSlewGlide::MOVING_OUTPUT].getVoltage(0) == 10.0f,
+            "SlewGlide motion gate should be raised during polyphonic slew");
+    module.inputs[ModularSynthSlewGlide::SIGNAL_INPUT].setChannels(1);
+    module.process(args);
+    outputsFinite(module, ModularSynthSlewGlide::NUM_OUTPUTS, 1,
+                  "SlewGlide retired lanes");
+    module.onReset();
+    module.process(args);
+    outputsFinite(module, ModularSynthSlewGlide::NUM_OUTPUTS, 1,
+                  "SlewGlide reset");
+}
+
 template <typename ModuleT>
 void verifyDeferredHostReset(const rack::ProcessArgs& args, int inputId,
                              int outputCount, const char* label) {
@@ -616,6 +646,9 @@ void regressionDeferredHostResets(const rack::ProcessArgs& args) {
     verifyDeferredHostReset<ModularSynthChanceHold>(
         args, ModularSynthChanceHold::RATE_CV_INPUT,
         ModularSynthChanceHold::NUM_OUTPUTS, "ChanceHold host reset");
+    verifyDeferredHostReset<ModularSynthSlewGlide>(
+        args, ModularSynthSlewGlide::SIGNAL_INPUT,
+        ModularSynthSlewGlide::NUM_OUTPUTS, "SlewGlide host reset");
 }
 
 } // namespace
@@ -624,8 +657,8 @@ int main() {
     try {
         require(modelMorphVCO && modelStateFilter && modelMacro8 && modelStereoEcho &&
                     modelClockedLFO && modelFMVoice && modelChanceHold && modelFoldDrive &&
-                    modelDualVCA,
-                "Nine shim-tested first-party models must instantiate");
+                    modelDualVCA && modelSlewGlide,
+                "Ten shim-tested first-party models must instantiate");
         const rack::ProcessArgs args{};
         smokeMorph(args);
         smokeFilter(args);
@@ -638,8 +671,9 @@ int main() {
         smokeFM(args);
         smokeChance(args);
         smokeDual(args);
+        smokeSlew(args);
         regressionDeferredHostResets(args);
-        std::cout << "PASS: 9 HEADLESS wrapper compile/process/port/reset smokes "
+        std::cout << "PASS: 10 HEADLESS wrapper compile/process/port/reset smokes "
                      "and four-scene Macro8 JSON/shim deferred reset regressions (test shim)\n";
         return 0;
     } catch (const std::exception& error) {

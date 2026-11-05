@@ -21,6 +21,9 @@
   <rect x="13" y="139" width="274" height="1" fill="#424C6A"/>
   <rect x="13" y="230" width="274" height="1" fill="#424C6A"/>
   <rect x="13" y="291" width="274" height="1" fill="#50486A"/>
+  <!-- Keep A/B/C/D and LIVE scene recall controls together visually. -->
+  <rect id="macroSceneRail" x="12" y="295" width="276" height="71" rx="9"
+        fill="#1D1C32" stroke="#B7A2F4" stroke-width="2"/>
   <g stroke="#9AACCC" stroke-width="1.1" fill="#232A42">
     <circle cx="40" cy="82" r="24"/><circle cx="113" cy="82" r="24"/>
     <circle cx="187" cy="82" r="24"/><circle cx="260" cy="82" r="24"/>
@@ -40,10 +43,11 @@
     <circle cx="148" cy="329" r="17"/><circle cx="205" cy="329" r="17"/>
     <circle cx="262" cy="329" r="17"/>
   </g>
-  <g fill="#416785">
+  <!-- Dim center means the real Rack LEDs, not the SVG, indicate active scenes. -->
+  <g fill="#24374B" stroke="#83D0EF" stroke-width="1">
     <circle cx="34" cy="350" r="4"/><circle cx="91" cy="350" r="4"/>
     <circle cx="148" cy="350" r="4"/><circle cx="205" cy="350" r="4"/>
   </g>
-  <circle cx="262" cy="350" r="4" fill="#376A58"/>
+  <circle cx="262" cy="350" r="4" fill="#23483D" stroke="#89DDBB" stroke-width="1"/>
   <path d="M19 372h262" stroke="#45506F" stroke-width="1" opacity=".7"/>
 </svg>

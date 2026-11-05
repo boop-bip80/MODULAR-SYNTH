@@ -232,6 +232,7 @@ PLUGIN_FILES += ModularSynth/src/ClockedLFO.cpp
 PLUGIN_FILES += ModularSynth/src/FMVoice.cpp
 PLUGIN_FILES += ModularSynth/src/ChanceHold.cpp
 PLUGIN_FILES += ModularSynth/src/DualVCA.cpp
+PLUGIN_FILES += ModularSynth/src/SlewGlide.cpp
 
 # --------------------------------------------------------------
 # Cardinal (built-in)

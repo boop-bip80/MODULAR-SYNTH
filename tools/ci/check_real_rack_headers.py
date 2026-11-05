@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = ROOT / "plugins" / "ModularSynth" / "src"
-MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA")
+MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA", "SlewGlide")
 # Cardinal's production plugin builds still use gnu++11 on several targets.
 # Keep the newer dialect as a second independent compatibility check: a
 # successful gnu++17 syntax test alone does not demonstrate production ABI.

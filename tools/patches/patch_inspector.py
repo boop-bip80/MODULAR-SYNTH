@@ -20,6 +20,90 @@ FIRST_PARTY = ("Cardinal", "ModularSynth")
 ENUM_MARKERS = {"ParamIds": "NUM_PARAMS", "InputIds": "NUM_INPUTS", "OutputIds": "NUM_OUTPUTS"}
 
 
+def _directed_feedback_groups(
+    modules: dict[int, tuple[str, str]],
+    schemas: dict[int, dict | None],
+    edges: list[tuple[int, int, int]],
+) -> list[dict]:
+    """Find cyclic directed cable groups without inferring DSP or signal types.
+
+    A strongly connected component of saved *module-level cables* is only a
+    potential feedback graph. No source enum or saved cable proves a signal is
+    audio, that a module has a one-sample delay, or that the loop is unstable.
+    Iterative Kosaraju avoids Python recursion limits on large saved patches.
+    """
+    outgoing: dict[int, set[int]] = {mid: set() for mid in modules}
+    incoming: dict[int, set[int]] = {mid: set() for mid in modules}
+    for source, target, _ in edges:
+        outgoing[source].add(target)
+        incoming[target].add(source)
+
+    visited: set[int] = set()
+    finish_order: list[int] = []
+    for start in sorted(modules):
+        if start in visited:
+            continue
+        visited.add(start)
+        stack = [(start, iter(sorted(outgoing[start])))]
+        while stack:
+            mid, neighbors = stack[-1]
+            next_mid = next(neighbors, None)
+            if next_mid is None:
+                finish_order.append(mid)
+                stack.pop()
+            elif next_mid not in visited:
+                visited.add(next_mid)
+                stack.append((next_mid, iter(sorted(outgoing[next_mid]))))
+
+    assigned: set[int] = set()
+    components: list[list[int]] = []
+    component_of: dict[int, int] = {}
+    for start in reversed(finish_order):
+        if start in assigned:
+            continue
+        group = {start}
+        assigned.add(start)
+        stack = [start]
+        while stack:
+            for neighbor in sorted(incoming[stack.pop()]):
+                if neighbor not in assigned:
+                    assigned.add(neighbor)
+                    group.add(neighbor)
+                    stack.append(neighbor)
+        ordered = sorted(group)
+        group_index = len(components)
+        components.append(ordered)
+        for mid in ordered:
+            component_of[mid] = group_index
+
+    internal_cables: list[list[int]] = [[] for _ in components]
+    for source, target, cid in edges:
+        group_index = component_of[source]
+        if group_index == component_of[target]:
+            internal_cables[group_index].append(cid)
+
+    result: list[dict] = []
+    for ordered, cable_ids in zip(components, internal_cables):
+        internal = sorted(cable_ids)
+        if len(ordered) == 1 and not internal:
+            continue
+        # StereoEcho implements delayed wet processing, but it also supports
+        # direct paths and CV: its presence is NOT a buffering certificate.
+        delay_candidates = [mid for mid in ordered
+                            if modules[mid] == ("ModularSynth", "StereoEcho")]
+        result.append({
+            "module_ids": ordered,
+            "modules": [f"{modules[mid][0]}/{modules[mid][1]}[{mid}]" for mid in ordered],
+            "cable_ids": internal,
+            "port_contracts": "source-bounded" if all(schemas.get(mid) is not None
+                                                     for mid in ordered)
+                               else "contains-unverified-ports",
+            "delay_candidates": delay_candidates,
+            "timing_proof": "not-established",
+        })
+    return sorted(result, key=lambda entry: entry["module_ids"])
+
+
 def _integer(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -213,7 +297,8 @@ def _source_bounds(root: Path, plugin: str, model: str) -> dict | None:
     }
 
 
-def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: bool = False) -> dict:
+def inspect_patch(path: str | Path, root: str | Path = ROOT, *,
+                  strict_unknown: bool = False, require_acyclic: bool = False) -> dict:
     """Return a serializable report. Errors mean structurally unsafe patch JSON."""
     path = Path(path)
     root = Path(root)
@@ -227,6 +312,8 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
         "cables": [],
         "graph": [],
         "components": [],
+        "feedback_groups": [],
+        "feedback_skipped_cables": 0,
     }
     errors: list[str] = report["errors"]  # type: ignore[assignment]
     warnings: list[str] = report["warnings"]  # type: ignore[assignment]
@@ -327,6 +414,7 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
     seen_cable_ids: set[int] = set()
     seen_inputs: dict[tuple[int, int], int] = {}
     graph: list[str] = []
+    valid_directed_edges: list[tuple[int, int, int]] = []
     neighbors: dict[int, set[int]] = {mid: set() for mid in known_ids}
     for index, cable in enumerate(cables):
         tag = f"cable #{index}"
@@ -336,8 +424,10 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
         cid = cable.get("id")
         if not _integer(cid) or cid < 0:
             errors.append(f"{tag}: id must be a non-negative integer")
+            report["feedback_skipped_cables"] += 1
             continue
-        if cid in seen_cable_ids:
+        duplicate_cable = cid in seen_cable_ids
+        if duplicate_cable:
             errors.append(f"{tag}: duplicate cable id {cid}")
         seen_cable_ids.add(cid)
         parsed: dict[str, int] = {}
@@ -348,17 +438,21 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
             else:
                 parsed[name] = value
         if len(parsed) != 4:
+            report["feedback_skipped_cables"] += 1
             continue
         source_id, target_id = parsed["outputModuleId"], parsed["inputModuleId"]
+        valid_feedback_edge = not duplicate_cable
         for name, endpoint in (("outputModuleId", source_id), ("inputModuleId", target_id)):
             if endpoint not in known_ids:
                 errors.append(f"{tag}: {name} {endpoint} does not exist")
+                valid_feedback_edge = False
         input_key = (target_id, parsed["inputId"])
         if input_key in seen_inputs:
             errors.append(
                 f"{tag}: duplicate connection to input {target_id}:{parsed['inputId']} "
                 f"(also cable {seen_inputs[input_key]})"
             )
+            valid_feedback_edge = False
         seen_inputs[input_key] = cid
         for endpoint_id, port_id, kind in (
             (source_id, parsed["outputId"], "outputs"),
@@ -367,6 +461,7 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
             schema = schemas.get(endpoint_id)
             if schema is not None and port_id >= schema[kind]:
                 errors.append(f"{tag}: {kind} index {port_id} exceeds known count {schema[kind]} for module {endpoint_id}")
+                valid_feedback_edge = False
         if source_id in known_ids and target_id in known_ids:
             src = known_ids[source_id]
             dst = known_ids[target_id]
@@ -376,6 +471,10 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
             )
             neighbors[source_id].add(target_id)
             neighbors[target_id].add(source_id)
+        if valid_feedback_edge:
+            valid_directed_edges.append((source_id, target_id, cid))
+        else:
+            report["feedback_skipped_cables"] += 1
 
     components: list[list[int]] = []
     remaining = set(known_ids)
@@ -396,6 +495,14 @@ def inspect_patch(path: str | Path, root: str | Path = ROOT, *, strict_unknown: 
     report["cables"] = len(cables)
     report["graph"] = graph
     report["components"] = components
+    feedback_groups = _directed_feedback_groups(known_ids, schemas, valid_directed_edges)
+    report["feedback_groups"] = feedback_groups
+    if require_acyclic and feedback_groups:
+        errors.append(
+            f"Found {len(feedback_groups)} directed cable feedback group(s): "
+            "--require-acyclic rejects potential loops regardless of their signal type "
+            "or whether they are musically intentional"
+        )
     report["ok"] = not errors
     return report
 
@@ -410,6 +517,18 @@ def _format_report(report: dict, *, show_graph: bool) -> str:
     if show_graph:
         lines.append("  Signal graph:")
         lines.extend(f"    {edge}" for edge in report["graph"])
+        lines.append(f"  Potential directed cable feedback groups: {len(report['feedback_groups'])}")
+        for group in report["feedback_groups"]:
+            lines.append(
+                f"    modules {group['module_ids']}; cables {group['cable_ids']}; "
+                f"ports {group['port_contracts']}; timing NOT established"
+            )
+            if group["delay_candidates"]:
+                lines.append(f"      Contains StereoEcho {group['delay_candidates']}; "
+                             "a delayed/causal path is NOT proven")
+        if report["feedback_skipped_cables"]:
+            lines.append(f"  Feedback scan excluded {report['feedback_skipped_cables']} "
+                         "malformed or structurally invalid cable(s)")
     for issue in report["errors"]:
         lines.append(f"  ERROR: {issue}")
     for issue in report["warnings"]:
@@ -424,9 +543,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-root", type=Path, default=ROOT)
     parser.add_argument("--strict-unknown", action="store_true",
                         help="Reject modules not present in checked-in first-party manifests")
+    parser.add_argument("--require-acyclic", action="store_true",
+                        help="Reject any directed cable cycle (including intentional feedback); "
+                             "never a claim about audio stability")
     parser.add_argument("--json", action="store_true", help="Output structured JSON reports")
     args = parser.parse_args(argv)
-    reports = [inspect_patch(path, args.repo_root, strict_unknown=args.strict_unknown)
+    reports = [inspect_patch(path, args.repo_root, strict_unknown=args.strict_unknown,
+                             require_acyclic=args.require_acyclic)
                for path in args.patches]
     if args.json:
         print(json.dumps(reports, indent=2))

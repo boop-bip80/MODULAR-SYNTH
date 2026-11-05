@@ -69,3 +69,45 @@ changes to its saved morph knob while running. Actual host sample-time
 rounding, parameter automation, cable signal paths, module bypass, user
 interaction, and DSP/DAW audio are outside this source-only preview. For a
 listening or recording claim, verify the performance inside the built host.
+
+## Source-verified sparse route export (`automation`)
+
+For a **v2** source bundle whose selected Macro8 has direct cables to
+first-party input ports, the related `automation` command expands each
+requested control snapshot into one row *per saved, source-verified cable*.
+This is a planning/export table for control mapping, **not** a DAW automation
+file, actual MIDI event stream, or measured CV capture:
+
+```bash
+python3 tools/instrument-builder/instrument_builder.py automation \
+  Performance-v2.msinstrument --from A \
+  --events '0:B,0.25:A,0.5:D' \
+  --at '0,0.125,0.25,0.5,0.75' \
+  --sample-rate 48000 --format json
+
+# CSV rows can be inspected in a spreadsheet or other script:
+python3 tools/instrument-builder/instrument_builder.py automation \
+  Performance-v2.msinstrument --from A \
+  --events '0:B,0.25:A,0.5:D' \
+  --at '0,0.125,0.25,0.5,0.75' \
+  --sample-rate 48000 --format csv
+```
+
+Each machine-readable row carries exact quantized `sampleCount`, active
+scene target, Macro8 module/control/name/range, estimated normalized and
+nominal voltages, **source cable ID**, source-verified destination
+plugin/model/module/input/label and any source-declared related parameter
+knob. A related parameter knob is only explanatory metadata: a saved cable
+feeds a CV input, **not** a host parameter automation endpoint.
+
+The export requires v2, at least one selected Macro8 direct route and **no
+unverified destination ports for that Macro8**. It rejects invalid scenes,
+unsorted/sub-sample timestamps, oversized row output (maximum 8,192 rows) and
+missing Macro8 selection. CSV cells with user-provided names beginning with
+spreadsheet formula operators are escaped with a leading apostrophe; JSON
+retains the validated original names. All outputs are deterministic and
+do not modify the `.msinstrument` archive or its embedded `.vcv` source.
+
+To generate a v2 bundle, run `pack patch.vcv --out Performance-v2.msinstrument
+--format-version 2`. Use `routes` and `check --require-verified-routes`
+to examine source port contracts before relying on a cable label.

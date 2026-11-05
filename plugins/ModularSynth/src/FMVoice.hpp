@@ -106,6 +106,32 @@ public:
                        kMaxIndexRadians);
     }
 
+    // One-sample sine self-feedback generates harmonics even when the main
+    // two-operator phase-modulation index is zero. The index ceiling above
+    // therefore cannot guard either the positive modulator or negative
+    // carrier feedback loop. Fade those loops over a high-frequency window
+    // before their SECOND harmonic reaches the 0.45*sampleRate guard band.
+    // This is a small, allocation-free spectral safeguard, not full
+    // feedback bandlimiting: higher harmonics can still fold below the fade.
+    // Below 0.16*sampleRate its return is exactly 1, preserving the legacy
+    // low- and mid-note recurrence, including signed feedback topology.
+    static double harmonicFeedbackTaper(double oscillatorHz,
+                                        double sampleRateHz) noexcept {
+        if (!finite(oscillatorHz) || !finite(sampleRateHz)
+            || oscillatorHz < 0.0 || sampleRateHz < 1000.0
+            || sampleRateHz > 384000.0)
+            return 0.0;
+        const double fadeStartHz = 0.16 * sampleRateHz;
+        const double fadeEndHz = 0.225 * sampleRateHz;
+        if (oscillatorHz <= fadeStartHz)
+            return 1.0;
+        if (oscillatorHz >= fadeEndHz)
+            return 0.0;
+        const double remaining = (fadeEndHz - oscillatorHz)
+                                 / (fadeEndHz - fadeStartHz);
+        return remaining * remaining * (3.0 - 2.0 * remaining);
+    }
+
     void reset() noexcept {
         carrierPhase = 0.0;
         modulatorPhase = 0.0;
@@ -185,8 +211,19 @@ public:
         // Negative values route the same bounded amount to the carrier
         // loop instead. Both contributions approach zero at the sign
         // boundary; this is a topology choice, not negative modulator FM.
-        const double modulatorFeedback = std::max(0.0, smoothedFeedback);
-        const double carrierFeedback = std::max(0.0, -smoothedFeedback);
+        // Apply the same pitch's band-edge feedback taper on the very first
+        // frame of an upward CV jump. Delaying this attenuation would briefly
+        // emit high-frequency folded harmonics from an old bright setting.
+        // Feedback polarity selects which oscillator is affected; no
+        // additional phase state, serialized parameter or audio allocation.
+        // Only one signed topology is active; avoid calculating the unused
+        // harmonic taper in the 16-lane sample hot path.
+        const double modulatorFeedback = smoothedFeedback > 0.0
+            ? smoothedFeedback * harmonicFeedbackTaper(modulatorHz, input.sampleRateHz)
+            : 0.0;
+        const double carrierFeedback = smoothedFeedback < 0.0
+            ? -smoothedFeedback * harmonicFeedbackTaper(carrierHz, input.sampleRateHz)
+            : 0.0;
         const double modulator = std::sin(kTwoPi * modulatorPhase
                                           + modulatorFeedback * previousModulator);
         previousModulator = modulator;

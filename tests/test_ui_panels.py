@@ -12,7 +12,9 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "validate_panels.py"
 RAIL_CHECKER = REPO / "tools" / "ui-check" / "port_rail_audit.py"
-MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA")
+SCENE_CHECKER = REPO / "tools" / "ui-check" / "scene_rail_audit.py"
+MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho",
+           "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA", "SlewGlide")
 
 
 class PanelGeometryTests(unittest.TestCase):
@@ -40,6 +42,12 @@ class PanelGeometryTests(unittest.TestCase):
             capture_output=True, text=True, check=False
         )
 
+    def run_scene_checker(self, root: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCENE_CHECKER), "--root", str(root)],
+            capture_output=True, text=True, check=False
+        )
+
     def replace_one(self, path: Path, before: str, after: str) -> None:
         source = path.read_text(encoding="utf-8")
         self.assertIn(before, source, f"fixture changed unexpectedly: {path}")
@@ -48,18 +56,83 @@ class PanelGeometryTests(unittest.TestCase):
     def test_current_repository_panels_pass(self) -> None:
         result = self.run_checker(REPO)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("PASS: 9 SVG panels", result.stdout)
-        self.assertIn("121 conservative candidate widget centers", result.stdout)
+        self.assertIn("PASS: 10 SVG panels", result.stdout)
+        self.assertIn("129 conservative candidate widget centers", result.stdout)
         self.assertIn("visual rendering/overlap not verified", result.stdout)
 
     def test_source_signal_rails_cover_real_ports_and_labels(self) -> None:
         result = self.run_rail_checker(REPO)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("5 rails, 14 jacks and 14 labels", result.stdout)
+        self.assertIn("6 source-backed signal-zone panels, 13 rails", result.stdout)
+        self.assertIn("38 jacks and 38 labels", result.stdout)
+        self.assertIn("MorphVCO/morphInputRail: 4 ports", result.stdout)
+        self.assertIn("FMVoice/fmOutputRail: 2 ports", result.stdout)
+        self.assertIn("FoldDrive/foldOutputRail: 1 ports", result.stdout)
+        self.assertIn("StateFilter/stateOutputRail: 3 ports", result.stdout)
         self.assertIn("DualVCA/dualInputRail: 4 ports", result.stdout)
         self.assertIn("StereoEcho/echoMixCvRail: 1 ports", result.stdout)
         self.assertIn("StereoEcho/echoOutputRail: 2 ports", result.stdout)
         self.assertIn("no rendered contrast", result.stdout)
+
+    def test_new_panel_lanes_reject_missing_opaque_underlay(self) -> None:
+        for model, lane in (
+            ("MorphVCO", "morphInputRail"),
+            ("FMVoice", "fmOutputRail"),
+            ("FoldDrive", "foldInputRail"),
+            ("StateFilter", "stateOutputRail"),
+        ):
+            with self.subTest(module=model):
+                root = self.fixture()
+                svg = root / "plugins/ModularSynth/res" / (model + ".svg")
+                self.replace_one(svg, f'id="{lane}"', f'id="broken_{lane}"')
+                result = self.run_rail_checker(root)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"{lane}: expected exactly one", result.stderr)
+
+    def test_duplicate_knob_word_cannot_substitute_for_fm_jack_label(self) -> None:
+        root = self.fixture()
+        cpp = root / "plugins/ModularSynth/src/FMVoice.cpp"
+        # RATIO appears at the knob and the CV input, with the same text.
+        # Moving the jack's own label must not let the knob label satisfy it.
+        self.replace_one(
+            cpp,
+            'nvgText(args.vg, 69.0f, 271.0f, "RATIO", nullptr);',
+            'nvgText(args.vg, 69.0f, 252.0f, "RATIO", nullptr);'
+        )
+        result = self.run_rail_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("RATIO_CV_INPUT missing unique in-rail NanoVG label", result.stderr)
+
+    def test_macro_scene_recall_dock_covers_buttons_labels_and_lights(self) -> None:
+        result = self.run_scene_checker(REPO)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("five aligned A/B/C/D/LIVE controls", result.stdout)
+        self.assertIn("one Macro8 scene dock, five controls", result.stdout)
+
+    def test_macro_scene_dock_rejects_off_rail_light_and_label_drift(self) -> None:
+        root = self.fixture()
+        svg = root / "plugins/ModularSynth/res/Macro8.svg"
+        self.replace_one(svg, 'cx="262" cy="350" r="4"',
+                         'cx="262" cy="374" r="4"')
+        result = self.run_scene_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("350 decoration absent", result.stderr)
+
+        root = self.fixture()
+        cpp = root / "plugins/ModularSynth/src/Macro8.cpp"
+        self.replace_one(cpp, 'nvgText(args.vg, slots[i], 304, labels[i], nullptr);',
+                         'nvgText(args.vg, slots[i], 290, labels[i], nullptr);')
+        result = self.run_scene_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("NanoVG scene label placement/palette", result.stderr)
+
+    def test_reject_new_panel_lane_palette_with_low_border_contrast(self) -> None:
+        root = self.fixture()
+        svg = root / "plugins/ModularSynth/res/MorphVCO.svg"
+        self.replace_one(svg, 'stroke="#75D7EA"', 'stroke="#19374A"')
+        result = self.run_rail_checker(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("MorphVCO/morphInputRail: border/fill", result.stderr)
 
     def test_signal_rail_catches_port_relocation_inside_panel(self) -> None:
         root = self.fixture()
@@ -266,7 +339,7 @@ class PanelGeometryTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("center (400,", result.stderr)
 
-    def test_all_nine_modules_have_exact_control_callsite_cardinality(self) -> None:
+    def test_all_ten_modules_have_exact_control_callsite_cardinality(self) -> None:
         changes = (
             ("MorphVCO", "createInputCentered<PJ301MPort>",
              "createOutputCentered<PJ301MPort>", "expected 4 Input centered callsites, found 3"),
@@ -274,6 +347,8 @@ class PanelGeometryTests(unittest.TestCase):
              "createOutputCentered<RoundBlackKnob>", "expected 3 Param centered callsites, found 2"),
             ("Macro8", "createLightCentered<SmallLight<GreenLight>>",
              "createInputCentered<SmallLight<GreenLight>>", "expected 3 Light centered callsites, found 2"),
+            ("SlewGlide", "createParamCentered<RoundBlackKnob>",
+             "createOutputCentered<RoundBlackKnob>", "expected 2 Param centered callsites, found 1"),
         )
         for model, before, after, message in changes:
             with self.subTest(model=model):

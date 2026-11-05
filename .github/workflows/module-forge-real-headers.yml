@@ -53,5 +53,5 @@ jobs:
           git submodule update --init --depth 1 src/Rack dpf
           git -C src/Rack submodule update --init --depth 1 dep/glfw dep/nanosvg dep/oui-blendish dep/pffft dep/simde dep/speexdsp
 
-      - name: Syntax-check oscillator and effect against real Rack headers
+      - name: Syntax-check oscillator, effect and ADSR envelope against real Rack headers
         run: python3 -B tools/module-forge/check_real_generated_headers.py

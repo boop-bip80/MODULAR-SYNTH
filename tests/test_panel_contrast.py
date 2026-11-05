@@ -15,7 +15,7 @@ REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "contrast_audit.py"
 MODULES = {"MorphVCO": 12, "StateFilter": 14, "FoldDrive": 12,
            "Macro8": 20, "StereoEcho": 16, "ClockedLFO": 16, "FMVoice": 12,
-           "ChanceHold": 16, "DualVCA": 12}
+           "ChanceHold": 16, "DualVCA": 12, "SlewGlide": 12}
 
 
 class PanelContrastTests(unittest.TestCase):
@@ -158,7 +158,7 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("UNKNOWN TEXT CLOCKED LFO #E8FFF8", result.stdout)
         self.assertIn("UNKNOWN TEXT FM VOICE #F4F3FE", result.stdout)
         self.assertIn("UNKNOWN TEXT CHANCE HOLD #E8F6FF", result.stdout)
-        self.assertIn("112 nvgText sites", result.stdout)
+        self.assertIn("122 nvgText sites", result.stdout)
         self.assertIn("measured SVG outline shapes", result.stdout)
         self.assertIn("UNKNOWN SVG outline shapes", result.stdout)
         self.assertIn("UNKNOWN SVG OUTLINE #63b7cc vs fill url(#dial)", result.stdout)

@@ -20,14 +20,14 @@ import check_real_generated_headers as gate
 
 
 class GeneratedRealHeaderGateTests(unittest.TestCase):
-    def test_six_generated_sources_are_valid_and_waveforms_distinct(self) -> None:
+    def test_seven_generated_sources_are_valid_and_waveforms_distinct(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             sources = gate.generate_starters(Path(temp))
             self.assertEqual([path.name for path in sources],
                              ["ForgeRealOsc.cpp", "ForgeRealSaw.cpp",
                               "ForgeRealPulse.cpp", "ForgeRealPWM.cpp",
                               "ForgeRealTriangle.cpp",
-                              "ForgeRealLP.cpp"])
+                              "ForgeRealLP.cpp", "ForgeRealADSR.cpp"])
             for source in sources:
                 self.assertTrue(source.is_file())
                 self.assertIn("#include \"plugin.hpp\"", source.read_text())
@@ -65,6 +65,13 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
             self.assertFalse((Path(temp) / "ForgeRealTriangle" /
                               "ForgeRealTriangle.dsp.hpp").exists())
             self.assertTrue((Path(temp) / "ForgeRealLP" / "ForgeRealLP.dsp.hpp").exists())
+            envelope = sources[6].read_text()
+            self.assertIn("GATE_INPUT, NUM_INPUTS", envelope)
+            self.assertIn("ATTACK_PARAM, DECAY_PARAM, SUSTAIN_PARAM, RELEASE_PARAM", envelope)
+            self.assertIn("pendingReset.exchange(false", envelope)
+            self.assertIn("GATE IN", (Path(temp) / "ForgeRealADSR" /
+                                      "ForgeRealADSR.svg").read_text())
+            self.assertFalse((Path(temp) / "ForgeRealADSR" / "ForgeRealADSR.dsp.hpp").exists())
 
     def test_gate_uses_headless_real_header_flags_not_test_shim(self) -> None:
         paths = [Path("/tmp/a/ForgeRealOsc.cpp"),
@@ -72,11 +79,12 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                  Path("/tmp/c/ForgeRealPulse.cpp"),
                  Path("/tmp/f/ForgeRealPWM.cpp"),
                  Path("/tmp/e/ForgeRealTriangle.cpp"),
-                 Path("/tmp/d/ForgeRealLP.cpp")]
+                 Path("/tmp/d/ForgeRealLP.cpp"),
+                 Path("/tmp/g/ForgeRealADSR.cpp")]
         sdk_rack_headers = str(gate.ROOT / "src" / "Rack" / "include")
         flags = ["-DHEADLESS", "-fsyntax-only", "-I", sdk_rack_headers]
         commands = gate.syntax_commands("c++", flags, paths)
-        self.assertEqual(len(commands), 6)
+        self.assertEqual(len(commands), 7)
         for command, source in zip(commands, paths):
             self.assertEqual(command[0], "c++")
             self.assertEqual(command[1:3], ["-iquote", str(gate.COLLECTION)])
@@ -149,7 +157,7 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
             self.assertEqual(result, 2)
             self.assertIn("wrong pinned gitlink", output.getvalue())
 
-    def test_compiler_invokes_all_six_real_header_translation_units(self) -> None:
+    def test_compiler_invokes_all_seven_real_header_translation_units(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             rack = Path(temp) / "rack"
             template = rack / "dep/speexdsp/include/speex/speexdsp_config_types.h.in"
@@ -175,15 +183,16 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
                     result = gate.main(["--rack-root", str(rack),
                                         "--dpf-root", str(Path(temp) / "dpf")])
             self.assertEqual(result, 0)
-            self.assertEqual(len(calls), 12)
-            for index, dialect in ((0, "-std=gnu++11"), (6, "-std=gnu++17")):
+            self.assertEqual(len(calls), 14)
+            for index, dialect in ((0, "-std=gnu++11"), (7, "-std=gnu++17")):
                 self.assertTrue(calls[index][-1].endswith("/ForgeRealOsc/ForgeRealOsc.cpp"))
                 self.assertTrue(calls[index + 1][-1].endswith("/ForgeRealSaw/ForgeRealSaw.cpp"))
                 self.assertTrue(calls[index + 2][-1].endswith("/ForgeRealPulse/ForgeRealPulse.cpp"))
                 self.assertTrue(calls[index + 3][-1].endswith("/ForgeRealPWM/ForgeRealPWM.cpp"))
                 self.assertTrue(calls[index + 4][-1].endswith("/ForgeRealTriangle/ForgeRealTriangle.cpp"))
                 self.assertTrue(calls[index + 5][-1].endswith("/ForgeRealLP/ForgeRealLP.cpp"))
-                self.assertTrue(all(dialect in call for call in calls[index:index + 6]))
+                self.assertTrue(calls[index + 6][-1].endswith("/ForgeRealADSR/ForgeRealADSR.cpp"))
+                self.assertTrue(all(dialect in call for call in calls[index:index + 7]))
             self.assertTrue(all("rack_stub" not in " ".join(c) for c in calls))
 
 
@@ -221,6 +230,15 @@ class GeneratedRealHeaderGateTests(unittest.TestCase):
 
             with mock.patch.object(gate, "check_module", side_effect=check):
                 with self.assertRaisesRegex(gate.sdk.PreflightError, "tampered triangle"):
+                    gate.generate_starters(Path(temp))
+
+    def test_invalid_generated_adsr_fails_closed_before_compile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            def check(folder: Path) -> list[str]:
+                return ["tampered ADSR"] if folder.name == "ForgeRealADSR" else []
+
+            with mock.patch.object(gate, "check_module", side_effect=check):
+                with self.assertRaisesRegex(gate.sdk.PreflightError, "tampered ADSR"):
                     gate.generate_starters(Path(temp))
 
     def test_saw_compiler_failure_is_reported_not_a_pass(self) -> None:

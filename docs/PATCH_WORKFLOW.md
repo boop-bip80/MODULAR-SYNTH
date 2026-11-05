@@ -11,6 +11,8 @@ python3 tools/patches/patch_inspector.py validate patches/examples/MODULAR_-_Mor
 python3 tools/patches/patch_inspector.py inspect patches/examples/MODULAR_-_Morph_VCO_Performance.vcv
 python3 tools/patches/patch_inspector.py inspect patches/examples/MODULAR_-_Morph_VCO_Performance.vcv --json
 python3 tools/patches/patch_inspector.py validate patches/templates/synth.vcv
+# Optional policy for patches intended to have no *directed* cable feedback:
+python3 tools/patches/patch_inspector.py validate patches/examples/MODULAR_-_Morph_VCO_Performance.vcv --require-acyclic
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
@@ -27,6 +29,13 @@ The tool catches:
 - First-party ModularSynth input/output/parameter count violations and declared `configParam` range violations **when the simple source schema can be read**.
 - Checked-in Cardinal **HostMIDI** (12 inputs/12 outputs), **HostTime** (eight outputs) and **HostAudio2** (two input/output jacks and saved level range 0–2) bounds, guarded by expected source declarations. Other Cardinal models remain unverified unless a reviewed schema is added.
 - A readable inventory, a directed cable list and graph-connected components, including disconnected utility/note modules.
+- Deterministically grouped **directed cable cycles** (potential feedback structures) using an iterative graph scan. The report includes involved module and cable IDs, whether port bounds were derived from checked-in source, and how many malformed cables could not be scanned. It does not label any loop audible, buffered, unstable or unsafe.
+
+### Feedback inspection (source topology only)
+
+`inspect` now includes `Potential directed cable feedback groups` for every strongly connected component containing a cable cycle, including self-patches. JSON output exposes `feedback_groups` with `module_ids`, `modules`, `cable_ids`, `port_contracts`, `delay_candidates` and the explicit `timing_proof: "not-established"` marker. A `StereoEcho` entry is only a **candidate temporal processor**, not proof that the particular loop has a one-sample delay: a module can expose direct or CV paths, and saved knobs cannot establish causality. Unknown modules or missing source-derived port declarations are marked `contains-unverified-ports`.
+
+By default these groups are **informational** and do not make a valid `.vcv` fail. Musicians intentionally use audio feedback and recursive CV modulation. For a patch collection whose contract explicitly forbids *any* directed cable cycle, add `--require-acyclic`; that opts into a strict topology policy, and validation exits 1 when any cycle is found, regardless of whether it could be musically desirable. It is not an instability detector. Invalid cable endpoints, indices or duplicate input assignments remain normal structural errors; `feedback_skipped_cables` counts those excluded from loop analysis so a broken graph cannot be misrepresented as fully assessed.
 
 ### Important limitations
 
@@ -40,6 +49,7 @@ The inspector also cannot prove:
 - Real plugin/module availability in a specific compiled binary, asset-file compatibility, patch migration or DAW state roundtrips.
 - Correct metadata/ports for arbitrary third-party modules; these remain unverified until a matching pinned manifest/schema is supplied.
 - Whether a patch creates a desirable sound. Run an actual host smoke test and measure audio output.
+- Whether any detected directed feedback loop is zero-delay, causally buffered, CV-only, safe at its saved gains or audible. Feedback *absence* in the checked saved cable graph also says nothing about a processor's internal feedback.
 
 ### Trace a first-party voice to stereo host outputs
 

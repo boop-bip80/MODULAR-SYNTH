@@ -25,14 +25,15 @@ import check_real_rack_headers as sdk  # noqa: E402 -- shared pinned SDK preflig
 
 
 STARTERS = (
-    # Keep the default sine and effect starters; compile all opt-in
-    # polyBLEP/polyBLAMP waveforms (including PWM control ports) against real API.
+    # Keep all historical oscillator/effect starters; add the independent
+    # polyphonic ADSR control-envelope variant to the same real SDK gate.
     ("ForgeRealOsc", "Forge Real Osc", "oscillator", "sine"),
     ("ForgeRealSaw", "Forge Real Saw", "oscillator", "saw"),
     ("ForgeRealPulse", "Forge Real Pulse", "oscillator", "pulse"),
     ("ForgeRealPWM", "Forge Real PWM", "oscillator", "pwm"),
     ("ForgeRealTriangle", "Forge Real Triangle", "oscillator", "triangle"),
     ("ForgeRealLP", "Forge Real LP", "effect", "sine"),
+    ("ForgeRealADSR", "Forge Real ADSR", "envelope", "sine"),
 )
 
 

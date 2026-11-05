@@ -32,7 +32,7 @@ class WindowsReleaseAssetsTests(unittest.TestCase):
         )
 
     @staticmethod
-    def pe(target: str = "win64") -> bytes:
+    def pe(target: str = "win64", *, dll: bool = False) -> bytes:
         data = bytearray(0x400)
         data[:2] = b"MZ"
         struct.pack_into("<I", data, 0x3C, 0x80)
@@ -40,6 +40,7 @@ class WindowsReleaseAssetsTests(unittest.TestCase):
         struct.pack_into("<H", data, 0x84, 0x14C if target == "win32" else 0x8664)
         struct.pack_into("<H", data, 0x86, 1)  # one section
         struct.pack_into("<H", data, 0x94, 0xE0 if target == "win32" else 0xF0)
+        struct.pack_into("<H", data, 0x96, 0x0002 | (0x2000 if dll else 0))
         struct.pack_into("<H", data, 0x98, 0x10B if target == "win32" else 0x20B)
         return bytes(data)
 
@@ -52,12 +53,12 @@ class WindowsReleaseAssetsTests(unittest.TestCase):
             "README.md": b"synthetic release fixture",
             "CardinalJACK.exe": self.pe(target),
             "CardinalNative.exe": self.pe(target),
-            "Cardinal.clap/CardinalFX.clap": self.pe(target),
-            "Cardinal.clap/CardinalSynth.clap": self.pe(target),
+            "Cardinal.clap/CardinalFX.clap": self.pe(target, dll=True),
+            "Cardinal.clap/CardinalSynth.clap": self.pe(target, dll=True),
         }
         for module in ("Cardinal", "CardinalFX", "CardinalSynth"):
             contents[f"{module}.lv2/manifest.ttl"] = b"<http://example.invalid/plugin> a <http://lv2plug.in/ns/lv2core#Plugin> ."
-            contents[f"{module}.vst3/Contents/{arch}/{module}.vst3"] = self.pe(target)
+            contents[f"{module}.vst3/Contents/{arch}/{module}.vst3"] = self.pe(target, dll=True)
         contents.update(overrides or {})
         contents.update(additions or {})
         contents.pop(missing, None)
@@ -136,6 +137,82 @@ class WindowsReleaseAssetsTests(unittest.TestCase):
         struct.pack_into("<H", minimal, 0x94, 0)  # fake PE signature with no optional header
         self.stage_release(overrides={"CardinalNative.exe": bytes(minimal)})
         self.assertIn("invalid PE section or optional header", self.verify().stderr)
+
+    def test_release_gate_requires_pe_application_versus_plugin_flags(self) -> None:
+        self.stage_release(overrides={
+            "Cardinal.clap/CardinalFX.clap": self.pe("win64", dll=False),
+        })
+        result = self.verify()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("DLL/plugin", result.stderr)
+
+        self.stage_release(overrides={"CardinalJACK.exe": self.pe("win64", dll=True)})
+        self.assertIn("application/installer", self.verify().stderr)
+
+        self.stage_release()
+        (self.cwd / "Cardinal-win64-26.02-installer.exe").write_bytes(
+            self.pe("win64", dll=True))
+        self.assertIn("application/installer", self.verify().stderr)
+
+        missing_flag = bytearray(self.pe())
+        struct.pack_into("<H", missing_flag, 0x96, 0)
+        self.stage_release(overrides={"CardinalNative.exe": bytes(missing_flag)})
+        self.assertIn("executable-image flag is missing", self.verify().stderr)
+
+    def test_release_gate_rejects_casefold_ambiguous_windows_paths(self) -> None:
+        for path in ("cardinaljack.EXE", "Readme.md", "Cardinal.lv2/MANIFEST.TTL",
+                     "cardinal.clap/cardinalfx.clap"):
+            with self.subTest(path=path):
+                self.stage_release(additions={path: b"ambiguous shadow"})
+                result = self.verify()
+                self.assertEqual(1, result.returncode)
+                self.assertIn("Windows ZIP path collision", result.stderr)
+
+    def test_release_gate_rejects_ntfs_ambiguous_or_reserved_names(self) -> None:
+        for path in ("vendor/file.", "vendor/file ", "vendor/CON.txt",
+                     "vendor/com1/readme", "vendor/thing\x01.txt"):
+            with self.subTest(path=path):
+                self.stage_release(additions={path: b"invalid on Windows"})
+                result = self.verify()
+                self.assertEqual(1, result.returncode)
+                self.assertRegex(result.stderr, r"(?:unsafe Windows|reserved Windows) ZIP member")
+
+    def test_release_gate_rejects_file_used_as_parent_directory(self) -> None:
+        self.stage_release(additions={
+            "vendor/cabinet": b"a file, not a directory",
+            "vendor/cabinet/plug.dat": b"nested payload",
+        })
+        result = self.verify()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("file/directory collision", result.stderr)
+
+    def test_release_gate_rejects_special_archive_members(self) -> None:
+        self.stage_release()
+        archive = self.cwd / "MODULAR-SYNTH-win64-v26.02.zip"
+        with zipfile.ZipFile(archive, "a") as zf:
+            entry = zipfile.ZipInfo("vendor/pipe")
+            entry.create_system = 3
+            entry.external_attr = (0o010644 << 16)  # Unix named FIFO.
+            zf.writestr(entry, b"not a regular payload")
+        self.assertIn("special ZIP member", self.verify().stderr)
+
+    def test_release_gate_rejects_inconsistent_directory_metadata(self) -> None:
+        self.stage_release()
+        archive = self.cwd / "MODULAR-SYNTH-win64-v26.02.zip"
+        with zipfile.ZipFile(archive, "a") as zf:
+            entry = zipfile.ZipInfo("vendor/looks-regular")
+            entry.create_system = 3
+            entry.external_attr = (0o040755 << 16)  # Claims directory without '/'.
+            zf.writestr(entry, b"not really a directory")
+        self.assertIn("inconsistent ZIP directory", self.verify().stderr)
+
+        self.stage_release()
+        with zipfile.ZipFile(archive, "a") as zf:
+            entry = zipfile.ZipInfo("vendor/invalid-dir/")
+            entry.create_system = 3
+            entry.external_attr = (0o040755 << 16)
+            zf.writestr(entry, b"directory with unexpected file data")
+        self.assertIn("inconsistent ZIP directory", self.verify().stderr)
 
     def test_release_gate_rejects_corrupt_zip_and_unsafe_paths(self) -> None:
         self.stage_release()
