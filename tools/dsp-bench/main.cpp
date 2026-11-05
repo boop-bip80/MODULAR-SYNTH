@@ -13,6 +13,7 @@
 #include "../../plugins/ModularSynth/src/StereoEcho.hpp"
 
 #include <array>
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -33,6 +34,8 @@
 namespace {
 std::atomic<bool> gTrackNew(false);
 std::atomic<std::uint64_t> gNewCalls(0);
+std::atomic<bool> gTrackPreparation(false);
+std::atomic<std::uint64_t> gPreparedCppNewBytes(0);
 }
 
 // The measurement counts C++ new/new[] calls in the sample loop. It does not
@@ -40,6 +43,9 @@ std::atomic<std::uint64_t> gNewCalls(0);
 void* operator new(std::size_t bytes) {
     if (gTrackNew.load(std::memory_order_relaxed))
         gNewCalls.fetch_add(1u, std::memory_order_relaxed);
+    if (gTrackPreparation.load(std::memory_order_relaxed))
+        gPreparedCppNewBytes.fetch_add(static_cast<std::uint64_t>(bytes),
+                                      std::memory_order_relaxed);
     if (void* memory = std::malloc(bytes == 0 ? 1u : bytes))
         return memory;
     throw std::bad_alloc();
@@ -49,10 +55,26 @@ void* operator new[](std::size_t bytes) {
     return ::operator new(bytes);
 }
 
+// GCC 13's aggressive interprocedural mismatched-new-delete heuristic treats
+// the intentional malloc/free-backed global new override as foreign to STL
+// allocator new expressions if it inlines these shims into vector teardown.
+// Keep the delete shims opaque without suppressing the project's -Werror.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
 void operator delete(void* memory) noexcept { std::free(memory); }
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
 void operator delete[](void* memory) noexcept { ::operator delete(memory); }
 #if __cplusplus >= 201402L
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
 void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
 void operator delete[](void* memory, std::size_t) noexcept { ::operator delete(memory); }
 #endif
 
@@ -142,14 +164,24 @@ struct Measurement {
     double meanEnergy;
     std::uint64_t newCalls;
     std::size_t preparedBytesHint;
+    std::uint64_t preparedCppNewBytes;
+    int repetitions;
+    double minElapsedMs;
+    double p90ElapsedMs;
+    double maxElapsedMs;
 };
 
 template <typename Engine, typename Step>
-Measurement measure(const char* name, int voices, int sampleRate, int frames,
-                    std::size_t extraBytesPerVoice = 0u) {
+Measurement measureOnce(const char* name, int voices, int sampleRate, int frames,
+                        std::size_t extraBytesPerVoice = 0u) {
     // Important: 16 StereoEcho voices allocate ~23.4 MiB, but all constructors,
     // table initialization and warmup execute before timing/heap tracking.
+    gPreparedCppNewBytes.store(0u, std::memory_order_relaxed);
+    gTrackPreparation.store(true, std::memory_order_relaxed);
     std::vector<Engine> state(static_cast<std::size_t>(voices));
+    gTrackPreparation.store(false, std::memory_order_relaxed);
+    const std::uint64_t preparedNewBytes =
+        gPreparedCppNewBytes.load(std::memory_order_relaxed);
     const std::array<float, kSignalPeriod>& signal = inputTable();
     const Step step;
     const int warmupFrames = sampleRate / 12; // 83 ms: primes the 55-73 ms delay.
@@ -202,19 +234,67 @@ Measurement measure(const char* name, int voices, int sampleRate, int frames,
     result.newCalls = allocations;
     result.preparedBytesHint = static_cast<std::size_t>(voices)
                              * (sizeof(Engine) + extraBytesPerVoice);
+    result.preparedCppNewBytes = preparedNewBytes;
+    result.repetitions = 1;
+    result.minElapsedMs = result.elapsedMs;
+    result.p90ElapsedMs = result.elapsedMs;
+    result.maxElapsedMs = result.elapsedMs;
     return result;
+}
+
+template <typename Engine, typename Step>
+Measurement measure(const char* name, int voices, int sampleRate, int frames,
+                    int repetitions, std::size_t extraBytesPerVoice = 0u) {
+    // Reconstruct and warm fresh engine states before every timed repetition.
+    // Median elapsed time is more useful than a single scheduling outlier,
+    // but deliberately remains observational rather than a CI pass threshold.
+    std::vector<double> times;
+    times.reserve(static_cast<std::size_t>(repetitions));
+    Measurement aggregate = {};
+    for (int trial = 0; trial < repetitions; ++trial) {
+        const Measurement next = measureOnce<Engine, Step>(
+            name, voices, sampleRate, frames, extraBytesPerVoice);
+        if (trial == 0)
+            aggregate = next;
+        else if (aggregate.meanEnergy != next.meanEnergy
+                 || aggregate.preparedBytesHint != next.preparedBytesHint
+                 || aggregate.preparedCppNewBytes != next.preparedCppNewBytes)
+            throw std::runtime_error(std::string(name)
+                + ": repeated source DSP output/preparation was not deterministic");
+        times.push_back(next.elapsedMs);
+    }
+    std::sort(times.begin(), times.end());
+    const std::size_t middle = times.size() / 2u;
+    const double medianMs = times.size() % 2u
+        ? times[middle]
+        : (times[middle - 1u] + times[middle]) * 0.5;
+    const std::size_t p90Index = (times.size() * 9u + 9u) / 10u - 1u;
+    aggregate.elapsedMs = medianMs;
+    aggregate.nsPerVoiceSample = medianMs * 1.0e6
+        / (static_cast<double>(frames) * voices);
+    aggregate.realtimeFactor = (medianMs / 1000.0)
+        / (frames / static_cast<double>(sampleRate));
+    aggregate.repetitions = repetitions;
+    aggregate.minElapsedMs = times.front();
+    aggregate.p90ElapsedMs = times[p90Index];
+    aggregate.maxElapsedMs = times.back();
+    return aggregate;
 }
 
 void printCsv(const std::vector<Measurement>& rows) {
     std::cout << "engine,voices,sample_rate_hz,frames,elapsed_ms,ns_per_voice_sample,"
-                 "realtime_factor,mean_output_energy,cpp_new_calls,prepared_bytes_hint\n";
+                 "realtime_factor,mean_output_energy,cpp_new_calls,prepared_bytes_hint,"
+                 "prepared_cpp_new_bytes,repetitions,min_elapsed_ms,p90_elapsed_ms,max_elapsed_ms\n";
     std::cout << std::setprecision(9);
     for (std::size_t n = 0; n < rows.size(); ++n) {
         const Measurement& r = rows[n];
         std::cout << r.engine << ',' << r.voices << ',' << r.sampleRate << ','
                   << r.frames << ',' << r.elapsedMs << ',' << r.nsPerVoiceSample
                   << ',' << r.realtimeFactor << ',' << r.meanEnergy << ','
-                  << r.newCalls << ',' << r.preparedBytesHint << '\n';
+                  << r.newCalls << ',' << r.preparedBytesHint << ','
+                  << r.preparedCppNewBytes << ',' << r.repetitions << ','
+                  << r.minElapsedMs << ',' << r.p90ElapsedMs << ','
+                  << r.maxElapsedMs << '\n';
     }
 }
 
@@ -230,7 +310,12 @@ void printJson(const std::vector<Measurement>& rows) {
                   << ",\"realtime_factor\":" << r.realtimeFactor
                   << ",\"mean_output_energy\":" << r.meanEnergy
                   << ",\"cpp_new_calls\":" << r.newCalls
-                  << ",\"prepared_bytes_hint\":" << r.preparedBytesHint << '}';
+                  << ",\"prepared_bytes_hint\":" << r.preparedBytesHint
+                  << ",\"prepared_cpp_new_bytes\":" << r.preparedCppNewBytes
+                  << ",\"repetitions\":" << r.repetitions
+                  << ",\"min_elapsed_ms\":" << r.minElapsedMs
+                  << ",\"p90_elapsed_ms\":" << r.p90ElapsedMs
+                  << ",\"max_elapsed_ms\":" << r.maxElapsedMs << '}';
         if (n + 1u != rows.size())
             std::cout << ',';
         std::cout << '\n';
@@ -247,8 +332,17 @@ int parseFrames(const char* text) {
     return static_cast<int>(value);
 }
 
+int parseRepetitions(const char* text) {
+    errno = 0;
+    char* end = NULL;
+    const long value = std::strtol(text, &end, 10);
+    if (errno != 0 || text == end || *end != '\0' || value < 1L || value > 9L)
+        throw std::invalid_argument("--repeats must be an integer 1..9");
+    return static_cast<int>(value);
+}
+
 void usage(const char* command) {
-    std::cout << "Usage: " << command << " [--frames 32768] [--json]\n"
+    std::cout << "Usage: " << command << " [--frames 32768] [--repeats 1] [--json]\n"
               << "Runs MorphVCO, StateFilter, FMVoice and StereoEcho at 48/96 kHz, "
                  "1/8/16 voices.\n"
               << "Source DSP timing only: no Cardinal, UI, drivers, host, or audio I/O.\n";
@@ -258,12 +352,17 @@ void usage(const char* command) {
 int main(int argc, char** argv) {
     try {
         int frames = 32768;
+        int repeats = 1;
         bool json = false;
         for (int n = 1; n < argc; ++n) {
             if (std::strcmp(argv[n], "--frames") == 0) {
                 if (n + 1 == argc)
                     throw std::invalid_argument("--frames needs a value");
                 frames = parseFrames(argv[++n]);
+            } else if (std::strcmp(argv[n], "--repeats") == 0) {
+                if (n + 1 == argc)
+                    throw std::invalid_argument("--repeats needs a value");
+                repeats = parseRepetitions(argv[++n]);
             } else if (std::strcmp(argv[n], "--json") == 0) {
                 json = true;
             } else if (std::strcmp(argv[n], "--help") == 0) {
@@ -282,13 +381,13 @@ int main(int argc, char** argv) {
                 const int sr = rates[rate];
                 const int count = voices[voice];
                 rows.push_back(measure<dsp::MorphOscillator, MorphStep>(
-                    "MorphVCO", count, sr, frames));
+                    "MorphVCO", count, sr, frames, repeats));
                 rows.push_back(measure<dsp::StateFilter, FilterStep>(
-                    "StateFilter", count, sr, frames));
+                    "StateFilter", count, sr, frames, repeats));
                 rows.push_back(measure<dsp::FMVoice, FMStep>(
-                    "FMVoice", count, sr, frames));
+                    "FMVoice", count, sr, frames, repeats));
                 rows.push_back(measure<dsp::StereoEchoDSP, EchoStep>(
-                    "StereoEcho", count, sr, frames,
+                    "StereoEcho", count, sr, frames, repeats,
                     dsp::StereoEchoDSP::reservedBytesPerVoice()));
             }
         }

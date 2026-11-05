@@ -103,7 +103,15 @@ def _parse_patch(patch: dict[str, Any]) -> tuple[dict[int, dict[str, Any]], list
                 raise PatchComparisonError(f"{context}.params[{pindex}] must be an object")
             pid = _natural_id(entry.get("id"), f"{context}.params[{pindex}].id")
             val = entry.get("value")
-            if type(val) not in (int, float) or not math.isfinite(val):
+            # Python's math.isfinite() converts integers to double and raises
+            # OverflowError for a valid JSON integer beyond float range.
+            # Such a parameter cannot represent a Rack control value; reject
+            # it with our stable API error instead of a raw CLI traceback.
+            try:
+                finite = type(val) in (int, float) and math.isfinite(val)
+            except OverflowError:
+                finite = False
+            if not finite:
                 raise PatchComparisonError(f"{context}.params[{pindex}].value must be finite numeric")
             if pid in params:
                 raise PatchComparisonError(f"{context}: duplicate parameter ID {pid}")
@@ -158,7 +166,7 @@ def _slug(module: dict[str, Any]) -> str:
 def _match(
     old: dict[int, dict[str, Any]], new: dict[int, dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[int, str], dict[int, str]]:
-    """Stable IDs first; otherwise pair only the unique remaining instance of a type."""
+    """Pair stable IDs, unambiguous model instances, then unique saved states."""
     old_left, new_left = set(old), set(new)
     pairs: list[tuple[int, int]] = []
     for mid in sorted(old_left & new_left):
@@ -168,6 +176,47 @@ def _match(
             new_left.remove(mid)
     old_types: dict[tuple[str, str], list[int]] = defaultdict(list)
     new_types: dict[tuple[str, str], list[int]] = defaultdict(list)
+    for mid in sorted(old_left):
+        old_types[_kind(old[mid])].append(mid)
+    for mid in sorted(new_left):
+        new_types[_kind(new[mid])].append(mid)
+    for kind in sorted(set(old_types) & set(new_types)):
+        if len(old_types[kind]) == len(new_types[kind]) == 1:
+            lhs, rhs = old_types[kind][0], new_types[kind][0]
+            pairs.append((lhs, rhs))
+            old_left.remove(lhs)
+            new_left.remove(rhs)
+
+    # Rack may regenerate IDs for a patch with multiple instances of the
+    # *same* model. Recover only uniquely identifiable exact saved states;
+    # this can distinguish two differently configured VCAs without inferring
+    # identity from their canvas position or an arbitrary numeric ID. A state
+    # fingerprint occurring twice on either side is ambiguous and deliberately
+    # stays added/removed. Route rewires are checked after safe pairing.
+    old_fingerprints: dict[tuple, list[int]] = defaultdict(list)
+    new_fingerprints: dict[tuple, list[int]] = defaultdict(list)
+    for mid in sorted(old_left):
+        old_fingerprints[(_kind(old[mid]), _saved_identity(old[mid]))].append(mid)
+    for mid in sorted(new_left):
+        new_fingerprints[(_kind(new[mid]), _saved_identity(new[mid]))].append(mid)
+    for mids in old_fingerprints.values():
+        if len(mids) != 1:
+            continue
+        lhs = mids[0]
+        fingerprint = (_kind(old[lhs]), _saved_identity(old[lhs]))
+        right = new_fingerprints.get(fingerprint, ())
+        if len(right) == 1:
+            rhs = right[0]
+            pairs.append((lhs, rhs))
+            old_left.remove(lhs)
+            new_left.remove(rhs)
+
+    # A duplicate set may now have one unmatched instance per side, with the
+    # other instances positively identified by their saved state. Apply the
+    # same singleton-model policy used above to expose genuine edits to the
+    # last remaining module instead of misreporting it as a replacement.
+    old_types.clear()
+    new_types.clear()
     for mid in sorted(old_left):
         old_types[_kind(old[mid])].append(mid)
     for mid in sorted(new_left):

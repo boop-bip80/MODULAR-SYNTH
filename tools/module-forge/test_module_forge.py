@@ -134,6 +134,29 @@ class ModuleForgeTests(unittest.TestCase):
         self.assertIn("leftFilter[voice].reset();", effect)
         self.assertIn("rightFilter[voice].reset();", effect)
 
+    def test_generated_starters_defer_host_reset_to_audio_callback(self):
+        for kind, waveform in (("oscillator", "sine"),
+                               ("oscillator", "saw"),
+                               ("oscillator", "pulse"),
+                               ("oscillator", "pwm"),
+                               ("oscillator", "triangle"),
+                               ("effect", "sine")):
+            with self.subTest(kind=kind, waveform=waveform):
+                source = render_files("SafeReset", "Safe Reset",
+                                      kind=kind, waveform=waveform)["SafeReset.cpp"]
+                self.assertIn("#include <atomic>", source)
+                self.assertIn("std::atomic<bool> pendingReset{false};", source)
+                self.assertIn("pendingReset.store(true, std::memory_order_release);", source)
+                self.assertIn("pendingReset.exchange(false, std::memory_order_acq_rel)", source)
+                self.assertIn("void onReset(const ResetEvent& event) override", source)
+                self.assertIn("Module::onReset(event);", source)
+                # Both public reset handlers must be O(1): only request a
+                # reset; state clears belong to the audio process() callback.
+                handlers = source.split("    void onReset() override {", 1)[1]
+                handlers = handlers.split("    void process(const ProcessArgs& args) override {", 1)[0]
+                self.assertNotIn("phase.fill(", handlers)
+                self.assertNotIn("leftFilter[voice].reset()", handlers)
+
     def test_opt_in_saw_is_bandlimited_and_keeps_default_bytes(self):
         with tempfile.TemporaryDirectory() as tmp:
             parent = Path(tmp)

@@ -85,6 +85,19 @@ int main() {
         || !near(sine1, 5.f * std::sin(twoPi * 523.25113f / 48000.f)))
         return 5;
 
+    // Rack may send reset from a different thread. Neither the legacy nor
+    // event overload may touch audio-owned phase until process() consumes
+    // the atomic request. The first post-reset frame must restart at phase 0.
+    const float phaseBeforeHostReset = oscillator.phase[0];
+    oscillator.onReset(rack::ResetEvent{});
+    if (!oscillator.pendingReset.load() || oscillator.phase[0] != phaseBeforeHostReset
+        || oscillator.activeChannels != 2)
+        return 22;
+    oscillator.process(args);
+    if (oscillator.pendingReset.load()
+        || !near(oscillator.outputs[MSForgeOrbitModule::AUDIO_OUTPUT].getVoltage(0), sine0))
+        return 23;
+
     // Nonfinite coarse/pitch CV must fall back to 0 octaves even with strict
     // -ffast-math; baseline reference uses independently reset phase.
     for (float bad : {nan, plusInf, minusInf}) {
@@ -168,8 +181,23 @@ int main() {
     effect.process(args);
     if (effect.outputs[MSForgeStereoLPModule::LEFT_OUTPUT].getChannels() != 3)
         return 13;
+    const float stateBeforeHostReset = effect.leftFilter[0].state;
     effect.onReset();
+    if (!effect.pendingReset.load() || effect.leftFilter[0].state != stateBeforeHostReset)
+        return 14;
+    effect.inputs[MSForgeStereoLPModule::LEFT_INPUT].setChannels(1);
+    effect.inputs[MSForgeStereoLPModule::LEFT_INPUT].setVoltage(0.f, 0);
+    effect.inputs[MSForgeStereoLPModule::RIGHT_INPUT].setChannels(1);
+    effect.inputs[MSForgeStereoLPModule::RIGHT_INPUT].setVoltage(0.f, 0);
+    effect.inputs[MSForgeStereoLPModule::CUTOFF_CV_INPUT].setChannels(1);
+    effect.inputs[MSForgeStereoLPModule::CUTOFF_CV_INPUT].setVoltage(0.f, 0);
+    effect.process(args);
+    if (effect.pendingReset.load() || effect.activeChannels != 1)
+        return 14;
     for (const auto& voice : effect.leftFilter)
+        if (voice.state != 0.f)
+            return 14;
+    for (const auto& voice : effect.rightFilter)
         if (voice.state != 0.f)
             return 14;
 

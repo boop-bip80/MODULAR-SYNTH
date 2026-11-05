@@ -17,6 +17,13 @@ c++ -std=gnu++11 -O3 -ffast-math -fno-finite-math-only \
   -Wall -Wextra -Werror tools/dsp-bench/main.cpp -o /tmp/modular-dsp-bench
 /tmp/modular-dsp-bench --frames 32768 > /tmp/modular-dsp.csv
 /tmp/modular-dsp-bench --frames 32768 --json > /tmp/modular-dsp.json
+
+# Three fresh warm-state trials per scenario; report the median and dispersion:
+/tmp/modular-dsp-bench --frames 32768 --repeats 3 --json > /tmp/modular-dsp-repeated.json
+
+# Run the exact same binary/flags/workload on baseline and candidate commits:
+python3 tools/dsp-bench/compare.py /tmp/baseline-dsp.json /tmp/candidate-dsp.json
+python3 tools/dsp-bench/compare.py /tmp/baseline-dsp.json /tmp/candidate-dsp.json --json
 ```
 
 The C++11 debug and production smoke tests, including 24 scenario records per
@@ -24,6 +31,7 @@ profile, run through:
 
 ```bash
 python3 -B -m unittest tests/test_dsp_benchmark.py -v
+python3 -B -m unittest tests/test_dsp_benchmark_compare.py -v
 ```
 
 No dependency download, plugin SDK, test audio device, or host installation is
@@ -33,6 +41,11 @@ produces 24 records (four engines × two rates × three polyphony settings).
 Use the same flags, compiler, system load, CPU governor, and core affinity when
 comparing two code revisions; report all of these and repeat runs. Shared CI
 VMs are noisy and unsuitable for absolute release-performance targets.
+`--repeats` accepts 1–9; each repeat constructs **fresh** DSP objects and warms
+their signal/ring states *before* timing. The default `--repeats 1` preserves
+historical single-trial behavior and the same 24 scenario records. On repeated
+runs, `elapsed_ms` and derived per-sample figures are based on the **median**
+timed loop; min, nearest-rank 90th percentile and max reveal scheduling jitter.
 
 ## Method and columns
 
@@ -63,6 +76,31 @@ VMs are noisy and unsuitable for absolute release-performance targets.
 | `mean_output_energy` | Deterministic average squared outputs; sanity signal, not audio quality |
 | `cpp_new_calls` | C++ `new`/`new[]` calls while timing was active |
 | `prepared_bytes_hint` | `sizeof(DSP object) + declared echo ring bytes`, per voice; excludes allocator metadata, libraries and host |
+| `prepared_cpp_new_bytes` | Exact requested byte sizes intercepted by global C++ `new`/`new[]` during fresh DSP object construction (separate from the timed loop); excludes direct `malloc`, allocator overhead, shared libraries and RSS |
+| `repetitions` | Independent construction/warmup/timing repetitions for one scenario (1–9) |
+| `min_elapsed_ms` | Minimum observed loop wall time, including stimulus/check overhead |
+| `p90_elapsed_ms` | Nearest-rank 90th-percentile observed loop time, not a realtime deadline guarantee |
+| `max_elapsed_ms` | Maximum observed loop wall time; a scheduling-outlier indicator |
+
+## Compare two source revisions conservatively
+
+`tools/dsp-bench/compare.py` validates both JSON captures before comparing
+them: exactly one record for each of the 24 engine/polyphony/rate scenarios,
+matching measured frame counts, finite positive timings/energy, zero C++
+sample-loop allocations, valid quantiles and nonduplicated JSON properties.
+It rejects malformed, truncated or inconsistent input with exit code 2 and
+does not silently compare mismatched workloads. Legacy single-trial JSON
+without the new dispersion fields is accepted as one low-information capture.
+
+The report includes per-scenario elapsed nanoseconds per voice sample,
+observed speedup/slowdown, energy ratio and preparation heap-byte difference,
+plus the *equal-scenario-weight geometric mean* of timing ratios. An interval
+label of `nonoverlap-faster`, `nonoverlap-slower` or `overlapping-ranges` only
+describes the observed min/max trial ranges; it is **not** a confidence interval
+or statistical significance claim. A different machine, process priority,
+compiler or driver can invalidate a time comparison. **No performance
+regression threshold is enforced by this tool or CI**; use repeated controlled
+capture, not a single noisy CI VM, to investigate a candidate regression.
 
 This harness counts only C++ `new` and `new[]`, **not** direct `malloc`, custom
 allocators, page faults, driver buffers, host allocations, or UI/memory activity.
@@ -72,6 +110,11 @@ logic and varies with CPU, frequency scaling, thermal state, OS scheduling,
 compiler, vectorization, cache effects and other processes. Do not use it as
 a fixed CI pass/fail threshold, a DAW CPU percentage or a minimum hardware
 promise.
+Similarly, `prepared_cpp_new_bytes` is a count of requested construction
+allocations, **not peak resident memory**, malloc arena size or total plugin
+memory pressure. The construction byte count can guide a source-voice memory
+audit, but real process high-water marks require platform profilers and a
+linked host. The benchmark still has **no audio device or real-time callback**.
 
 ## Next acceptance steps
 

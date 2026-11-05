@@ -166,9 +166,16 @@ public:
             // Saved high-note timbre starts correctly; no fake reset glide.
             smoothedGuardCeiling = ceiling;
             guardInitialized = true;
+        } else if (ceiling < smoothedGuardCeiling) {
+            // When pitch or ratio CV jumps upward, the previous ceiling can
+            // temporarily permit Nyquist-folding sidebands for ~2 ms. Apply
+            // reductions immediately: the new fundamental has already moved
+            // and preserving the old bright index is no longer safe.
+            smoothedGuardCeiling = ceiling;
         } else {
-            // Pitch/ratio CV may jump while the module is sounding. Smooth
-            // changes to the ceiling so the PM index cannot jump instantly.
+            // Restore brightness gradually when bandwidth becomes available.
+            // This avoids an abrupt *increase* in modulation depth at the
+            // release from a high-note guard. No oversampling is implied.
             const double alpha = std::min(1.0, 1.0 / (0.002 * input.sampleRateHz));
             smoothedGuardCeiling += alpha * (ceiling - smoothedGuardCeiling);
         }

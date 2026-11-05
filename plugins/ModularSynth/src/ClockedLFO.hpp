@@ -83,6 +83,7 @@ public:
         secondsSinceClockEdge_ = 0.0;
         clockPeriodSeconds_ = 0.0;
         clockPulseIndex_ = 0;
+        suspectedMissedBeatMultiple_ = 0;
     }
 
     double phase() const noexcept { return phase_; }
@@ -115,6 +116,7 @@ public:
             clockArmed_ = true;
             secondsSinceClockEdge_ = 0.0;
             clockPulseIndex_ = 0;
+            suspectedMissedBeatMultiple_ = 0;
         } else {
             if (sawClockEdge_) {
                 secondsSinceClockEdge_ += sampleTime;
@@ -125,6 +127,7 @@ public:
                     sawClockEdge_ = false;
                     clockLocked_ = false;
                     clockPulseIndex_ = 0;
+                    suspectedMissedBeatMultiple_ = 0;
                 }
             }
             if (schmittRise(clockCv, clockArmed_)) {
@@ -133,12 +136,41 @@ public:
                     clockLocked_ = false;
                     secondsSinceClockEdge_ = 0.0;
                     clockPulseIndex_ = 0;
+                    suspectedMissedBeatMultiple_ = 0;
                     phase_ = 0.0; // first pulse establishes a phase origin
                 } else if (secondsSinceClockEdge_ >= kMinClockPeriodSeconds) {
                     if (secondsSinceClockEdge_ <= kMaxClockPeriodSeconds) {
-                        clockPeriodSeconds_ = secondsSinceClockEdge_;
+                        double newPeriod = secondsSinceClockEdge_;
+                        unsigned elapsedBeats = 1u;
+                        if (clockLocked_ && clockPeriodSeconds_ >= kMinClockPeriodSeconds) {
+                            // A missing external beat yields an interval almost
+                            // exactly 2x/3x the previously locked period. Keep
+                            // the prior tempo for one such gap and advance the
+                            // divided phase by the full beat count. Two equal
+                            // consecutive long gaps instead confirm a true
+                            // slower tempo. Other tempo edits take effect now.
+                            const double multiple = newPeriod / clockPeriodSeconds_;
+                            const double rounded = std::round(multiple);
+                            if (rounded >= 2.0 && rounded <= 3.0 &&
+                                    std::abs(newPeriod - rounded * clockPeriodSeconds_) <=
+                                        0.08 * clockPeriodSeconds_) {
+                                const unsigned candidate = static_cast<unsigned>(rounded);
+                                if (suspectedMissedBeatMultiple_ != candidate) {
+                                    newPeriod = clockPeriodSeconds_;
+                                    elapsedBeats = candidate;
+                                    suspectedMissedBeatMultiple_ = candidate;
+                                } else {
+                                    suspectedMissedBeatMultiple_ = 0;
+                                }
+                            } else {
+                                suspectedMissedBeatMultiple_ = 0;
+                            }
+                        } else {
+                            suspectedMissedBeatMultiple_ = 0;
+                        }
+                        clockPeriodSeconds_ = newPeriod;
                         clockLocked_ = true;
-                        clockPulseIndex_ = (clockPulseIndex_ + 1u) & 3u;
+                        clockPulseIndex_ = (clockPulseIndex_ + elapsedBeats) & 3u;
                         const int divider = ratio == 0.25 ? 4 : ratio == 0.5 ? 2 : 1;
                         const double aligned = static_cast<double>(
                             clockPulseIndex_ % static_cast<unsigned>(divider)) / divider;
@@ -149,6 +181,7 @@ public:
                         // A new distant pulse starts a new clock measurement.
                         clockLocked_ = false;
                         clockPulseIndex_ = 0;
+                        suspectedMissedBeatMultiple_ = 0;
                         phase_ = 0.0;
                     }
                     secondsSinceClockEdge_ = 0.0;
@@ -160,6 +193,7 @@ public:
             phase_ = 0.0;
             clockPulseIndex_ = 0;
             endOfCycleSeconds_ = 0.0;
+            suspectedMissedBeatMultiple_ = 0;
         }
 
         const double hz = clockLocked_
@@ -218,6 +252,7 @@ private:
     bool sawClockEdge_ = false;
     bool clockLocked_ = false;
     unsigned clockPulseIndex_ = 0;
+    unsigned suspectedMissedBeatMultiple_ = 0;
 };
 
 } // namespace dsp

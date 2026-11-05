@@ -53,6 +53,12 @@ checked under C++17). Generation alone does not establish host compatibility:
   Rack-independent, standard-library-only DSP core; `<Slug>.cpp` supplies
   Rack module metadata and GUI/headless widgets. When polyphony contracts,
   both filter states for retired channels are cleared before reuse.
+- **Audio-thread-safe reset requests:** all generated oscillator and effect
+  wrappers defer Rack `onReset()` and `ResetEvent` requests via a single C++11
+  atomic flag. Only the next audio `process()` call clears phase or filter
+  memory, preventing host/UI-thread writes racing with audio-owned DSP state.
+  This changes the timing of the internal reset, not the starter's saved
+  parameters, port identities, oscillator math or audio-thread allocation.
 - Both generate an SVG panel, **single-module JSON manifest fragment**, and
   `INTEGRATION.md` outlining the exact first-party build/registration edits.
 
@@ -209,7 +215,8 @@ the stereo effect's Rack-free DSP header. This checks exported model symbols,
 parameter and CV/audio port cardinality, sample processing, two-voice 1 V/oct
 pitch tracking, stereo right-input normalled from left, independent stereo
 inputs, polyphony contraction/expansion with retired oscillator/filter state,
-resets, nonfinite audio/CV and invalid sample-rate fallback.
+resets (including a host event that leaves DSP state untouched until the next
+process callback), nonfinite audio/CV and invalid sample-rate fallback.
 The C++ probe runs under GNU C++11 and C++17, including ordinary `-O2`,
 production-style `-O2 -ffast-math -fno-finite-math-only`, and strict
 `-O2 -ffast-math` variants;

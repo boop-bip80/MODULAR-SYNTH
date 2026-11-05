@@ -228,9 +228,9 @@ invalid/missing stop, transparency, stylesheet or unsupported paint construct
 withholds the bound; a weak lower bound is **inconclusive**, not automatic
 proof of low contrast, and does not trigger strict-mode failure. The bare
 SVGs were preview-rendered with Inkscape for geometry/color inspection, but
-that preview omits C++ NanoVG labels and Rack controls. No opaque label
-plates were added because the source evidence does not justify obscuring
-the existing design.
+that preview omits C++ NanoVG labels and Rack controls. No separate opaque
+plates were added to each text label; two panels now have solid signal-lane
+backplates, with source-color caveats documented below.
 
 StereoEcho's four radial-gradient knob-dial fills are also reported as
 **UNKNOWN** control outline ratios, while its seven flat port-ring
@@ -242,6 +242,68 @@ This preflight **does not render the UI or establish WCAG conformance**.
 It cannot assess antialiasing, font size/weight in final pixels, labels over
 knobs, dynamic states, color-vision usability, hit areas or keyboard use.
 Review a real host screenshot and complete the manual UI checks above.
+
+### Stereo Echo / Dual VCA signal-path zone review
+
+The two dense lower-port areas now distinguish the **input** and **output**
+lanes with broad solid-color backplates and visibly outlined boundaries:
+
+| Panel / zone | Literal SVG fill | Outline | Source fill/outline ratio | NanoVG label/fill ratio (lowest in zone) |
+| --- | --- | --- | ---: | ---: |
+| Dual VCA: four signal/CV inputs | `#122E3E` | `#78D5DB` | 8.30:1 | 10.42:1 |
+| Dual VCA: A, B and summed outputs | `#28243F` | `#D1AAF1` | 7.59:1 | 9.87:1 |
+| Stereo Echo: L/R audio and time/feedback CV inputs | `#132F41` | `#6FD8DE` | 8.31:1 | 9.28:1 |
+| Stereo Echo: lower-left **MIX CV input** | `#15334A` | `#6FD8DE` | 7.82:1 | 8.74:1 |
+| Stereo Echo: lower-right L/R outputs | `#2D2646` | `#C9A4F3` | 6.83:1 | 8.06:1 |
+
+**Before:** the two panels had zero enclosed role-separated signal rails:
+thin dividers, decorative port rings and gradient backgrounds did not
+establish five solid roles/label-underlay regions. **After:** five enclosed
+zones are statically associated with all **14 real Rack PJ301MPort centers**
+and all **14 matching NanoVG label coordinates and source colors**. The
+decorative jack rings are checked for containment inside their zones. The
+signal-zone changes are SVG-only; the underlying module DSP and Rack widget
+positions, port identifiers and parameter identifiers are unchanged.
+
+The source-driven regression is separate from the general SVG geometry
+preflight:
+
+```sh
+python3 tools/ui-check/port_rail_audit.py
+python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
+```
+
+It checks actual `addInput` / `addOutput` callsites, expected port roles,
+label coordinates, literal opaque rail paint, port-ring containment, and
+source-color ratio advisories (at least 3:1 for frame strokes and 4.5:1
+for labels against their solid rail fill). Fixture regressions deliberately
+reject a moved jack **still inside the physical panel**, a false MIX CV
+output classification, deleted rail, escaped label, insufficient palette
+contrast, or clipped port decoration. This establishes the reported
+**source-palette** figures, not actual composited screen pixels.
+
+For repeatable SVG artwork inspection, render at fixed width, for example:
+
+```sh
+inkscape plugins/ModularSynth/res/DualVCA.svg --export-type=png --export-width=600 --export-filename=/tmp/DualVCA-preview.png
+inkscape plugins/ModularSynth/res/StereoEcho.svg --export-type=png --export-width=600 --export-filename=/tmp/StereoEcho-preview.png
+```
+
+The two SVGs were preview-rendered before and after the change, and the
+jack-zone boundaries, halo fit and left MIX CV grouping were visually
+inspected at 600 pixels wide. **The SVG-only render cannot show labels
+drawn by C++, Rack jack controls, plug/cable occlusion, HiDPI scaling or
+actual keyboard/host interaction.** It is not an accessibility conformance
+measurement. A host tester must therefore still verify:
+
+- [ ] All fourteen labels and their jacks align at normal and HiDPI zoom,
+  without clipped letters or border/plug collisions.
+- [ ] The Stereo Echo **MIX CV** remains obviously an input despite being
+  beside the **L OUT/R OUT** pair; both output lanes are distinct.
+- [ ] Dual VCA A/B audio/CV inputs are easily distinguished from A/B/SUM
+  outputs in an active patch with ordinary colored cables.
+- [ ] The panel remains readable at practical display sizes and under common
+  color-vision differences, without depending solely on the hue of a jack.
 
 ## 9. Parameter, port and tooltip discoverability (manual)
 

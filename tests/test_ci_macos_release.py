@@ -57,6 +57,23 @@ class MacosReleaseWorkflowTests(unittest.TestCase):
             raise AssertionError("macos job missing from full-build workflow")
         cls.job = match.group(1)
 
+    def test_retired_macos14_runner_is_replaced_by_supported_intel_host(self) -> None:
+        # runner-images #13518 retired macOS 14 from GitHub Actions on
+        # 2026-11-02.  The unsuffixed macos-15 label is arm64; this inherited
+        # PawPaw build is x86_64-hosted and produces universal macOS binaries.
+        self.assertIn("runs-on: macos-15-intel", self.job)
+        self.assertNotIn("runs-on: macos-14", self.job)
+        self.assertNotIn("runs-on: macos-15\n", self.job)
+
+    def test_macos_build_host_is_verified_before_checkout_or_bootstrap(self) -> None:
+        self.assertIn("      - name: Verify available Intel macOS build host", self.job)
+        self.assertIn('test "$(uname -s)" = Darwin', self.job)
+        self.assertIn('test "$(uname -m)" = x86_64', self.job)
+        self.assertIn("sw_vers -productVersion", self.job)
+        self.assertIn("xcodebuild -version", self.job)
+        self.assertLess(self.job.index("Verify available Intel macOS build host"),
+                        self.job.index("actions/checkout@v4"))
+
     def test_release_gate_references_no_nonexistent_matrix_property(self) -> None:
         self.assertNotIn("strategy:\n", self.job)
         self.assertNotIn("matrix.debug", self.job)
