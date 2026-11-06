@@ -54,6 +54,8 @@ class FactoryPatchCoverageTests(unittest.TestCase):
                       report["model_coverage"]["FMVoice"])
         self.assertIn("MODULAR_-_Chance_Hold_FM_Drift.vcv",
                       report["model_coverage"]["ChanceHold"])
+        self.assertIn("MODULAR_-_Major_Glow_Quantized_Performance.vcv",
+                      report["model_coverage"]["ScaleQuantizer"])
         self.assertEqual(report["sample_rate_status"],
                          "not asserted: no host runtime sample-rate execution")
         self.assertGreater(sum(patch["warning_count"]

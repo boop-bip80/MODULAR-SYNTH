@@ -16,7 +16,8 @@ from pathlib import Path
 
 
 LEGACY_ENGINES = ("MorphVCO", "StateFilter", "FMVoice", "StereoEcho")
-ENGINES = LEGACY_ENGINES + ("FoldDrive", "ClockedLFO", "ChanceHold")
+PREVIOUS_ENGINES = LEGACY_ENGINES + ("FoldDrive", "ClockedLFO", "ChanceHold")
+ENGINES = PREVIOUS_ENGINES + ("SlewGlide",)
 VOICES = (1, 8, 16)
 RATES = (48000, 96000)
 MAX_BYTES = 8 * 1024 * 1024
@@ -24,7 +25,8 @@ SCENARIO_SETS = {
     frozenset((engine, voice, rate)
               for engine in engines for voice in VOICES for rate in RATES): label
     for engines, label in ((LEGACY_ENGINES, "legacy-24"),
-                           (ENGINES, "extended-42"))
+                           (PREVIOUS_ENGINES, "extended-42"),
+                           (ENGINES, "extended-48"))
 }
 
 
@@ -78,8 +80,8 @@ def load_rows(path: Path) -> dict[tuple[str, int, int], dict]:
                           parse_constant=_reject_constant)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise CompareError(f"{path}: invalid JSON benchmark: {exc}") from exc
-    if not isinstance(rows, list) or len(rows) not in (24, 42):
-        raise CompareError("expected exactly 24 legacy or 42 current benchmark scenarios")
+    if not isinstance(rows, list) or len(rows) not in (24, 42, 48):
+        raise CompareError("expected exactly 24, 42 or 48 benchmark scenarios")
     indexed: dict[tuple[str, int, int], dict] = {}
     for row in rows:
         if not isinstance(row, dict):
@@ -126,7 +128,7 @@ def load_rows(path: Path) -> dict[tuple[str, int, int], dict]:
         indexed[key] = dict(row, repetitions=repeats, min_elapsed_ms=low,
                             max_elapsed_ms=high, p90_elapsed_ms=p90)
     if frozenset(indexed) not in SCENARIO_SETS:
-        raise CompareError("missing expected benchmark scenarios")
+        raise CompareError("missing expected benchmark scenarios for a complete 24/42/48 profile")
     return indexed
 
 

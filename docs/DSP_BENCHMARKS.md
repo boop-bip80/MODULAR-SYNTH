@@ -1,8 +1,8 @@
 # Standalone DSP performance measurement
 
-This source-only harness measures seven *original* MODULAR-SYNTH DSP engines:
+This source-only harness measures eight *original* MODULAR-SYNTH DSP engines:
 MorphVCO, StateFilter, FMVoice, StereoEcho, FoldDrive, ClockedLFO and
-ChanceHold. It runs their actual
+ChanceHold, plus SlewGlide. It runs their actual
 `plugins/ModularSynth/src/*.hpp` processing code, **without** Rack/Cardinal,
 plugin wrappers, a DAW, audio drivers, UI, graph routing, or any host overhead.
 Numbers here cannot establish a Cardinal plugin's CPU use or its audio-thread
@@ -27,7 +27,7 @@ python3 tools/dsp-bench/compare.py /tmp/baseline-dsp.json /tmp/candidate-dsp.jso
 python3 tools/dsp-bench/compare.py /tmp/baseline-dsp.json /tmp/candidate-dsp.json --json
 ```
 
-The C++11 debug and production smoke tests, including 42 scenario records per
+The C++11 debug and production smoke tests, including 48 scenario records per
 profile, run through:
 
 ```bash
@@ -38,13 +38,13 @@ python3 -B -m unittest tests/test_dsp_benchmark_compare.py -v
 No dependency download, plugin SDK, test audio device, or host installation is
 required. `--frames` accepts 256–1,000,000 frames **per voice**; each invocation
 tests 48,000 and 96,000 Hz, with 1, 8, and 16 simultaneous voices. The default
-produces 42 records (seven engines × two rates × three polyphony settings).
+produces 48 records (eight engines × two rates × three polyphony settings).
 Use the same flags, compiler, system load, CPU governor, and core affinity when
 comparing two code revisions; report all of these and repeat runs. Shared CI
 VMs are noisy and unsuitable for absolute release-performance targets.
 `--repeats` accepts 1–9; each repeat constructs **fresh** DSP objects and warms
 their signal/ring states *before* timing. The default `--repeats 1` preserves
-historical single-trial behavior with the expanded 42 scenario records. On repeated
+historical single-trial behavior with the expanded 48 scenario records. On repeated
 runs, `elapsed_ms` and derived per-sample figures are based on the **median**
 timed loop; min, nearest-rank 90th percentile and max reveal scheduling jitter.
 
@@ -53,9 +53,11 @@ timed loop; min, nearest-rank 90th percentile and max reveal scheduling jitter.
 1. Construct all voices and preallocate StereoEcho delay rings **before**
    timing. The 16-voice echo includes approximately 23.4 MiB of ring storage.
 2. Generate a fixed 1,024-sample two-harmonic input table outside timing.
-   Process seven actual DSP cores with bounded, deterministic note/control
+   Process eight actual DSP cores with bounded, deterministic note/control
    settings (FM index/morph/low-pass cutoff, FoldDrive timbre, free and
-   externally clocked LFO lanes, seeded ChanceHold probability and glide).
+   externally clocked LFO lanes, seeded ChanceHold probability and glide,
+   and SlewGlide's alternating bipolar targets, continuously varying input,
+   directional rise/fall times, changing rise/fall CV and per-voice offsets).
 3. Warm each voice at the selected sample rate for 1/12 second, longer than
    the 55–73 ms echo setting, so the delay path is active during measurement.
    The measured stimulus/control timeline continues after warmup rather than
@@ -87,15 +89,21 @@ timed loop; min, nearest-rank 90th percentile and max reveal scheduling jitter.
 ## Compare two source revisions conservatively
 
 `tools/dsp-bench/compare.py` validates both JSON captures before comparing
-them: exactly one record for each of the 42 engine/polyphony/rate scenarios,
+them: exactly one record for each of the 48 engine/polyphony/rate scenarios,
 matching measured frame counts, finite positive timings/energy, zero C++
 sample-loop allocations, valid quantiles and nonduplicated JSON properties.
 It rejects malformed, truncated or inconsistent input with exit code 2 and
-does not silently compare mismatched workloads. Previously captured **legacy
-24-scenario** JSON (the original four engines) is still accepted and labelled
-`legacy-24`, but is **not comparable** with a new `extended-42` capture; the
-same complete engine set must be present in both. Legacy single-trial JSON
-without dispersion fields is accepted as one low-information capture.
+does not silently compare mismatched workloads. Previously captured **24-**
+and **42-scenario** JSON are still accepted and labelled `legacy-24` and
+`extended-42` respectively. The new eight-engine profile is `extended-48`.
+Comparison is permitted *within* any of these three exact, complete profiles,
+but **never across profiles**—including 24↔42, 24↔48 and 42↔48, in either
+direction. Incomplete/hybrid 42- or 48-row inventories are rejected rather
+than guessed into a known profile. Legacy single-trial JSON without dispersion
+fields is accepted as one low-information capture. To compare against a
+42-row pre-SlewGlide revision, rerun both source revisions using the same
+benchmark workload or backport the eighth scenario; the comparator will not
+manufacture or extrapolate missing SlewGlide timings.
 
 The report includes per-scenario elapsed nanoseconds per voice sample,
 observed speedup/slowdown, energy ratio and preparation heap-byte difference,

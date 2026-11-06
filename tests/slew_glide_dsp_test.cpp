@@ -152,6 +152,107 @@ void testDeterminismResetAndSettling() {
            "reset replay reproduces first-frame transition");
 }
 
+void testMovementGateSchmittBoundary() {
+    SlewGlide core;
+    SlewGlide::Input in;
+    in.sampleRateHz = 48000.0;
+    in.riseSeconds = 5.0;
+    in.fallSeconds = 5.0;
+
+    in.voltage = 0.00015;
+    auto out = core.process(in);
+    expect(out.movingGate == 0.0f,
+           "tiny settled-boundary CV noise does not open movement gate");
+    in.voltage = 0.00030;
+    out = core.process(in);
+    expect(out.movingGate == 10.0f,
+           "movement gate opens above conservative entrance threshold");
+    in.voltage = 0.00015;
+    out = core.process(in);
+    expect(out.movingGate == 10.0f,
+           "gate stays open inside the Schmitt hysteresis band");
+    in.voltage = 0.00005;
+    out = core.process(in);
+    expect(out.movingGate == 0.0f,
+           "gate closes below the original settled threshold");
+    in.voltage = 0.00015;
+    out = core.process(in);
+    expect(out.movingGate == 0.0f,
+           "gate stays closed inside the Schmitt hysteresis band");
+    core.reset();
+    expect(core.process(in).movingGate == 0.0f,
+           "reset clears movement history even if target is in hysteresis band");
+}
+
+void testSampleRateContinuityAndRecovery() {
+    SlewGlide switched;
+    SlewGlide reference;
+    SlewGlide::Input in;
+    in.voltage = 10.0;
+    in.riseSeconds = 1.0;
+    in.fallSeconds = 0.25;
+    in.sampleRateHz = 48000.0;
+    for (int frame = 0; frame < 6000; ++frame)
+        expect(safe(switched.process(in)), "48k slew remains finite");
+    in.sampleRateHz = 96000.0;
+    for (int frame = 0; frame < 12000; ++frame)
+        expect(safe(switched.process(in)), "96k resumed slew remains finite");
+    const auto switchedOut = switched.process(in);
+
+    in.sampleRateHz = 96000.0;
+    SlewGlide::Output referenceOut{};
+    for (int frame = 0; frame < 24001; ++frame)
+        referenceOut = reference.process(in);
+    expect(std::abs(switchedOut.linear - referenceOut.linear) < 2.0e-5f,
+           "48k-to-96k rate switch preserves linear wall-clock slew state");
+    expect(std::abs(switchedOut.exponential - referenceOut.exponential) < 2.0e-5f,
+           "48k-to-96k rate switch preserves exponential wall-clock response");
+
+    in.sampleRateHz = std::numeric_limits<double>::infinity();
+    const auto invalid = switched.process(in);
+    expect(invalid.linear == 0.0f && invalid.exponential == 0.0f
+               && invalid.movingGate == 0.0f,
+           "invalid host rate fails closed including movement-gate state");
+    in.sampleRateHz = 48000.0;
+    SlewGlide fresh;
+    const auto recovered = switched.process(in);
+    const auto freshOut = fresh.process(in);
+    expect(recovered.linear == freshOut.linear
+               && recovered.exponential == freshOut.exponential
+               && recovered.movingGate == freshOut.movingGate,
+           "host-rate recovery begins from a fresh deterministic lane");
+}
+
+void testExtremeTimeControlsAndSubnormalTargets() {
+    SlewGlide core;
+    SlewGlide::Input in;
+    in.sampleRateHz = 384000.0;
+    in.riseSeconds = std::numeric_limits<double>::denorm_min();
+    in.fallSeconds = std::numeric_limits<double>::denorm_min();
+    in.voltage = 10.0;
+    const auto out = core.process(in);
+    expect(safe(out) && out.linear == 10.0f
+               && out.exponential == 10.0f && out.movingGate == 0.0f,
+           "subnormal positive slew time acts as instantaneous finite response");
+
+    in.voltage = -10.0;
+    const auto reverse = core.process(in);
+    expect(safe(reverse) && reverse.linear == -10.0f
+               && reverse.exponential == -10.0f,
+           "subnormal fall time cannot overflow/underflow into unstable output");
+    core.reset();
+    in.riseSeconds = 5.0;
+    in.fallSeconds = 5.0;
+    in.riseCvVolts = std::numeric_limits<double>::quiet_NaN();
+    in.fallCvVolts = std::numeric_limits<double>::infinity();
+    in.voltage = 1.0e-7;
+    const auto tiny = core.process(in);
+    expect(safe(tiny) && tiny.linear > 0.0f && tiny.exponential > 0.0f,
+           "tiny target snaps to finite value instead of retaining a denormal tail");
+    expect(tiny.movingGate == 0.0f,
+           "sub-microvolt target does not emit an spurious 10V activity gate");
+}
+
 void testUntrustedInputsAndSixteenLanes() {
     std::array<SlewGlide, 16> cores;
     SlewGlide::Input in;
@@ -192,6 +293,9 @@ int main() {
     testTimeConstantAndDirectionalAsymmetry();
     testCvAndZeroTime();
     testDeterminismResetAndSettling();
+    testMovementGateSchmittBoundary();
+    testSampleRateContinuityAndRecovery();
+    testExtremeTimeControlsAndSubnormalTargets();
     testUntrustedInputsAndSixteenLanes();
     if (failures) {
         std::fprintf(stderr, "SlewGlide: %d regression failure(s)\n", failures);

@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Factory Patches — original examples
 
-These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `DualVCA`, `Macro8`, `StereoEcho`, `ClockedLFO`, `FMVoice`, `ChanceHold` and `SlewGlide` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
+These original patch arrangements are stored in `patches/examples/` for direct `.vcv` loading and, when packaged, Cardinal's **File → Open demo / example project** submenu. The original three use already bundled modules; newer performance patches demonstrate the fork's registered `MorphVCO`, `StateFilter`, `FoldDrive`, `DualVCA`, `Macro8`, `StereoEcho`, `ClockedLFO`, `FMVoice`, `ChanceHold`, `SlewGlide` and `ScaleQuantizer` modules. A patch file is not evidence that a particular installed binary can load or sound-test it.
 
 | Patch | Purpose | Interaction |
 | --- | --- | --- |
@@ -24,6 +24,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_Cinematic_Pulse_Score.vcv` | Free-running LFO pulse gates a **second** ADSR/VCA on filter LP only; HP remains separate into stereo Echo, with four Macro8 scenes | Play MIDI and recall Hush/Motion/Surge/Return scenes; no host transport or BPM synchronization required |
 | `MODULAR_-_Noir_Expressive_Lead.vcv` | Monophonic dark lead using MIDI channel aftertouch for oscillator timbre, mod wheel for Echo wet, and five Macro8 scene controls | Play single-note phrases, move aftertouch/mod wheel, then recall four Noir/Tension scenes; no host BPM sync |
 | `MODULAR_-_Fold_Drive_Cinematic_Motion.vcv` | Eight MIDI voices through MorphVCO → FoldDrive → StateFilter → ADSR/VCA, with slow sine/triangle LFO fold modulation and mod-wheel wet control | Hold chords, move CC1 and channel pressure; LFO is intentionally free-running at 0.25 Hz, not beat-locked |
+| `MODULAR_-_Major_Glow_Quantized_Performance.vcv` | MIDI pitch quantized to C major, note-change trigger retriggering a gated ADSR, DualVCA → StateFilter LP/HP stereo Echo, and four Macro8 delay/timbre scenes | Play a line that includes non-C-major notes, try SCALE/ROOT/HYST, and recall four echo scenes; requires MIDI, not transport |
 
 ## Loading
 
@@ -36,7 +37,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 ## Scope and compatibility
 
 - These are **patch examples**, not new DSP modules or a finished preset management system.
-- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, FoldDrive, DualVCA, Macro8, StereoEcho, ClockedLFO, FMVoice, ChanceHold and SlewGlide).
+- The first three use bundled Fundamental, Bogaudio, Audible Instruments, JW Modules, Valley and Cardinal models. Newer examples additionally require this fork's registered `ModularSynth` collection (MorphVCO, StateFilter, FoldDrive, DualVCA, Macro8, StereoEcho, ClockedLFO, FMVoice, ChanceHold, SlewGlide and ScaleQuantizer).
 - MIDI/transport mapping and sample-rate behavior are inherited from the built-in modules and host.
 - The examples target `Cardinal/HostAudio2`. Some use two saved input routes; others feed a single host input. Polyphonic Motion Pad sends the same summed voice signal to both channels, **not** an independently panned stereo image. They are not standalone VST3 exports.
 - They use plain-text VCV Rack 2.x patch JSON for reproducibility.
@@ -58,7 +59,7 @@ python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Morph_VCO
 python3 tools/patches/patch_audio_routes.py patches/examples/MODULAR_-_Aurora_Glass_Bells.vcv --json
 ```
 
-In the checked-in source, Morph VCO Performance has **2/2 wired host inputs** supported by a typed MorphVCO → DualVCA → HostAudio2 chain. Aurora Glass Bells has **0/2** under this deliberately narrow first-party gate because the audio passes through bundled **Fundamental/VCA-1**, whose internal audio-port transfer is not covered by the verified first-party contracts. Its two saved host cables and patch structure are valid; **0/2 is not evidence of silence or a malfunction**. Nor does 2/2 prove an audible signal, independent stereo content, gain safety, or DAW compatibility. Do not apply this strict gate as a blanket rejection of factory patches using legitimate but opaque bundled modules.
+In the checked-in source, Morph VCO Performance has **2/2 wired host inputs** supported by a typed MorphVCO → DualVCA → HostAudio2 chain. Major Glow Quantized Performance also has **2/2** typed paths through DualVCA, StateFilter and StereoEcho to the independent host L/R jacks. Aurora Glass Bells has **0/2** under this deliberately narrow first-party gate because the audio passes through bundled **Fundamental/VCA-1**, whose internal audio-port transfer is not covered by the verified first-party contracts. Its two saved host cables and patch structure are valid; **0/2 is not evidence of silence or a malfunction**. Nor does 2/2 prove an audible signal, independent stereo content, gain safety, or DAW compatibility. Do not apply this strict gate as a blanket rejection of factory patches using legitimate but opaque bundled modules.
 
 **Not yet verified:** loading the patches in a compiled MODULAR-SYNTH binary, rendering audio, listening for expected sonic results, clipping/CPU profiling, and loading/saving from real DAWs. Those are explicit acceptance checks before these patches are described as production-validated.
 
@@ -80,6 +81,7 @@ In the checked-in source, Morph VCO Performance has **2/2 wired host inputs** su
 - Cinematic Pulse Score: hold mono MIDI notes; check free-run rhythmic LP gating only on the left, independent continuous HP on right, LFO sine waveform change, A–D scenes and LIVE. Verify no host sync is advertised or expected.
 - Noir Expressive Lead: play single-note MIDI phrases, test **channel pressure** on MorphVCO wave morph and **CC1 mod wheel** on Echo wet CV; recall Macro8 A–D and LIVE while varying the five documented macro routes. Verify note-off closes VCA, stereo echo tails remain finite and both channels reach the host. Do not assume your controller or DAW sends channel aftertouch without explicitly checking.
 - Fold Drive Cinematic Motion: hold 2/4/8 simultaneous MIDI notes and test the **FoldDrive IN → OUT** audio segment between MorphVCO and StateFilter; inspect ClockedLFO TRI → DRIVE CV and SIN → BIAS CV, then move MIDI CC1 → MIX CV and channel pressure → oscillator MORPH CV. Its LFO must free-run at 0.25 Hz without host beat cables. Check quiet output, per-voice release, clipping and high-register alias audibly; no such listening test has been performed yet.
+- Major Glow Quantized Performance: play ascending C-major and chromatic phrases; confirm non-scale notes land on the nearest C-major pitch, and the quantizer's CHANGE output retriggers ADSR only when the selected note changes. Try changing ROOT/SCALE/TRANS and 12-cent hysteresis; verify MIDI GATE still opens/closes the envelope. Recall Macro8 A–D, check LP/HP paths through Echo to both host jacks, release tails, gain and clipping at safe monitor volume. Its four scene morphs are manual, not host-tempo-synced.
 - For each patch: save under a new filename, reload, and compare module/cable counts and playback.
 - Test at 44.1/48/96 kHz and block sizes 64/128/256 when practical. Verify silence on stop and no plugin crash.
 

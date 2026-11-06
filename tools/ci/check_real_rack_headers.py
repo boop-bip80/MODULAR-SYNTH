@@ -24,7 +24,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = ROOT / "plugins" / "ModularSynth" / "src"
-MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho", "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA", "SlewGlide")
+MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho",
+           "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA", "SlewGlide",
+           "ScaleQuantizer")
 # Cardinal's production plugin builds still use gnu++11 on several targets.
 # Keep the newer dialect as a second independent compatibility check: a
 # successful gnu++17 syntax test alone does not demonstrate production ABI.
@@ -320,7 +322,7 @@ def run_link_smoke(
     validate_linked_model_symbols(*results)
     print(
         f"PASS: {len(objects)} pinned-Rack HEADLESS objects ({standard}) "
-        "linked into one temporary ELF, with nine defined first-party models; "
+        f"linked into one temporary ELF, with {len(MODULES)} defined first-party models; "
         "Rack/host imports intentionally unresolved. NOT a Cardinal plugin."
     )
 
@@ -335,7 +337,7 @@ def main() -> int:
     mode.add_argument("--preflight-only", action="store_true", help="verify pinned SDK headers; skip C++ parsing")
     mode.add_argument(
         "--link-smoke", action="store_true",
-        help="compile nine real-Rack HEADLESS objects and link a temporary ELF (NOT a host plugin)",
+        help="compile all first-party real-Rack HEADLESS objects and link a temporary ELF (NOT a host plugin)",
     )
     args = parser.parse_args()
 

@@ -86,6 +86,21 @@ class WindowsReleaseAssetsTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("not DAW loadability proof", result.stdout)
 
+    def test_nonrelease_main_sha_slug_must_pass_same_payload_validation(self) -> None:
+        """Green main packaging should not bypass tag-quality source gates."""
+        for target in ("win32", "win64"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                self.cwd = Path(directory)
+                self.stage_release(target)
+                source = self.cwd / f"MODULAR-SYNTH-{target}-v26.02.zip"
+                source.rename(self.cwd / f"MODULAR-SYNTH-{target}-3e44c84a.zip")
+                result = self.verify(target=target, slug="3e44c84a")
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn("not DAW loadability proof", result.stdout)
+                # An architecture-valid installer cannot rescue a broken ZIP.
+                (self.cwd / f"MODULAR-SYNTH-{target}-3e44c84a.zip").write_bytes(b"not zip")
+                self.assertNotEqual(0, self.verify(target=target, slug="3e44c84a").returncode)
+
     def test_release_gate_rejects_wrong_ref_target_and_empty_file(self) -> None:
         self.stage_release()
         (self.cwd / "Cardinal-win32-26.02-installer.exe").write_bytes(b"installer")
@@ -256,8 +271,16 @@ class WindowsReleaseAssetsTests(unittest.TestCase):
         job = match.group(1)
 
         self.assertIn("${{ github.event.repository.name }}-${{ matrix.target }}-${{ github.event.pull_request.number || env.SHA8 }}.zip", job)
-        self.assertIn("      - name: Verify Windows release installer and ZIP\n        if: startsWith(github.ref, 'refs/tags/')", job)
+        self.assertIn("      - name: Verify Windows installer and ZIP before every upload\n        shell: bash", job)
         self.assertIn("bash .github/workflows/scripts/verify-windows-release-artifacts.sh", job)
+        # Non-tag/main artifacts must be audited before upload as well; a
+        # tag-only if condition would leave historical successful main jobs
+        # with no actual ZIP/installer integrity evidence.
+        integrity = job.split("      - name: Verify Windows installer and ZIP before every upload\n", 1)[1].split("      - uses: actions/upload-artifact@v4\n", 1)[0]
+        self.assertNotRegex(integrity, r"(?m)^\s+if:\s*startsWith\(github\.ref")
+        self.assertIn("${{ github.event.pull_request.number || env.SHA8 }}", integrity)
+        self.assertLess(job.index("      - name: Pack binaries\n"), job.index("      - name: Verify Windows installer and ZIP before every upload\n"))
+        self.assertLess(job.index("      - name: Verify Windows installer and ZIP before every upload\n"), job.index("      - uses: actions/upload-artifact@v4\n"))
         script = VERIFIER.read_text(encoding="utf-8")
         self.assertIn("verify-windows-payload.py", script)
         upload = job.split("      - uses: actions/upload-artifact@v4\n", 1)[1].split("      - uses:", 1)[0]

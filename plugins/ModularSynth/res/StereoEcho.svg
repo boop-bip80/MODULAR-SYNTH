@@ -30,11 +30,11 @@
   <path d="M69 68V72M171 68V72M69 153V157M171 153V157"
         stroke="#eaf8ff" stroke-width="2" stroke-linecap="round"/>
   <!-- The MIX CV jack remains an input despite sharing the lower row with outputs. -->
-  <rect id="echoInputRail" x="12" y="232" width="216" height="64" rx="7"
+  <rect id="echoInputRail" x="12" y="232" width="216" height="61" rx="7"
         fill="#132F41" stroke="#6FD8DE" stroke-width="1.6"/>
-  <rect id="echoMixCvRail" x="12" y="299" width="46" height="73" rx="7"
+  <rect id="echoMixCvRail" x="12" y="295" width="46" height="77" rx="7"
         fill="#15334A" stroke="#6FD8DE" stroke-width="1.6"/>
-  <rect id="echoOutputRail" x="82" y="299" width="146" height="73" rx="7"
+  <rect id="echoOutputRail" x="82" y="295" width="146" height="77" rx="7"
         fill="#2D2646" stroke="#C9A4F3" stroke-width="1.6"/>
   <circle cx="34" cy="273" r="17" fill="#162f42" stroke="#57acb5" stroke-width="1.1"/>
   <circle cx="91" cy="273" r="17" fill="#162f42" stroke="#57acb5" stroke-width="1.1"/>

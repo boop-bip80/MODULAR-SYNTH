@@ -645,6 +645,70 @@ their original `UNVERIFIED` interpretations. The strict gate will fail such rout
 repacked from trusted `.vcv` source with the appropriate new v2 contract. The existing default `check` output remains
 unchanged for backwards compatibility.
 
+### Optional strict stereo HostAudio2 source-route gate (v1 and v2)
+
+For musicians sharing a saved source instrument, a patch may contain a
+`Cardinal/HostAudio2` module but leave the Right input unpatched, feed one jack
+from Macro8 control voltage, or pass a voice through opaque third-party DSP.
+The normal compatibility `check` deliberately does not evaluate this topology.
+Enable the independent gate to require **both Left/M and Right inputs of
+every saved HostAudio2 module** to have their **own checked-in first-party
+generator-to-terminal signal-port chain**:
+
+```bash
+# Show per-host Left/M and Right evidence, even on failure (0=pass, 1=gate fail).
+python3 tools/instrument-builder/instrument_builder.py check \
+  Echo_Motion.msinstrument --require-verified-stereo-host-routes
+
+# CI-readable stable JSON: verifiedStereoHostRoutes.status/reason/hosts/summary.
+python3 tools/instrument-builder/instrument_builder.py check \
+  Echo_Motion.msinstrument --require-verified-stereo-host-routes --json
+
+# You may also refuse a NEW export before writing a bundle (0=created, 2=rejected).
+python3 tools/instrument-builder/instrument_builder.py pack \
+  patches/examples/MODULAR_-_Echo_Motion_Performance.vcv \
+  --out Stereo_Instrument.msinstrument --require-verified-stereo-host-routes
+```
+
+These are illustrative commands, **not claims that Echo Motion passes**. The
+source route gate is separate from Macro8's `--require-verified-routes` and
+works with both v1 and v2 `.msinstrument` archives. You can combine both flags
+on `check`: both reports are printed and either failing makes the command exit
+`1`. An unreadable/unsafe ZIP or malformed collection manifest is an input
+error (`2`); source port contracts that cannot be verified instead cause the
+strict route gate to fail (`1`). The opt-in `pack` gate aborts *before*
+creating its destination if the saved topology does not qualify. All default
+bundle bytes, manifests, `pack` behavior and ordinary `check` outputs stay
+unchanged. Route checks open an ephemeral private copy of the verified source
+patch for the existing patch-inspector; they leave the bundle untouched.
+
+The `verifiedStereoHostRoutes` JSON report includes a source-only `scope`,
+`status: PASS|FAIL`, a machine-readable `reason`, `hostContractVerified`, and
+stable-ID `hosts` with `wiredInputs`, `sourceVerifiedInputs`, `missingInputs`,
+`unverifiedWiredInputs`, plus each verified generator's saved `cables` trace.
+The summary counts verified stereo hosts, source-verified terminals, missing
+terminals, and wired-but-unverified terminals. Reason codes are:
+
+| Reason | Meaning |
+| --- | --- |
+| `null` | Every HostAudio2 host has separately verified Left/M and Right terminal chains |
+| `NO_HOST_AUDIO2` | No saved HostAudio2 module exists |
+| `UNVERIFIED_STEREO_HOST_INPUTS` | Some terminal is unpatched or wired without a verified source-defined signal chain |
+| `HOST_CONTRACT_UNVERIFIED` | Checked-in HostAudio2 port definition drifted or cannot be confirmed |
+| `PATCH_INSPECTION_FAILED` | Inspector found structurally invalid patch endpoints, parameters, cable duplicates, etc. |
+| `ROUTING_INSPECTION_UNAVAILABLE` | Source route preflight could not complete safely; no result is assumed |
+
+Verification follows only the existing auditor's narrow, source-backed
+`MorphVCO` and `FMVoice` generators through known signal inputs/outputs of
+first-party processors, with exact cable-ID provenance. An external or bundled
+third-party processor is **opaque** and breaks the proof, even when the graph
+reaches a HostAudio2 jack. A direct Macro8, ClockedLFO or MIDI CV connection
+cannot satisfy the gate. The requirement applies to **every HostAudio2** in a
+patch, including unused ones; remove an intentional spare host or leave the
+strict gate off. This is a conservative source-wiring policy, **not proof** of
+audible audio, left/right independence, stereo width, correct signal level,
+runtime DSP behavior, host availability or actual VST/AU/CLAP export.
+
 **Important:** `DECLARED` does not establish that the model was compiled,
 registered in a specific build, installed in the user's host, or loadable in a
 DAW. It does not inspect third-party plugins, third-party port indices,

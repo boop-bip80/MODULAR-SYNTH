@@ -13,11 +13,15 @@ ROOT = Path(__file__).resolve().parents[1]
 COMPARE = ROOT / "tools/dsp-bench/compare.py"
 
 
-def fixtures(factor=1.0, *, legacy=False):
+def fixtures(factor=1.0, *, profile="extended-48"):
     rows = []
     engines = ("MorphVCO", "StateFilter", "FMVoice", "StereoEcho")
-    if not legacy:
+    if profile not in ("legacy-24", "extended-42", "extended-48"):
+        raise ValueError("unknown test benchmark profile")
+    if profile != "legacy-24":
         engines += ("FoldDrive", "ClockedLFO", "ChanceHold")
+    if profile == "extended-48":
+        engines += ("SlewGlide",)
     for engine in engines:
         for voices in (1, 8, 16):
             for rate in (48000, 96000):
@@ -62,8 +66,8 @@ class BenchmarkComparisonTests(unittest.TestCase):
         result = self.invoke(None, None, "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
-        self.assertEqual(len(report["scenarios"]), 42)
-        self.assertEqual(report["scenario_profile"], "extended-42")
+        self.assertEqual(len(report["scenarios"]), 48)
+        self.assertEqual(report["scenario_profile"], "extended-48")
         self.assertAlmostEqual(report["equal_weight_geometric_speedup"], 1.0)
         self.assertIn("not DAW/host CPU", report["scope"])
         self.assertEqual({row["observed_range"] for row in report["scenarios"]},
@@ -83,23 +87,35 @@ class BenchmarkComparisonTests(unittest.TestCase):
         self.assertIn("nonoverlap-slower", slower.stdout)
         self.assertIn("not host CPU", slower.stdout)
 
-    def test_legacy_capture_is_accepted_but_never_compared_to_42_scenarios(self):
-        legacy = fixtures(legacy=True)
-        result = self.invoke(legacy, legacy, "--json")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        report = json.loads(result.stdout)
-        self.assertEqual(report["scenario_profile"], "legacy-24")
-        self.assertEqual(len(report["scenarios"]), 24)
-        mixed = self.invoke(legacy, fixtures())
-        self.assertEqual(mixed.returncode, 2)
-        self.assertIn("scenario sets differ", mixed.stderr)
+    def test_historical_24_and_42_scenario_captures_remain_comparable_within_profile(self):
+        for profile, count in (("legacy-24", 24), ("extended-42", 42),
+                               ("extended-48", 48)):
+            with self.subTest(profile=profile):
+                rows = fixtures(profile=profile)
+                result = self.invoke(rows, rows, "--json")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                report = json.loads(result.stdout)
+                self.assertEqual(report["scenario_profile"], profile)
+                self.assertEqual(len(report["scenarios"]), count)
 
-    def test_missing_extended_engine_and_duplicate_engine_are_rejected(self):
+    def test_comparator_rejects_every_cross_version_pair(self):
+        profiles = ("legacy-24", "extended-42", "extended-48")
+        for base_profile in profiles:
+            for candidate_profile in profiles:
+                if base_profile == candidate_profile:
+                    continue
+                with self.subTest(baseline=base_profile, candidate=candidate_profile):
+                    mixed = self.invoke(fixtures(profile=base_profile),
+                                        fixtures(profile=candidate_profile))
+                    self.assertEqual(mixed.returncode, 2)
+                    self.assertIn("scenario sets differ", mixed.stderr)
+
+    def test_missing_new_engine_is_cross_version_and_duplicate_engine_is_rejected(self):
         candidate = fixtures()
-        with self.subTest(problem="missing ChanceHold"):
+        with self.subTest(problem="missing SlewGlide becomes historical 42 profile"):
             result = self.invoke(fixtures(), candidate[:-6])
             self.assertEqual(result.returncode, 2)
-            self.assertIn("benchmark scenarios", result.stderr)
+            self.assertIn("scenario sets differ", result.stderr)
         with self.subTest(problem="duplicated engine"):
             duplicated = fixtures()
             for row in duplicated:
@@ -108,6 +124,14 @@ class BenchmarkComparisonTests(unittest.TestCase):
             result = self.invoke(fixtures(), duplicated)
             self.assertEqual(result.returncode, 2)
             self.assertIn("duplicate scenario", result.stderr)
+        with self.subTest(problem="hybrid 42-scenario profile"):
+            hybrid = fixtures(profile="extended-42")
+            for row in hybrid:
+                if row["engine"] == "ChanceHold":
+                    row["engine"] = "SlewGlide"
+            result = self.invoke(hybrid, hybrid)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("complete 24/42/48 profile", result.stderr)
 
     def test_bad_input_sets_and_numeric_types_fail_closed(self):
         bad_rows = []

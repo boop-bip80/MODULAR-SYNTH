@@ -29,6 +29,7 @@ DIGEST = "sha256:" + "f" * 64
 def snapshot() -> tuple[dict, dict, dict]:
     run = {
         "id": RUN_ID,
+        "run_attempt": 1,
         "name": "build",
         "path": ".github/workflows/build.yml",
         "head_sha": SHA,
@@ -38,7 +39,8 @@ def snapshot() -> tuple[dict, dict, dict]:
     jobs = {
         "total_count": len(gate.FULL_JOBS),
         "jobs": [
-            {"name": name, "status": "completed", "conclusion": "success",
+            {"name": name, "run_id": RUN_ID, "head_sha": SHA, "run_attempt": 1,
+             "status": "completed", "conclusion": "success",
              "steps": ([{"name": step, "status": "completed", "conclusion": "success"}
                         for step in gate.CORE_PLUGIN_STEPS]
                        if name == "plugin-validation" else [])}
@@ -96,6 +98,37 @@ class HostedBuildEvidenceTests(unittest.TestCase):
         run, jobs, artifacts = snapshot()
         artifacts["artifacts"][0]["workflow_run"]["head_sha"] = "b" * 40
         self.expect_incomplete(run, jobs, artifacts, "does not attest")
+
+    def test_jobs_from_another_run_commit_or_attempt_fail_closed(self) -> None:
+        for key, wrong, phrase in (
+            ("run_id", RUN_ID + 1, "requested run"),
+            ("run_id", None, "requested run"),
+            ("head_sha", "b" * 40, "requested commit"),
+            ("head_sha", None, "requested commit"),
+            ("run_attempt", 2, "requested run attempt"),
+            ("run_attempt", None, "requested run attempt"),
+        ):
+            with self.subTest(key=key, wrong=wrong):
+                run, jobs, artifacts = snapshot()
+                jobs["jobs"][0][key] = wrong
+                self.expect_incomplete(run, jobs, artifacts, phrase)
+
+    def test_rerun_attempt_must_match_across_all_jobs(self) -> None:
+        run, jobs, artifacts = snapshot()
+        run["run_attempt"] = 3
+        for job in jobs["jobs"]:
+            job["run_attempt"] = 3
+        self.assertTrue(gate.evaluate(run, jobs, artifacts, SHA)["automated_evidence_complete"])
+        jobs["jobs"][-1]["run_attempt"] = 2
+        self.expect_incomplete(run, jobs, artifacts, "requested run attempt")
+
+    def test_invalid_run_attempt_is_rejected(self) -> None:
+        for invalid in (None, 0, True, "1"):
+            with self.subTest(invalid=invalid):
+                run, jobs, artifacts = snapshot()
+                run["run_attempt"] = invalid
+                with self.assertRaisesRegex(gate.EvidenceError, "run_attempt"):
+                    gate.evaluate(run, jobs, artifacts, SHA)
 
     def test_run_identity_and_workflow_path_fail_closed(self) -> None:
         for key, wrong, phrase in (

@@ -55,12 +55,13 @@ class RealRackHeaderCheckTests(unittest.TestCase):
         self.assertIn("/sdk/rack/include", flags)
         self.assertIn("/sdk/dpf/distrho", flags)
         self.assertNotIn(str(real_rack.ROOT / "tests" / "rack_stub"), flags)
-        self.assertEqual(len(real_rack.MODULES), 10)
+        self.assertEqual(len(real_rack.MODULES), 11)
         self.assertIn("FoldDrive", real_rack.MODULES)
         self.assertIn("FMVoice", real_rack.MODULES)
         self.assertIn("ChanceHold", real_rack.MODULES)
         self.assertIn("DualVCA", real_rack.MODULES)
         self.assertIn("SlewGlide", real_rack.MODULES)
+        self.assertIn("ScaleQuantizer", real_rack.MODULES)
 
     def test_production_and_newer_dialects_reject_unexpected_std(self) -> None:
         self.assertEqual(real_rack.CXX_STANDARDS, ("gnu++11", "gnu++17"))
@@ -204,7 +205,7 @@ class RealRackHeaderCheckTests(unittest.TestCase):
                 modules,
             )
 
-    def test_real_registration_snapshot_matches_all_ten_modules(self) -> None:
+    def test_real_registration_snapshot_matches_all_eleven_modules(self) -> None:
         # This reads the real repository's production loader and Makefile,
         # avoiding a link-smoke that succeeds while the host never registers it.
         real_rack.check_registration_contract()

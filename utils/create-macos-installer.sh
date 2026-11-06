@@ -2,12 +2,38 @@
 
 set -e
 
-if [ -d bin ]; then
-  cd bin
-else
-  echo "Please run this script from the root folder"
-  exit
+# The packaging stage renames/moves built bundles inside bin/.  Check the
+# complete input inventory *before* touching it, and expose the same check as
+# a read-only CI preflight.  This does not prove that the Mach-O files load.
+if [ "${1:-}" != "" ] && [ "${1:-}" != "--preflight" ]; then
+  echo "Usage: $0 [--preflight]" >&2
+  exit 2
 fi
+if [ ! -f Makefile ] || [ ! -f utils/macOS/package.xml.in ] ||
+   [ ! -d bin ] || [ -L bin ]; then
+  echo "Run this script from a Cardinal source root with a real bin/ directory" >&2
+  exit 1
+fi
+for required in bin/Cardinal.app bin/CardinalNative.app bin/Cardinal.lv2/resources; do
+  if [ ! -d "$required" ] || [ -L "$required" ]; then
+    echo "Required macOS packaging directory missing or symlinked: $required" >&2
+    exit 1
+  fi
+done
+shopt -s nullglob
+for format in component lv2 vst vst3 clap; do
+  matches=(bin/*."$format")
+  if [ "${#matches[@]}" -eq 0 ]; then
+    echo "Required macOS packaging format missing: $format" >&2
+    exit 1
+  fi
+done
+if [ "${1:-}" = "--preflight" ]; then
+  echo "PASS: macOS installer input inventory found; no files modified"
+  exit 0
+fi
+
+cd bin
 
 rm -rf res jack native au lv2 vst2 vst3 clap
 mkdir jack native au lv2 vst2 vst3 clap

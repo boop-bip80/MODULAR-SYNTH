@@ -49,8 +49,8 @@ jobs:
           git submodule update --init --depth 1 src/Rack dpf
           git -C src/Rack submodule update --init --depth 1 dep/glfw dep/nanosvg dep/oui-blendish dep/pffft dep/simde dep/speexdsp
 
-      - name: Verify pinned dependencies and syntax-check nine real wrappers
+      - name: Verify pinned dependencies and syntax-check eleven real wrappers
         run: python3 -B tools/ci/check_real_rack_headers.py
 
-      - name: Compile and link ten original HEADLESS wrappers
+      - name: Compile and link eleven original HEADLESS wrappers
         run: python3 -B tools/ci/check_real_rack_headers.py --link-smoke

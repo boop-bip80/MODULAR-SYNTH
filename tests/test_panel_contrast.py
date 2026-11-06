@@ -15,7 +15,7 @@ REPO = Path(__file__).resolve().parents[1]
 CHECKER = REPO / "tools" / "ui-check" / "contrast_audit.py"
 MODULES = {"MorphVCO": 12, "StateFilter": 14, "FoldDrive": 12,
            "Macro8": 20, "StereoEcho": 16, "ClockedLFO": 16, "FMVoice": 12,
-           "ChanceHold": 16, "DualVCA": 12, "SlewGlide": 12}
+           "ChanceHold": 16, "DualVCA": 12, "SlewGlide": 12, "ScaleQuantizer": 12}
 
 
 class PanelContrastTests(unittest.TestCase):
@@ -158,7 +158,7 @@ class PanelContrastTests(unittest.TestCase):
         self.assertIn("UNKNOWN TEXT CLOCKED LFO #E8FFF8", result.stdout)
         self.assertIn("UNKNOWN TEXT FM VOICE #F4F3FE", result.stdout)
         self.assertIn("UNKNOWN TEXT CHANCE HOLD #E8F6FF", result.stdout)
-        self.assertIn("122 nvgText sites", result.stdout)
+        self.assertIn("133 nvgText sites", result.stdout)
         self.assertIn("measured SVG outline shapes", result.stdout)
         self.assertIn("UNKNOWN SVG outline shapes", result.stdout)
         self.assertIn("UNKNOWN SVG OUTLINE #63b7cc vs fill url(#dial)", result.stdout)
@@ -244,14 +244,16 @@ class PanelContrastTests(unittest.TestCase):
                 svg = ET.parse(REPO / "plugins/ModularSynth/res" / f"{model}.svg")
                 rails = {}
                 for node in svg.getroot().iter():
-                    if (node.tag.endswith("}rect") and node.get("x") == "13"
-                            and node.get("y") in ("230", "307")):
+                    if (node.tag.endswith("}rect") and node.get("x") == "8"
+                            and node.get("y") in ("225", "302")):
                         rails[node.get("y")] = node
-                self.assertEqual(set(rails), {"230", "307"})
-                self.assertEqual(rails["230"].get("fill"), "none")
-                self.assertEqual(rails["307"].get("fill"), "none")
-                first = rgb(rails["230"].get("stroke"))
-                second = rgb(rails["307"].get("stroke"))
+                self.assertEqual(set(rails), {"225", "302"})
+                self.assertEqual(rails["225"].get("width"), "224")
+                self.assertEqual(rails["302"].get("width"), "224")
+                self.assertEqual(rails["225"].get("fill"), "none")
+                self.assertEqual(rails["302"].get("fill"), "none")
+                first = rgb(rails["225"].get("stroke"))
+                second = rgb(rails["302"].get("stroke"))
                 self.assertIsNotNone(first)
                 self.assertIsNotNone(second)
                 self.assertNotEqual(first, second)

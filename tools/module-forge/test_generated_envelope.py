@@ -76,7 +76,7 @@ int main() {
     if (!(e.outputs[e.ENV_OUTPUT].getVoltage(0) > interrupted)) return 7;
 
     // A host/UI reset event must not mutate audio-owned lanes directly.
-    const float beforeReset = e.lanes[0].level;
+    const double beforeReset = e.lanes[0].level;
     e.onReset(rack::ResetEvent{});
     if (!e.pendingReset.load() || e.lanes[0].level != beforeReset) return 8;
     e.process(args);
@@ -118,6 +118,82 @@ int main() {
     e.inputs[e.GATE_INPUT].setVoltage(5.f);
     e.process(args);
     if (!near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 10.f / 48.f)) return 14;
+
+    // A release must preserve its elapsed *seconds* when the host rate changes
+    // between buffers; reusing a fixed per-sample decrement makes it finish
+    // twice as fast at the doubled rate.
+    args.sampleRate = 48000.0;
+    e.onReset();
+    e.params[e.ATTACK_PARAM].setValue(0.001f);
+    e.params[e.DECAY_PARAM].setValue(0.001f);
+    e.params[e.SUSTAIN_PARAM].setValue(1.f);
+    e.params[e.RELEASE_PARAM].setValue(0.1f);
+    e.inputs[e.GATE_INPUT].setVoltage(5.f);
+    for (int i = 0; i < 120; ++i) e.process(args);
+    if (!near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 10.f)) return 15;
+    e.inputs[e.GATE_INPUT].setVoltage(0.f);
+    for (int i = 0; i < 2400; ++i) e.process(args);
+    if (!near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 5.f, 0.08f)) return 16;
+    // The release control is captured at gate fall; modulation afterwards
+    // must not warp an already active release.
+    e.params[e.RELEASE_PARAM].setValue(0.001f);
+    args.sampleRate = 96000.0;
+    for (int i = 0; i < 2400; ++i) e.process(args);
+    if (!near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 2.5f, 0.08f)) return 17;
+    for (int i = 0; i < 2400; ++i) e.process(args);
+    if (!near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 0.f, 0.08f)) return 18;
+
+    // The longest permitted A stage at the highest supported sample rate
+    // must not accumulate millions of float-ULP rounding errors.
+    args.sampleRate = 384000.0;
+    e.onReset();
+    e.params[e.ATTACK_PARAM].setValue(20.f);
+    e.params[e.SUSTAIN_PARAM].setValue(1.f);
+    e.inputs[e.GATE_INPUT].setVoltage(5.f);
+    for (int i = 0; i < 3840000; ++i) e.process(args);
+    if (!near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 5.f, 0.20f)) return 19;
+    for (int i = 0; i < 3840000; ++i) e.process(args);
+    if (!near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 10.f, 0.15f)) return 20;
+
+    // Zero sustain and minimum-time stages must reach a genuine sustained
+    // zero, not generate denormals or stick in a decay loop at 384 kHz.
+    e.onReset();
+    e.params[e.ATTACK_PARAM].setValue(0.001f);
+    e.params[e.DECAY_PARAM].setValue(0.001f);
+    e.params[e.SUSTAIN_PARAM].setValue(0.f);
+    e.params[e.RELEASE_PARAM].setValue(0.001f);
+    e.inputs[e.GATE_INPUT].setVoltage(5.f);
+    for (int i = 0; i < 800; ++i) e.process(args);
+    if (!near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 0.f)
+        || e.lanes[0].stage != MSForgeADSRModule::Sustain) return 21;
+    for (int i = 0; i < 1000; ++i) {
+        e.inputs[e.GATE_INPUT].setVoltage(i % 2 ? 0.11f : 0.99f);
+        e.process(args);
+        if (!e.lanes[0].gate || e.lanes[0].stage != MSForgeADSRModule::Sustain)
+            return 22;
+    }
+    e.inputs[e.GATE_INPUT].setVoltage(0.1f);
+    e.process(args);
+    if (e.lanes[0].gate || e.lanes[0].stage != MSForgeADSRModule::Idle)
+        return 23;
+    e.inputs[e.GATE_INPUT].setVoltage(0.99f);
+    e.process(args);
+    if (e.lanes[0].gate || !near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 0.f))
+        return 24;
+    e.inputs[e.GATE_INPUT].setVoltage(1.f);
+    e.process(args);
+    if (!e.lanes[0].gate || e.lanes[0].stage != MSForgeADSRModule::Attack
+        || !(e.outputs[e.ENV_OUTPUT].getVoltage(0) > 0.f)) return 25;
+
+    // Release after a partially complete new attack must start from the
+    // current value and end in approximately one 1 ms interval.
+    const double retriggerLevel = e.lanes[0].level;
+    e.inputs[e.GATE_INPUT].setVoltage(0.f);
+    e.process(args);
+    if (!(e.lanes[0].level < retriggerLevel)) return 26;
+    for (int i = 0; i < 384; ++i) e.process(args);
+    if (!near(e.outputs[e.ENV_OUTPUT].getVoltage(0), 0.f)
+        || e.lanes[0].stage != MSForgeADSRModule::Idle) return 27;
     return 0;
 }
 '''

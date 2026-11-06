@@ -1237,6 +1237,7 @@ static void initStatic__ModularSynth()
         p->addModel(modelChanceHold);
         p->addModel(modelDualVCA);
         p->addModel(modelSlewGlide);
+        p->addModel(modelScaleQuantizer);
     }
 }
 

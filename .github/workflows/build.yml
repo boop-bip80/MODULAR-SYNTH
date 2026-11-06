@@ -8,6 +8,16 @@ on:
       - '**/*.md'
       - 'docs/**'
   workflow_dispatch:
+    inputs:
+      require_host_audio_evidence:
+        description: 'Opt in to source-matched operator-provided DAW WAV evidence (fails if absent)'
+        required: false
+        type: boolean
+        default: false
+      host_audio_capture_run_id:
+        description: 'Run ID containing a modular-real-host-audio artifact captured in a real host'
+        required: false
+        type: string
 
 # The large build matrix is for integration/release verification, not every
 # feature-branch push and pull request. Those run quality-baseline.yml.
@@ -290,6 +300,9 @@ jobs:
           make NOOPT=true ${MAKE_ARGS} -j $(sysctl -n hw.logicalcpu)
       - name: Verify universal macOS build products
         run: python3 -B .github/workflows/scripts/verify-macos-release-payload.py --binaries bin
+      - name: Verify macOS installer inputs without modifying bundles
+        shell: bash
+        run: bash utils/create-macos-installer.sh --preflight
       - name: Build macOS (packaging)
         shell: bash
         env:
@@ -659,8 +672,9 @@ jobs:
           zip -r -9 ../${{ github.event.repository.name }}-${{ matrix.target }}-${{ github.event.pull_request.number || env.SHA8 }}.zip $(ls | grep -e lv2 -e vst -e clap)
           popd
           zip -u -9 ${{ github.event.repository.name }}-${{ matrix.target }}-${{ github.event.pull_request.number || env.SHA8 }}.zip LICENSE README.md docs/*.* CardinalJACK.exe CardinalNative.exe
-      - name: Verify Windows release installer and ZIP
-        if: startsWith(github.ref, 'refs/tags/')
+      # A successful non-release build must verify its uploaded Windows payload
+      # just as a tag does. The slug is SHA8 on main and ref_name on tags.
+      - name: Verify Windows installer and ZIP before every upload
         shell: bash
         run: |
           bash .github/workflows/scripts/verify-windows-release-artifacts.sh \
@@ -826,6 +840,9 @@ jobs:
 
   plugin-validation:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read  # download independent real-host recordings from an earlier run
     steps:
       - name: Verify SpeexDSP Git mirror before recursive checkout
         shell: bash
@@ -884,7 +901,35 @@ jobs:
           make CIBUILD=false NOOPT=true -j 1
           ./dpf/utils/generate-ttl.sh
       - name: Verify linked first-party collection
-        run: python3 -B tools/ci/verify_compiled_collection.py --binary bin/Cardinal
+        id: first_party_inventory
+        run: |
+          set -euo pipefail
+          # The JACK standalone bin/Cardinal is not the DAW's loaded ELF. The
+          # first-party modules must be present in all three real LV2 plugin
+          # shared objects (also loaded by generate-ttl above).
+          for binary in \
+              bin/Cardinal.lv2/Cardinal.so \
+              bin/CardinalFX.lv2/CardinalFX.so \
+              bin/CardinalSynth.lv2/CardinalSynth.so; do
+            python3 -B tools/ci/verify_compiled_collection.py --binary "$binary"
+          done
+      - name: Diagnose linked ELF collection on inventory failure
+        if: failure() && steps.first_party_inventory.outcome == 'failure'
+        run: |
+          python3 -B tools/ci/diagnose_compiled_collection.py \
+            --binary bin/CardinalSynth.lv2/CardinalSynth.so \
+            --candidate bin/CardinalFX.lv2/CardinalFX.so \
+            --candidate bin/Cardinal.lv2/Cardinal.so \
+            --candidate bin/Cardinal \
+            --json-output first-party-linked-elf-diagnostics.json
+      - name: Upload linked ELF collection failure diagnostics
+        if: failure() && steps.first_party_inventory.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-party-linked-elf-diagnostics
+          path: first-party-linked-elf-diagnostics.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Run Cardinal self-tests
         run: |
           # --exit-on-first-error=yes
@@ -961,3 +1006,39 @@ jobs:
                 --suppressions=./dpf/utils/valgrind-dpf.supp \
                 /usr/lib/carla/carla-bridge-native vst3 "$p" ""
           done
+      # Carla's dummy-bridge smoke checks above exercise plugin-host entry
+      # points, but DO NOT generate playable audio. Explicit operator-provided
+      # actual-host recordings are an independent, opt-in manual acceptance
+      # gate. Disabled builds must not be reported as passing audio validation.
+      - name: Declare real-host stereo audio evidence status
+        run: |
+          echo 'HOST AUDIO NOT PROVEN by build or Carla dummy bridge smoke.'
+          echo 'For independently collected recordings dispatch build with require_host_audio_evidence=true and a capture artifact run ID.'
+      - name: Download operator-recorded real-host audio capture
+        if: github.event_name == 'workflow_dispatch' && inputs.require_host_audio_evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_RUN_ID: ${{ inputs.host_audio_capture_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$EVIDENCE_RUN_ID" =~ ^[0-9]{1,18}$ ]]; then
+            echo 'Real-host capture required, but a valid artifact run ID was not supplied.' >&2
+            exit 1
+          fi
+          mkdir -p host-evidence
+          gh run download "$EVIDENCE_RUN_ID" \
+            --name modular-real-host-audio \
+            --dir host-evidence
+          test -s host-evidence/capture.json || {
+            echo 'Required real-host capture.json missing from artifact; no audio validation.' >&2
+            exit 1
+          }
+      - name: Validate source-matched real-host stereo audio evidence
+        if: github.event_name == 'workflow_dispatch' && inputs.require_host_audio_evidence
+        run: |
+          set -euo pipefail
+          python3 -B tools/ci/verify_host_audio_capture_ci.py \
+            --manifest host-evidence/capture.json \
+            --expected-sha "$(git rev-parse HEAD)" \
+            --bin-dir bin \
+            --lv2-dir /tmp/lv2-path

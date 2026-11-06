@@ -100,6 +100,16 @@
         "Polyphonic",
         "Utility"
       ]
+    },
+    {
+      "slug": "ScaleQuantizer",
+      "name": "Scale Quantizer",
+      "description": "Original scale-aware 16-lane 1 V/oct CV quantizer with eight pitch-class modes, root/transpose CV, adjustable hysteresis and a pitch-change trigger. Source-DSP verified, not yet auditioned in a host.",
+      "tags": [
+        "Quantizer",
+        "Polyphonic",
+        "Utility"
+      ]
     }
   ]
 }

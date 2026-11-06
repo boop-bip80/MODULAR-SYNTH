@@ -117,6 +117,8 @@ def evaluate(run: dict[str, Any], jobs: dict[str, Any],
         raise EvidenceError("profile must be core or full")
     if not _integer(run.get("id")):
         raise EvidenceError("workflow run must contain a positive integer id")
+    if not _integer(run.get("run_attempt")):
+        raise EvidenceError("workflow run must contain a positive integer run_attempt")
     if not isinstance(jobs, dict) or not isinstance(artifacts, dict):
         raise EvidenceError("jobs and artifacts responses must be objects")
 
@@ -133,6 +135,17 @@ def evaluate(run: dict[str, Any], jobs: dict[str, Any],
         reasons.append("full build workflow did not complete successfully")
 
     job_names = _by_name(jobs.get("jobs"), "job", reasons)
+    # A successful job with the expected name is not evidence for this build if
+    # it was copied from another commit, run, or rerun attempt.
+    for job in jobs["jobs"]:
+        name = job["name"]
+        if not _integer(job.get("run_id")) or job["run_id"] != run["id"]:
+            reasons.append(f"job does not attest requested run: {name}")
+        if job.get("head_sha") != expected_sha:
+            reasons.append(f"job does not attest requested commit: {name}")
+        if (not _integer(job.get("run_attempt"))
+                or job["run_attempt"] != run["run_attempt"]):
+            reasons.append(f"job does not attest requested run attempt: {name}")
     artifact_names = _by_name(artifacts.get("artifacts"), "artifact", reasons)
     declared = jobs.get("total_count")
     if type(declared) is not int or declared < len(jobs.get("jobs", [])):

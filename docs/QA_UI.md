@@ -1,8 +1,8 @@
 # MODULAR-SYNTH — Manual UI and DAW State QA
 
 **Status: NOT EXECUTED.** This is a checklist for human verification of
-the ten first-party modules, including the introductory Morph VCO, State Filter
-and Macro8 voice as well as FMVoice, Chance Hold, Dual VCA and Slew Glide. No desktop/DAW
+the eleven first-party modules, including the introductory Morph VCO, State Filter
+and Macro8 voice as well as FMVoice, Chance Hold, Dual VCA, Slew Glide and Scale Quantizer. No desktop/DAW
 UI run is claimed. All checkboxes intentionally remain unchecked.
 
 | Record before running | Value |
@@ -24,8 +24,8 @@ each supported host/plugin format.
 - [ ] Module browser offers exactly one each of **Morph VCO**,
   **State Filter**, **Fold Drive**, **Macro8 Performance Macros**,
   **Stereo Echo**, **Clocked LFO**, **FM Voice**, **Chance Hold** and
-  **Dual VCA** and **Slew Glide** in the **MODULAR-SYNTH Originals** collection.
-  Search resolves all ten.
+  **Dual VCA**, **Slew Glide** and **Scale Quantizer** in the **MODULAR-SYNTH Originals** collection.
+  Search resolves all eleven.
 - [ ] Inspect each SVG panel, ports, labels, controls and lights at normal
   and HiDPI scaling; zoom, close/reopen the editor and check alignment.
 - [ ] Confirm the release package actually contains
@@ -38,7 +38,8 @@ each supported host/plugin format.
   `ModularSynth/res/FMVoice.svg`,
   `ModularSynth/res/ChanceHold.svg` and
   `ModularSynth/res/DualVCA.svg` and
-  `ModularSynth/res/SlewGlide.svg`.
+  `ModularSynth/res/SlewGlide.svg` and
+  `ModularSynth/res/ScaleQuantizer.svg`.
 
 - [ ] Patch HostMIDI pitch → Slew Glide CV IN → LINEAR → Morph VCO PITCH.
   Check RISE/FALL at zero and nonzero seconds and positive/negative modulation;
@@ -47,6 +48,17 @@ each supported host/plugin format.
   voltage meter and verify it rises during a glide and falls after settling.
   Retire/re-add polyphonic lanes and reset the module while transport runs;
   record any stale previous pitch, clicks, host allocations or invalid CV.
+
+- [ ] Route a stable calibrated 1 V/oct CV into Scale Quantizer PITCH, select
+  C major, then confirm output semitones C–D–E–F–G–A–B only; repeat below
+  0 V and through two octaves. Change ROOT, SCALE and TRANS individually,
+  then apply independent positive/negative ROOT CV and TRANS CV; measure the
+  resulting steps with a voltage monitor.
+- [ ] Slowly sweep across a note boundary with HYST at 0 and 20 cents; verify
+  hysteresis reduces back-and-forth pitch flapping and that CHANGE is +10 V
+  for about 2 ms per new note. Test fast skips, 1/8/16 polyphonic lanes,
+  disappearing/reappearing lanes, host reset during playback, 44.1/48/96 kHz,
+  and project save/reload. No live-host results are recorded yet.
 
 - [ ] With Fold Drive between Morph VCO and State Filter, verify dry
   transparency at zero DRIVE, audible fold changes with increasing DRIVE,
@@ -165,13 +177,11 @@ python3 tools/ui-check/validate_panels.py
 python3 -m unittest discover -s tests -p 'test_ui_panels.py' -v
 ```
 
-The standard-library-only checker validates nine first-party source panels
+The standard-library-only checker validates ten first-party source panels
 (Morph VCO, State Filter, FoldDrive, Macro8, StereoEcho, ClockedLFO,
-FMVoice, ChanceHold, DualVCA) as parseable SVGs with an SVG namespace
-and expected **12/14/12/20/16/16/12/16/12 HP** widths, standard
-**3U height** and Rack viewBoxes of **15 px/HP × 380 px**. Seven panels
-specify 128.5 mm physical height; ClockedLFO and ChanceHold declare
-equivalent 380 px dimensions. It cross-checks exact `setPanel()` asset paths in C++ and
+FMVoice, ChanceHold, DualVCA and SlewGlide) as parseable SVGs with an SVG namespace
+and expected **12/14/12/20/16/16/12/16/12/12 HP** widths, standard
+**3U height** and Rack viewBoxes of **15 px/HP × 380 px**. It cross-checks exact `setPanel()` asset paths in C++ and
 checks statically resolvable centered knobs, ports, switches and lights
 against panel coordinate bounds. It conservatively expands simple constant
 arrays and conditional positions; non-constant expressions are reported as
@@ -192,7 +202,7 @@ python3 -m unittest discover -s tests -p 'test_panel_focus_contrast.py' -v
 ```
 
 The audit derives **actual text foreground colors** from NanoVG
-`nvgRGB()` / `nvgText()` calls in all nine module widgets, and reads SVG
+`nvgRGB()` / `nvgText()` calls in all ten module widgets, and reads SVG
 panel fill and decorative control-outline colors. It computes standard
 sRGB relative luminance and contrast ratios and flags measured swatches
 below **4.5:1** for small text and **3:1** for SVG control outlines as
@@ -229,8 +239,8 @@ label contrast or a WCAG pass**.
 
 Across the dark-gradient panels, the source palette bounds
 remain comfortably above the 4.5:1 text advisory. ClockedLFO has a
-separately inspected flat/layered SVG background; all **112 local source-label
-contrasts across the nine panels remain UNKNOWN**, including Macro8's
+separately inspected flat/layered SVG background; all **122 local source-label
+contrasts across the ten panels remain UNKNOWN**, including Macro8's
 dynamic labels. The base-only bounds can be evaluated for 80 sites but
 never establish the actual local pixel background. An
 invalid/missing stop, transparency, stylesheet or unsupported paint construct
@@ -358,6 +368,78 @@ inkscape plugins/ModularSynth/res/StateFilter.svg --export-type=png --export-wid
   scale; verify no label/plug overlap in all six modules.
 - [ ] Confirm Macro8 scene labels and active LEDs remain distinguishable
   through Rack's render/host theme and after live scene recall.
+
+### Eleven-panel label footprint and rail-clip preflight (2026-11-06)
+
+The eleven original SVG files contain **no text glyphs**: labels are painted later
+by the C++ NanoVG widget overrides. The added preflight combines actual
+`nvgText()` coordinates and `nvgFontSize()` values with each panel's SVG
+`viewBox`, the module's Rack `PJ301MPort` callsites, and the input/output
+outline rectangles (including the four two-lane unnumbered panels).
+
+```sh
+python3 -B tools/ui-check/label_footprint_audit.py
+python3 -B -m unittest discover -s tests -p 'test_ui_label_footprints.py' -v
+python3 -B tools/ui-check/port_rail_audit.py
+```
+
+The current source dataset has **131 static NanoVG text labels**, each at
+least **10px** before host scaling, with conservative text boxes inside its
+3U panel and no estimated text/text collisions. **67 real, individually
+identified jack callsites** across ten static-labelled originals are
+checked against their captions, offsets and fully containing source SVG
+rails. Macro8's eight loop-created outputs and editable captions instead
+have separate source-array, circle-center and maximum-width checks. These
+checks do not change port IDs or widget centers.
+
+Before this update, estimated captions reached or crossed their rail frames:
+Morph VCO and FM Voice **1V/OCT** reached 2px left of their input rails;
+Clocked LFO and Chance Hold **WIDTH/GLIDE** reached beyond the right input
+frame; and top-row captions on several panels touched the top outline.
+Their original SVG rail boxes were widened or raised only as necessary,
+without moving knob/port widgets, rings, labels or module identifiers.
+Stereo Echo's lower rails also have additional vertical caption clearance
+with a distinct input/lower-lane border gap. Slew Glide's two bottom docks
+were extended to contain the complete estimated **FALL CV / MOVING** text.
+Scale Quantizer's first input caption was shifted 2px right, and its
+input/output captions were lowered 4px to remain within their original
+outlined lanes; neither knob nor jack centers changed.
+
+Macro8 permits custom names up to 12 printable ASCII characters. A
+12-character name at the default 10.5px monospaced size could extend into
+an adjacent 73px column. The NanoVG draw loop now measures each name with
+`nvgTextBounds()` and scales **only its displayed font size** if necessary to
+fit a 65px lane. The saved name, underlying macro parameter and port layout
+are unchanged. Very long names may render below 10px, a deliberate
+legibility/overlap tradeoff pending live host review.
+
+**Limitations:** The estimated text boxes assume a 0.60em advance and 1em
+height, not sampled actual ShareTechMono glyph outlines. Source checks can
+verify a plugin-local font file exists if referenced; all eleven current panels
+instead request Rack's own `res/fonts/ShareTechMono-Regular.ttf` via
+`asset::system()`. This external **host font's actual presence is unverified**
+without opening Rack/Cardinal. The Inkscape SVG previews show the expanded
+rail shapes, but **do not include C++ text, cable/port widgets, rendered
+letter metrics, font fallback or zoom behavior**. No WCAG/DAW GUI
+certification is claimed; the manual acceptance status remains NOT EXECUTED.
+
+Reproduce original artwork preview inspection (choose any writable output
+path; this shows only SVG graphics):
+
+```sh
+inkscape plugins/ModularSynth/res/ClockedLFO.svg --export-type=png --export-width=720 --export-filename=/tmp/ClockedLFO-ui-review.png
+inkscape plugins/ModularSynth/res/SlewGlide.svg --export-type=png --export-width=720 --export-filename=/tmp/SlewGlide-ui-review.png
+```
+
+- [ ] On a real Rack/DAW host with the installed system font, photograph or
+  screenshot every panel at regular and HiDPI scale. Inspect all captions
+  for clipping, readability, misleading rail association, and overlap with
+  actual jack widgets and cables.
+- [ ] Rename Macro8 controls to twelve **W** characters and twelve **i**
+  characters, save/reopen, and verify glyph fitting, name persistence and
+  legibility at practical zoom levels. Screenshot before/after playback.
+- [ ] Verify the font resource resolves on each intended host distribution;
+  if it does not, package a proven-license local font and update the checker.
 
 ## 9. Parameter, port and tooltip discoverability (manual)
 

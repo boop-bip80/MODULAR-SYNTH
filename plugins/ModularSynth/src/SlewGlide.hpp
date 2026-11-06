@@ -23,7 +23,11 @@ public:
     static constexpr double kMaxTimeSeconds = 5.0;
     static constexpr double kMaxVolts = 10.0;
     static constexpr double kSnapEpsilon = 1.0e-6;
-    static constexpr double kMoveGateEpsilon = 1.0e-4;
+    // Two distinct thresholds prevent the MOVING output from chattering when
+    // an externally modulated target jitters around the settled boundary.
+    static constexpr double kMoveGateOffEpsilon = 1.0e-4;
+    static constexpr double kMoveGateOnEpsilon = 2.0e-4;
+    static constexpr double kMoveGateEpsilon = kMoveGateOffEpsilon;
 
     struct Input {
         double sampleRateHz = 48000.0;
@@ -60,6 +64,7 @@ public:
     void reset() noexcept {
         linear_ = 0.0;
         exponential_ = 0.0;
+        moving_ = false;
         cachedSampleRate_ = -1.0;
         cachedRise_ = -1.0;
         cachedFall_ = -1.0;
@@ -127,15 +132,22 @@ public:
         Output output;
         output.linear = static_cast<float>(linear_);
         output.exponential = static_cast<float>(exponential_);
-        output.movingGate = (std::abs(linear_ - target) > kMoveGateEpsilon
-                          || std::abs(exponential_ - target) > kMoveGateEpsilon)
-            ? 10.0f : 0.0f;
+        const double remaining = std::max(std::abs(linear_ - target),
+                                          std::abs(exponential_ - target));
+        if (moving_) {
+            if (remaining <= kMoveGateOffEpsilon)
+                moving_ = false;
+        } else if (remaining > kMoveGateOnEpsilon) {
+            moving_ = true;
+        }
+        output.movingGate = moving_ ? 10.0f : 0.0f;
         return output;
     }
 
 private:
     double linear_ = 0.0;
     double exponential_ = 0.0;
+    bool moving_ = false;
     double cachedSampleRate_ = -1.0;
     double cachedRise_ = -1.0;
     double cachedFall_ = -1.0;
