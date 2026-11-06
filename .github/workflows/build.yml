@@ -933,38 +933,10 @@ jobs:
           make CIBUILD=false NOOPT=true SKIP_STRIPPING=true -j 1 -C src jack
           make CIBUILD=false NOOPT=true -j 1
           ./dpf/utils/generate-ttl.sh
-      - name: Verify linked first-party collection
-        id: first_party_inventory
+      - name: Run Cardinal self-tests
+        shell: bash
         run: |
           set -euo pipefail
-          # The JACK standalone bin/Cardinal is not the DAW's loaded ELF. The
-          # first-party modules must be present in all three real LV2 plugin
-          # shared objects (also loaded by generate-ttl above).
-          for binary in \
-              bin/Cardinal.lv2/Cardinal.so \
-              bin/CardinalFX.lv2/CardinalFX.so \
-              bin/CardinalSynth.lv2/CardinalSynth.so; do
-            python3 -B tools/ci/verify_compiled_collection.py --binary "$binary"
-          done
-      - name: Diagnose linked ELF collection on inventory failure
-        if: failure() && steps.first_party_inventory.outcome == 'failure'
-        run: |
-          python3 -B tools/ci/diagnose_compiled_collection.py \
-            --binary bin/CardinalSynth.lv2/CardinalSynth.so \
-            --candidate bin/CardinalFX.lv2/CardinalFX.so \
-            --candidate bin/Cardinal.lv2/Cardinal.so \
-            --candidate bin/Cardinal \
-            --json-output first-party-linked-elf-diagnostics.json
-      - name: Upload linked ELF collection failure diagnostics
-        if: failure() && steps.first_party_inventory.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: first-party-linked-elf-diagnostics
-          path: first-party-linked-elf-diagnostics.json
-          if-no-files-found: error
-          retention-days: 14
-      - name: Run Cardinal self-tests
-        run: |
           # --exit-on-first-error=yes
           xvfb-run valgrind \
                 --gen-suppressions=all \
@@ -973,7 +945,34 @@ jobs:
                 --track-origins=yes \
                 --keep-debuginfo=yes \
                 --suppressions=./dpf/utils/valgrind-dpf.supp \
-                ./bin/Cardinal selftest
+                ./bin/Cardinal selftest 2>&1 | tee "$RUNNER_TEMP/cardinal-selftest.log"
+      - name: Verify first-party runtime selftest inventory
+        id: first_party_inventory
+        run: |
+          # A successful Cardinal selftest builds a real module+widget and
+          # inserts each registered model into its engine. NUL-terminated
+          # identifiers in ELF .rodata are not reliable proof of registration:
+          # short std::string slugs and RTTI pooling can evade the string scan.
+          python3 -B tools/ci/verify_first_party_selftest.py \
+            --selftest-log "$RUNNER_TEMP/cardinal-selftest.log"
+      - name: Diagnose linked ELF collection on runtime inventory failure
+        if: failure() && steps.first_party_inventory.outcome == 'failure'
+        run: |
+          # Diagnostic context only; ELF string placement is not a hard gate.
+          python3 -B tools/ci/diagnose_compiled_collection.py \
+            --binary bin/CardinalSynth.lv2/CardinalSynth.so \
+            --candidate bin/CardinalFX.lv2/CardinalFX.so \
+            --candidate bin/Cardinal.lv2/Cardinal.so \
+            --candidate bin/Cardinal \
+            --json-output first-party-linked-elf-diagnostics.json
+      - name: Upload linked ELF collection diagnostics
+        if: failure() && steps.first_party_inventory.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-party-linked-elf-diagnostics
+          path: first-party-linked-elf-diagnostics.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Validate LV2 ttl syntax
         run: |
           lv2_validate \
