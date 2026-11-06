@@ -163,6 +163,13 @@ Gitlink checkout with three bounded attempts. Its *explicit* Git URL rule direct
 the pinned Rack/SpeexDSP dependency to the official Xiph GitHub mirror even if
 checkout-action environment handling would otherwise reach GitLab (the November
 5 build's Linux i686 and Windows win32 checkout failed on GitLab HTTP 502).
+The November 6 Windows win64 run exposed a separate container checkout failure:
+Git rejected the host-mounted checkout as having dubious ownership after
+`actions/checkout` restored its temporary HOME. The recursive retry now invokes
+`trust_checkout_workspace.sh`, which verifies the exact absolute
+`GITHUB_WORKSPACE` and adds only that repository to the current job's Git
+`safe.directory` list. It never trusts all repositories or their parent
+directory. This source mitigation needs a new hosted Windows run to prove it.
 After a successful checkout, Git's recursive submodule status must report only
 exact initialized Gitlink commits, including Rack's nested SpeexDSP. This
 pre-bootstrap script intentionally requires Bash and Git, **not Python**,

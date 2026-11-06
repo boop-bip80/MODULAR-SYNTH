@@ -19,6 +19,7 @@ SOURCE = "https://gitlab.xiph.org/xiph/speexdsp.git"
 MIRROR = "https://github.com/xiph/speexdsp.git"
 REQUIRED_KEYS = ("GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0")
 RECURSIVE_CHECKOUT = ROOT / "tools" / "ci" / "update_pinned_submodules.sh"
+WORKSPACE_TRUST = ROOT / "tools" / "ci" / "trust_checkout_workspace.sh"
 
 
 def build_git_config_environment() -> dict[str, str]:
@@ -94,6 +95,13 @@ class GitMirrorTests(unittest.TestCase):
         self.assertEqual(11, len(checkouts), "Every full-build checkout must be retried")
         self.assertNotIn("submodules: recursive", workflow)
         subprocess.run(["bash", "-n", str(RECURSIVE_CHECKOUT)], check=True)
+        subprocess.run(["bash", "-n", str(WORKSPACE_TRUST)], check=True)
+        script = RECURSIVE_CHECKOUT.read_text(encoding="utf-8")
+        self.assertLess(
+            script.index('trust_checkout_workspace.sh'),
+            script.index("source_url='https://gitlab.xiph.org/xiph/speexdsp.git'"),
+            "CI checkout must establish narrowly scoped Git trust before other Git operations",
+        )
 
     def test_nested_checkout_retries_pinned_gitlinks_without_network(self) -> None:
         # Replace git/sleep with local stubs: test both retry policy and exact
@@ -101,9 +109,12 @@ class GitMirrorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="pinned-submodule-retry-") as temp:
             fake_bin = Path(temp)
             state = fake_bin / "attempts"
+            commands = fake_bin / "commands"
             fake_git = fake_bin / "git"
             fake_git.write_text(
                 '#!/usr/bin/env bash\n'
+                'printf "%s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n'
+                'if [[ " $* " == *" config --global --add safe.directory "* ]]; then exit 0; fi\n'
                 'if [[ " $* " == *" ls-remote --get-url "* ]]; then\n'
                 '  if [[ "$FAKE_WRONG_MIRROR" = 1 ]]; then echo https://untrusted.invalid; exit 0; fi\n'
                 '  raw="${@: -1}"\n'
@@ -133,8 +144,10 @@ class GitMirrorTests(unittest.TestCase):
                 command.chmod(0o755)
 
             def invoke(failures: int, wrong_mirror: bool = False,
-                       bad_status: bool = False) -> subprocess.CompletedProcess[str]:
+                       bad_status: bool = False,
+                       ci: bool = False) -> subprocess.CompletedProcess[str]:
                 state.unlink(missing_ok=True)
+                commands.unlink(missing_ok=True)
                 env = os.environ.copy()
                 env.update({
                     "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
@@ -142,6 +155,9 @@ class GitMirrorTests(unittest.TestCase):
                     "FAKE_WRONG_MIRROR": "1" if wrong_mirror else "0",
                     "FAKE_BAD_STATUS": "1" if bad_status else "0",
                     "FAKE_ATTEMPTS_FILE": str(state),
+                    "FAKE_COMMAND_LOG": str(commands),
+                    "GITHUB_ACTIONS": "true" if ci else "false",
+                    "GITHUB_WORKSPACE": str(ROOT),
                 })
                 return subprocess.run(
                     ["bash", str(RECURSIVE_CHECKOUT)], cwd=ROOT, env=env,
@@ -163,6 +179,96 @@ class GitMirrorTests(unittest.TestCase):
             result = invoke(failures=0, bad_status=True)
             self.assertNotEqual(0, result.returncode)
             self.assertIn("non-pinned submodule", result.stderr)
+
+            result = invoke(failures=0, ci=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+            calls = commands.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(
+                f"config --global --add safe.directory {ROOT}", calls[0],
+                "Trust must be scoped to the checkout and established before checkout retry",
+            )
+
+    def test_ci_workspace_trust_restores_git_after_checkout_temporary_home(self) -> None:
+        # Git >=2.35 exposes a test-only ownership override, reproducing the
+        # hosted container's dubious-owner rejection on a disposable repo.
+        with tempfile.TemporaryDirectory(prefix="ci-safe-workspace-") as temp:
+            test_root = Path(temp)
+            workspace = test_root / "checked-out-project"
+            workspace.mkdir()
+            subprocess.run(["git", "init", "-q", str(workspace)], check=True)
+            unrelated = test_root / "other-project"
+            unrelated.mkdir()
+            subprocess.run(["git", "init", "-q", str(unrelated)], check=True)
+
+            job_home = test_root / "job-home"
+            job_home.mkdir()
+            config_home = test_root / "xdg-config"
+            config_home.mkdir()
+            env = os.environ.copy()
+            env.update({
+                "GITHUB_ACTIONS": "true",
+                "GITHUB_WORKSPACE": str(workspace),
+                "HOME": str(job_home),
+                "XDG_CONFIG_HOME": str(config_home),
+                "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1",
+            })
+
+            def inspect(repo: Path) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    cwd=repo, env=env, capture_output=True, text=True,
+                )
+
+            before = inspect(workspace)
+            if before.returncode == 0:
+                self.skipTest("Git has no test-only different-owner guard")
+            self.assertIn("dubious ownership", before.stderr)
+
+            recovery = subprocess.run(
+                ["bash", str(WORKSPACE_TRUST)], cwd=workspace, env=env,
+                capture_output=True, text=True, check=True,
+            )
+            self.assertEqual("", recovery.stderr)
+            self.assertEqual(str(workspace), inspect(workspace).stdout.strip())
+            self.assertIn("dubious ownership", inspect(unrelated).stderr,
+                          "Siblings must stay untrusted")
+            trusted = subprocess.check_output(
+                ["git", "config", "--global", "--get-all", "safe.directory"],
+                cwd=workspace, env=env, text=True,
+            ).splitlines()
+            self.assertEqual([str(workspace)], trusted)
+
+    def test_ci_workspace_trust_rejects_wrong_workspace(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="ci-safe-workspace-wrong-") as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            (project / ".git").mkdir()
+            other = Path(temp) / "other"
+            other.mkdir()
+            job_home = Path(temp) / "job-home"
+            job_home.mkdir()
+            env = os.environ.copy()
+            env.update({
+                "GITHUB_ACTIONS": "true",
+                "GITHUB_WORKSPACE": str(other),
+                "HOME": str(job_home),
+            })
+            result = subprocess.run(
+                ["bash", str(WORKSPACE_TRUST)], cwd=project, env=env,
+                capture_output=True, text=True,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("Refusing to trust", result.stderr)
+            self.assertFalse((job_home / ".gitconfig").exists())
+
+    def test_workspace_trust_is_noop_outside_github_actions(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="ci-safe-workspace-local-") as temp:
+            result = subprocess.run(
+                ["bash", str(WORKSPACE_TRUST)], cwd=temp,
+                env={"PATH": os.environ.get("PATH", ""), "GITHUB_ACTIONS": "false"},
+                capture_output=True, text=True,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
 
 
 if __name__ == "__main__":
