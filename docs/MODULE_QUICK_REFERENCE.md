@@ -255,9 +255,9 @@ oscillator morph. Those are saved signal/CV routes, not an audio audition.
 HostTime beat/reset routing and Clocked LFO modulation to VCO, filter,
 ADSR retrigger and Echo wet mix; it needs host transport for beat lock. **Cinematic Pulse Score** instead leaves HostTime/CLK disconnected, uses a free-running LFO PULSE to gate a second ADSR/VCA on its low-pass left path, and keeps high-pass right separate. Its four A–D Macro8 scenes are saved CV positions, not auditioned film-score audio.
 
-## Twenty-one factory patches
+## Twenty-two factory patches
 
-All twenty-one links below are actual `.vcv` files under
+All twenty-two links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
 existing plugin collection and does not require one of these eleven first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
@@ -285,6 +285,7 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Noir Expressive Lead](../patches/examples/MODULAR_-_Noir_Expressive_Lead.vcv) | Originals | Mono MIDI voice; aftertouch moves wave morph, mod wheel raises Echo wet and Macro8 A–D recall dark-to-tense scenes |
 | [Fold Drive Cinematic Motion](../patches/examples/MODULAR_-_Fold_Drive_Cinematic_Motion.vcv) | Originals | Eight MIDI lanes; 0.25 Hz free-running LFO modulates FoldDrive drive/bias and MIDI CC1 controls wet mix |
 | [Major Glow Quantized Performance](../patches/examples/MODULAR_-_Major_Glow_Quantized_Performance.vcv) | Originals | MIDI pitch → C-major ScaleQuantizer → MorphVCO; note CHANGE retriggers ADSR, four echo scenes, verified stereo L/R cables |
+| [Moonlit Harmonic Minor Motion](../patches/examples/MODULAR_-_Moonlit_Harmonic_Minor_Motion.vcv) | Originals | D harmonic-minor ScaleQuantizer with SlewGlide portamento; free-running LFO/ChanceHold filter motion, separate stereo Echo-to-host paths and four Macro8 scenes |
 
 If the examples folder is included in the build, open a patch through
 **File → Open demo / example project**; otherwise load its `.vcv` directly.
@@ -297,7 +298,7 @@ and [offline patch checks](PATCH_WORKFLOW.md) provide more context.
 
 ## What is—and is not—verified
 
-The manifest, module C++ metadata and all twenty-one saved patch graphs can be
+The manifest, module C++ metadata and all twenty-two saved patch graphs can be
 checked offline with:
 
 ```sh

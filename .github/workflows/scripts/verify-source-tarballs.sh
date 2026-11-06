@@ -100,6 +100,39 @@ for archive in "../cardinal-${version}.tar.xz" "../cardinal+deps-${version}.tar.
         echo "Invalid or incomplete source release archive: $archive" >&2
         exit 1
     fi
+    # Tar's textual listing hides duplicate-member ambiguity and does not
+    # expose symlink destinations. Check these using actual tar headers.
+    if ! python3 -B - "$archive" "cardinal-${version}" <<'PY'
+import posixpath
+import sys
+import tarfile
+
+archive, root = sys.argv[1:]
+seen = set()
+try:
+    with tarfile.open(archive, "r:xz") as source:
+        for member in source:
+            name = posixpath.normpath(member.name)
+            if name in seen:
+                raise ValueError(f"Duplicate archive member path: {member.name!r}")
+            seen.add(name)
+            if member.issym():
+                target = posixpath.normpath(
+                    posixpath.join(posixpath.dirname(name), member.linkname)
+                )
+                if target != root and not target.startswith(root + "/"):
+                    raise ValueError(
+                        f"Archive symlink escapes versioned root: "
+                        f"{member.name!r} -> {member.linkname!r}"
+                    )
+except (tarfile.TarError, OSError, ValueError) as error:
+    print(f"Invalid source archive structure: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
+    then
+        echo "Unsafe source release archive: $archive" >&2
+        exit 1
+    fi
     # A same-named but stale manifest can otherwise masquerade as current.
     if ! cmp -s "plugins/ModularSynth/plugin.json" <(tar --xz -xOf "$archive" "cardinal-${version}/plugins/ModularSynth/plugin.json" 2>/dev/null); then
         echo "Source archive manifest differs from current checkout: $archive" >&2

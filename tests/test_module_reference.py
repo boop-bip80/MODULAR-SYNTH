@@ -170,13 +170,14 @@ class ModuleQuickReferenceTests(unittest.TestCase):
         linked = [path for path, _ in rows]
         self.assertEqual(len(linked), len(set(linked)), "Duplicate factory-patch references")
         self.assertEqual(actual, set(linked), "Update quick reference when factory patches change")
-        self.assertEqual(21, len(actual))
-        self.assertIn("## Twenty-one factory patches", self.document)
+        self.assertEqual(len(rows), len(actual))
+        self.assertIn("## Twenty-two factory patches", self.document)
         self.assertIn("[Cinematic Pulse Score]", self.document)
         self.assertIn("[Night Lanterns Dual Timbre]", self.document)
         self.assertIn("[Reed Chamber Organ]", self.document)
         self.assertIn("[Luminous Portamento Duets]", self.document)
         self.assertIn("[Major Glow Quantized Performance]", self.document)
+        self.assertIn("[Moonlit Harmonic Minor Motion]", self.document)
         for path, classification in rows:
             with self.subTest(path=path):
                 patch = json.loads((ROOT / path).read_text(encoding="utf-8"))

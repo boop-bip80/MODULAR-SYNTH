@@ -5,10 +5,12 @@ evidence of any completed hosted build or downloadable release.
 """
 
 from pathlib import Path
+import io
 import json
 import re
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import unittest
 
@@ -270,6 +272,40 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("escapes versioned root", result.stderr)
 
+    @unittest.skipUnless(
+        shutil.which("tar") and shutil.which("xz") and shutil.which("bash"),
+        "GNU tar/XZ/Bash unavailable for archive smoke test",
+    )
+    def test_validator_rejects_duplicate_archive_member(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "checkout"
+            project.mkdir()
+            self._stage_source_members(project)
+            self._create_archives(project)
+            duplicate = tarfile.TarInfo(f"cardinal-{VERSION}/README.md")
+            self._append_archive_member(project.parent / ARCHIVES[0], duplicate)
+            result = self._run(project, VERSION)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Duplicate archive member path", result.stderr)
+
+    @unittest.skipUnless(
+        shutil.which("tar") and shutil.which("xz") and shutil.which("bash"),
+        "GNU tar/XZ/Bash unavailable for archive smoke test",
+    )
+    def test_validator_rejects_escaping_archive_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "checkout"
+            project.mkdir()
+            self._stage_source_members(project)
+            self._create_archives(project)
+            link = tarfile.TarInfo(f"cardinal-{VERSION}/plugins/ModularSynth/escape")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "../../../outside-release"
+            self._append_archive_member(project.parent / ARCHIVES[1], link)
+            result = self._run(project, VERSION)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Archive symlink escapes versioned root", result.stderr)
+
     def test_validator_rejects_path_like_versions(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
@@ -295,6 +331,24 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
                 destination.write_text(json.dumps(MANIFEST), encoding="utf-8")
             else:
                 destination.write_text(f"source placeholder: {name}", encoding="utf-8")
+
+    @staticmethod
+    def _append_archive_member(archive: Path, extra: tarfile.TarInfo) -> None:
+        # Repack a synthetic fixture while preserving each original tar header.
+        with tarfile.open(archive, "r:xz") as source:
+            members = [
+                (member, source.extractfile(member).read() if member.isfile() else None)
+                for member in source
+            ]
+        with tarfile.open(archive, "w:xz") as output:
+            for member, content in members:
+                output.addfile(member, io.BytesIO(content) if content is not None else None)
+            if extra.isfile():
+                payload = b"duplicate fixture"
+                extra.size = len(payload)
+                output.addfile(extra, io.BytesIO(payload))
+            else:
+                output.addfile(extra)
 
     @staticmethod
     def _create_archives(project: Path, archive_root: str | None = None) -> None:

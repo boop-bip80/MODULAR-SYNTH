@@ -58,7 +58,7 @@ def sample_source_archive(names=None, *, links=(), extra_types=()):
 
 
 class FakeResponse(io.BytesIO):
-    def __init__(self, content, *, target="https://arm.example.test/source.tar.xz", mime="application/x-xz"):
+    def __init__(self, content, *, target="https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", mime="application/x-xz"):
         super().__init__(content)
         self.target = target
         self.headers = Message()
@@ -134,14 +134,14 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
             cache = Path(temp)
             with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(content)) as fetch:
                 self.assertEqual(
-                    seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, cache),
+                    seeder.seed_archive("https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", digest, cache),
                     "downloaded and verified source",
                 )
             fetch.assert_called_once()
             self.assertEqual((cache / seeder.ARCHIVE_NAME).read_bytes(), content)
             with mock.patch.object(seeder, "urlopen", side_effect=AssertionError("unexpected download")):
                 self.assertEqual(
-                    seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, cache),
+                    seeder.seed_archive("https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", digest, cache),
                     "verified cached source",
                 )
 
@@ -155,9 +155,51 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
                 return_value=FakeResponse(content, target="https://www.linaro.org/contact/", mime="text/html"),
             ):
                 with self.assertRaisesRegex(seeder.SourceArchiveError, "HTML"):
-                    seeder.seed_archive("https://releases.linaro.org/source.tar.xz", digest, cache)
+                    seeder.seed_archive("https://releases.linaro.org/gcc-linaro-7.5-2019.12.tar.xz", digest, cache)
             self.assertFalse((cache / seeder.ARCHIVE_NAME).exists())
             self.assertFalse(tuple(cache.iterdir()), "Staging archives must be cleaned up")
+
+    def test_archive_name_is_required_before_fetch_and_after_redirect(self) -> None:
+        archive = sample_source_archive()
+        digest = hashlib.sha256(archive).hexdigest()
+        with tempfile.TemporaryDirectory() as temp:
+            cache = Path(temp) / "cache"
+            with mock.patch.object(seeder, "urlopen", side_effect=AssertionError("must not fetch")):
+                with self.assertRaisesRegex(seeder.SourceArchiveError, seeder.ARCHIVE_NAME):
+                    seeder.seed_archive("https://mirror.example.test/download.html", digest, cache)
+            renamed_local = Path(temp) / "renamed-source.tar.xz"
+            renamed_local.write_bytes(archive)
+            with self.assertRaisesRegex(seeder.SourceArchiveError, seeder.ARCHIVE_NAME):
+                seeder.seed_local_archive(renamed_local, digest, cache)
+            with mock.patch.object(
+                seeder, "urlopen", return_value=FakeResponse(
+                    archive, target="https://mirror.example.test/contact.html",
+                    mime="application/octet-stream",
+                ),
+            ):
+                with self.assertRaisesRegex(seeder.SourceArchiveError, seeder.ARCHIVE_NAME):
+                    seeder.seed_archive(
+                        "https://mirror.example.test/" + seeder.ARCHIVE_NAME, digest, cache,
+                    )
+            self.assertFalse((cache / seeder.ARCHIVE_NAME).exists())
+            self.assertFalse(tuple(cache.iterdir()), "Redirect rejection must remove staging files")
+
+    def test_html_payload_is_rejected_even_when_hash_matches_and_mime_is_generic(self) -> None:
+        html = b"<!doctype html><html><body>Download discontinued</body></html>"
+        digest = hashlib.sha256(html).hexdigest()
+        with tempfile.TemporaryDirectory() as temp:
+            cache = Path(temp)
+            with mock.patch.object(
+                seeder, "urlopen", return_value=FakeResponse(
+                    html, target="https://mirror.example.test/" + seeder.ARCHIVE_NAME,
+                    mime="application/octet-stream",
+                ),
+            ):
+                with self.assertRaisesRegex(seeder.SourceArchiveError, "not XZ data"):
+                    seeder.seed_archive(
+                        "https://mirror.example.test/" + seeder.ARCHIVE_NAME, digest, cache,
+                    )
+            self.assertFalse(tuple(cache.iterdir()), "Spoofed archive must not reach cache")
 
     def test_rejects_downgrade_and_credential_urls(self) -> None:
         digest = hashlib.sha256(sample_source_archive()).hexdigest()
@@ -175,7 +217,7 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
                 return_value=FakeResponse(sample_source_archive(), target="http://arm.example.test/archive"),
             ):
                 with self.assertRaisesRegex(seeder.SourceArchiveError, "HTTPS URL"):
-                    seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp))
+                    seeder.seed_archive("https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", digest, Path(temp))
 
     def test_wrong_digest_or_wrong_archive_members_are_rejected(self) -> None:
         correct = sample_source_archive()
@@ -190,7 +232,7 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
             with self.subTest(problem=problem), tempfile.TemporaryDirectory() as temp:
                 with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(content)):
                     with self.assertRaisesRegex(seeder.SourceArchiveError, problem):
-                        seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp))
+                        seeder.seed_archive("https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", digest, Path(temp))
                 self.assertFalse((Path(temp) / seeder.ARCHIVE_NAME).exists())
 
     def test_canonical_gcc_source_files_are_required(self) -> None:
@@ -201,7 +243,7 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(fake)):
                 with self.assertRaisesRegex(seeder.SourceArchiveError, "canonical GCC 7 source"):
-                    seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp))
+                    seeder.seed_archive("https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", digest, Path(temp))
             self.assertFalse((Path(temp) / seeder.ARCHIVE_NAME).exists())
 
     def test_archive_links_must_resolve_inside_source_root(self) -> None:
@@ -217,7 +259,7 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as temp:
                     with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(archive)):
                         with self.assertRaisesRegex(seeder.SourceArchiveError, problem):
-                            seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp))
+                            seeder.seed_archive("https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", digest, Path(temp))
 
     def test_safe_relative_symlink_is_accepted(self) -> None:
         archive = sample_source_archive(links=(
@@ -227,7 +269,7 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(archive)):
                 self.assertEqual(
-                    seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp)),
+                    seeder.seed_archive("https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", digest, Path(temp)),
                     "downloaded and verified source",
                 )
 
@@ -248,14 +290,14 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
                 digest = hashlib.sha256(archive).hexdigest()
                 with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(archive)):
                     with self.assertRaisesRegex(seeder.SourceArchiveError, problem):
-                        seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, Path(temp))
+                        seeder.seed_archive("https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", digest, Path(temp))
 
     def test_local_source_seed_requires_digest_and_never_uses_network(self) -> None:
         archive = sample_source_archive()
         digest = hashlib.sha256(archive).hexdigest()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            source = root / "verified-by-maintainer.tar.xz"
+            source = root / seeder.ARCHIVE_NAME
             source.write_bytes(archive)
             cache = root / "download"
             with mock.patch.object(seeder, "urlopen", side_effect=AssertionError("no network allowed")):
@@ -270,7 +312,7 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
         archive = sample_source_archive()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            source = root / "source.tar.xz"
+            source = root / seeder.ARCHIVE_NAME
             source.write_bytes(archive)
             cache = root / "download"
             cache.mkdir()
@@ -286,7 +328,7 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
         digest = hashlib.sha256(archive).hexdigest()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            source = root / "local-source.tar.xz"
+            source = root / seeder.ARCHIVE_NAME
             source.write_bytes(archive)
             base_command = [
                 sys.executable, str(SEEDER_PATH), "--source-url", "", "--source-file", str(source),
@@ -328,7 +370,7 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
             destination = cache / seeder.ARCHIVE_NAME
             destination.write_bytes(b"<html>stale cache</html>")
             with mock.patch.object(seeder, "urlopen", return_value=FakeResponse(content)):
-                seeder.seed_archive("https://arm.example.test/source.tar.xz", digest, cache)
+                seeder.seed_archive("https://arm.example.test/gcc-linaro-7.5-2019.12.tar.xz", digest, cache)
             self.assertEqual(destination.read_bytes(), content)
 
     def test_missing_configuration_fails_without_network(self) -> None:
@@ -338,6 +380,10 @@ class ModToolchainSourceArchiveTests(unittest.TestCase):
                 check=False, capture_output=True, text=True,
             )
         self.assertEqual(result.returncode, 1)
+        self.assertIn("MOD_LINARO_SOURCE_URL", result.stderr)
+        self.assertIn("MOD_LINARO_SOURCE_SHA256", result.stderr)
+        self.assertIn(seeder.ARCHIVE_NAME, result.stderr)
+        self.assertIn("--source-file", result.stderr)
         self.assertIn("MOD hardware builds remain blocked", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
 

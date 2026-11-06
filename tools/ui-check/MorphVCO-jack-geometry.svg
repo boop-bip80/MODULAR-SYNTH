@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="60.96mm" height="128.5mm" viewBox="0 0 180 380">
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111726" />
+      <stop offset="1" stop-color="#1b1430" />
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#49d8eb" />
+      <stop offset=".55" stop-color="#9e71f8" />
+      <stop offset="1" stop-color="#dba3fc" />
+    </linearGradient>
+  </defs>
+  <rect width="180" height="380" fill="url(#base)" />
+  <path d="M0 0h180v3H0z" fill="url(#line)" />
+  <path d="M12 44h156" stroke="#55456c" stroke-width="1" />
+  <path d="M12 119h156" stroke="#3c455b" stroke-width="1" />
+  <path d="M12 190h156" stroke="#3c455b" stroke-width="1" />
+  <path d="M12 253h156" stroke="#3c455b" stroke-width="1" />
+  <path d="M12 315h156" stroke="#3c455b" stroke-width="1" />
+
+  <rect id="morphInputRail" x="6" y="259" width="168" height="59" rx="8" fill="#152C3E" stroke="#75D7EA" stroke-width="2" />
+  <rect id="morphOutputRail" x="12" y="320" width="156" height="54" rx="8" fill="#261D3C" stroke="#C69AF8" stroke-width="2" />
+  <g fill="#19374A" stroke="#95E7F8" stroke-width="1.6">
+    <circle cx="28" cy="301" r="12" /><circle cx="69" cy="301" r="12" />
+    <circle cx="111" cy="301" r="12" /><circle cx="152" cy="301" r="12" />
+  </g>
+  <g fill="#302244" stroke="#D1A5FF" stroke-width="1.6">
+    <circle cx="55" cy="352" r="12" /><circle cx="125" cy="352" r="12" />
+  </g>
+  <circle cx="50" cy="82" r="28" fill="#20243b" stroke="#9aaccc" stroke-width="1.5" />
+  <circle cx="130" cy="82" r="28" fill="#20243b" stroke="#9aaccc" stroke-width="1.5" />
+  <circle cx="52" cy="164" r="28" fill="#261f41" stroke="#bb96f0" stroke-width="1.5" />
+  <circle cx="128" cy="164" r="28" fill="#261f41" stroke="#bb96f0" stroke-width="1.5" />
+  <circle cx="90" cy="229" r="24" fill="#20243b" stroke="#9aaccc" stroke-width="1.5" />
+  <path d="M20 280h140" stroke="#236a81" stroke-width="2" stroke-linecap="round" />
+  <path d="M34 335h112" stroke="#8f65cd" stroke-width="2" stroke-linecap="round" />
+  <path d="M0 377h180" stroke="url(#line)" stroke-width="3" />
+<g id="source-jack-geometry-overlay" fill="none" stroke-width="1.4" pointer-events="none"><title>MorphVCO: static source jack geometry</title><desc>Centers are exact C++ PJ301MPort widget coordinates; circles are illustrative 3.5-unit markers, not Rack port sizes. Border is the original SVG viewBox. No runtime labels or host UI are represented.</desc><rect id="source-panel-boundary" x="0" y="0" width="180" height="380" stroke="#ffe36b" stroke-width="2" stroke-dasharray="5 3" /><circle cx="28" cy="301" r="3.5" stroke="#54edff" data-role="Input" data-port="PITCH_INPUT"><title>Input PITCH_INPUT: C++ center (28, 301)</title></circle><circle cx="69" cy="301" r="3.5" stroke="#54edff" data-role="Input" data-port="FM_INPUT"><title>Input FM_INPUT: C++ center (69, 301)</title></circle><circle cx="111" cy="301" r="3.5" stroke="#54edff" data-role="Input" data-port="MORPH_CV_INPUT"><title>Input MORPH_CV_INPUT: C++ center (111, 301)</title></circle><circle cx="152" cy="301" r="3.5" stroke="#54edff" data-role="Input" data-port="PWM_CV_INPUT"><title>Input PWM_CV_INPUT: C++ center (152, 301)</title></circle><circle cx="55" cy="352" r="3.5" stroke="#ff88c7" data-role="Output" data-port="MORPH_OUTPUT"><title>Output MORPH_OUTPUT: C++ center (55, 352)</title></circle><circle cx="125" cy="352" r="3.5" stroke="#ff88c7" data-role="Output" data-port="SINE_OUTPUT"><title>Output SINE_OUTPUT: C++ center (125, 352)</title></circle></g></svg>

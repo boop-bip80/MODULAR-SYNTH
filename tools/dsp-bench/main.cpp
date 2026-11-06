@@ -237,6 +237,8 @@ struct Measurement {
     int voices;
     int sampleRate;
     int frames;
+    int warmupFrames;
+    std::uint64_t timedVoiceSamples;
     double elapsedMs;
     double nsPerVoiceSample;
     double realtimeFactor;
@@ -297,15 +299,18 @@ Measurement measureOnce(const char* name, int voices, int sampleRate, int frames
     const double elapsedNs = std::chrono::duration<double, std::nano>(end - start).count();
     const double voiceSamples = static_cast<double>(voices) * frames;
     const double averageEnergy = energy / voiceSamples;
-    if (!finite || !finiteBits(averageEnergy) || averageEnergy <= 0.0 || allocations != 0u)
+    if (!finite || !finiteBits(averageEnergy) || averageEnergy <= 0.0 || allocations != 0u
+        || !finiteBits(elapsedNs) || elapsedNs <= 0.0)
         throw std::runtime_error(std::string(name)
-            + ": non-finite/zero output energy or C++ allocation inside sample loop");
+            + ": invalid output energy/timing or C++ allocation inside sample loop");
 
     Measurement result = {};
     result.engine = name;
     result.voices = voices;
     result.sampleRate = sampleRate;
     result.frames = frames;
+    result.warmupFrames = warmupFrames;
+    result.timedVoiceSamples = static_cast<std::uint64_t>(voices) * frames;
     result.elapsedMs = elapsedNs / 1.0e6;
     result.nsPerVoiceSample = elapsedNs / voiceSamples;
     result.realtimeFactor = (elapsedNs / 1.0e9) / (frames / static_cast<double>(sampleRate));
@@ -361,14 +366,15 @@ Measurement measure(const char* name, int voices, int sampleRate, int frames,
 }
 
 void printCsv(const std::vector<Measurement>& rows) {
-    std::cout << "engine,voices,sample_rate_hz,frames,elapsed_ms,ns_per_voice_sample,"
+    std::cout << "engine,voices,sample_rate_hz,frames,warmup_frames,timed_voice_samples,elapsed_ms,ns_per_voice_sample,"
                  "realtime_factor,mean_output_energy,cpp_new_calls,prepared_bytes_hint,"
                  "prepared_cpp_new_bytes,repetitions,min_elapsed_ms,p90_elapsed_ms,max_elapsed_ms\n";
     std::cout << std::setprecision(9);
     for (std::size_t n = 0; n < rows.size(); ++n) {
         const Measurement& r = rows[n];
         std::cout << r.engine << ',' << r.voices << ',' << r.sampleRate << ','
-                  << r.frames << ',' << r.elapsedMs << ',' << r.nsPerVoiceSample
+                  << r.frames << ',' << r.warmupFrames << ',' << r.timedVoiceSamples
+                  << ',' << r.elapsedMs << ',' << r.nsPerVoiceSample
                   << ',' << r.realtimeFactor << ',' << r.meanEnergy << ','
                   << r.newCalls << ',' << r.preparedBytesHint << ','
                   << r.preparedCppNewBytes << ',' << r.repetitions << ','
@@ -384,6 +390,8 @@ void printJson(const std::vector<Measurement>& rows) {
         std::cout << "  {\"engine\":\"" << r.engine << "\",\"voices\":" << r.voices
                   << ",\"sample_rate_hz\":" << r.sampleRate
                   << ",\"frames\":" << r.frames
+                  << ",\"warmup_frames\":" << r.warmupFrames
+                  << ",\"timed_voice_samples\":" << r.timedVoiceSamples
                   << ",\"elapsed_ms\":" << r.elapsedMs
                   << ",\"ns_per_voice_sample\":" << r.nsPerVoiceSample
                   << ",\"realtime_factor\":" << r.realtimeFactor
@@ -425,7 +433,9 @@ void usage(const char* command) {
               << "Runs MorphVCO, StateFilter, FMVoice, StereoEcho, FoldDrive, "
                  "ClockedLFO, ChanceHold and SlewGlide at 48/96 kHz, "
                  "1/8/16 voices.\n"
-              << "Source DSP timing only: no Cardinal, UI, drivers, host, or audio I/O.\n";
+              << "Source DSP timing only: no Cardinal, UI, drivers, host, or audio I/O.\n"
+              << "Warmup frames are excluded; ns_per_voice_sample is wall-clock time per\n"
+              << "source DSP voice-sample, not host CPU usage or DAW performance.\n";
 }
 } // namespace
 

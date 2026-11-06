@@ -145,9 +145,8 @@ class LuminousPortamentoSourceTests(unittest.TestCase):
         self.assertEqual(actual, declared)
         report = coverage.analyze(ROOT)
         self.assertTrue(report["ok"], report["errors"])
-        self.assertEqual(len(report["examples"]), 21)
-        self.assertEqual(
-            report["model_coverage"]["SlewGlide"], [PATCH.name])
+        self.assertEqual(len(report["examples"]), len(coverage.EXAMPLES))
+        self.assertIn(PATCH.name, report["model_coverage"]["SlewGlide"])
 
 
 if __name__ == "__main__":
