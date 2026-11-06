@@ -3,6 +3,10 @@
 # Gitlinks, not branch tips, determine each dependency's exact revision.
 set -euo pipefail
 
+# A container job can have a different HOME after actions/checkout@v4 and a
+# host-owned /__w mount. Re-establish narrowly scoped trust before calling Git.
+bash "$(dirname "${BASH_SOURCE[0]}")/trust_checkout_workspace.sh"
+
 source_url='https://gitlab.xiph.org/xiph/speexdsp.git'
 mirror_url='https://github.com/xiph/speexdsp.git'
 mirror_rule="url.${mirror_url}.insteadOf=${source_url}"
