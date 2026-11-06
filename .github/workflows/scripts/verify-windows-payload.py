@@ -25,7 +25,12 @@ VST3_MODULES = ("Cardinal", "CardinalFX", "CardinalSynth")
 IMAGE_FILE_EXECUTABLE_IMAGE = 0x0002
 IMAGE_FILE_DLL = 0x2000
 PE_MEMBER_SUFFIXES = (".exe", ".dll", ".clap", ".vst3")
-MAX_ZIP_MEMBERS = 50_000
+# The release ZIP contains separate CLAP/LV2/VST2/VST3 resource trees.  Its
+# legitimate SVG/PNG assets are repeated per format, and the win32 CI package
+# exceeded the earlier 50,000-entry limit (build 42150249873). Keep a finite
+# bound to reject pathological central directories while accepting large Rack
+# collections; the per-entry and 2 GiB uncompressed limits remain mandatory.
+MAX_ZIP_MEMBERS = 250_000
 MAX_MEMBER_UNCOMPRESSED = 512 * 1024 * 1024
 MAX_ZIP_UNCOMPRESSED = 2 * 1024 * 1024 * 1024
 WINDOWS_RESERVED_BASENAMES = {
@@ -33,6 +38,13 @@ WINDOWS_RESERVED_BASENAMES = {
     *(f"com{i}" for i in range(1, 10)),
     *(f"lpt{i}" for i in range(1, 10)),
 }
+
+
+def _check_zip_member_count(member_count: int) -> None:
+    if member_count > MAX_ZIP_MEMBERS:
+        raise ReleasePayloadError(
+            f"ZIP contains too many members ({member_count:,}; "
+            f"maximum {MAX_ZIP_MEMBERS:,})")
 
 
 def _coff_from_pe(head: bytes, label: str) -> tuple[int, int]:
@@ -131,8 +143,7 @@ def verify_payload(archive: Path, installer: Path, target: str) -> None:
             regular_file_names = set()
             pe_members = set(required_pe)
             total_uncompressed = 0
-            if len(zf.infolist()) > MAX_ZIP_MEMBERS:
-                raise ReleasePayloadError("ZIP contains too many members")
+            _check_zip_member_count(len(zf.infolist()))
             for info in zf.infolist():
                 canonical = _windows_canonical_name(info.filename,
                                                     is_dir=info.is_dir())

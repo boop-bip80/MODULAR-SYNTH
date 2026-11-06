@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import runpy
 import struct
 import subprocess
 import tempfile
@@ -275,6 +276,27 @@ class WindowsReleaseAssetsTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "a") as zf:
                 zf.writestr("CardinalJACK.exe", self.pe())
         self.assertIn("duplicate ZIP member", self.verify().stderr)
+
+    def test_large_legitimate_plugin_resource_tree_passes_bounded_member_limit(self) -> None:
+        """Rack resource trees can exceed the old 50,000-entry cap without being a ZIP bomb."""
+        self.stage_release()
+        archive = self.cwd / "MODULAR-SYNTH-win64-v26.02.zip"
+        with zipfile.ZipFile(archive, "a", zipfile.ZIP_STORED) as zf:
+            for index in range(50_000):
+                zf.writestr(f"Cardinal.clap/resources/fixture/vector-{index:05}.svg", b"<svg/>")
+        result = self.verify()
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_member_cap_remains_finite_with_actionable_count_diagnostics(self) -> None:
+        module = runpy.run_path(str(ROOT / ".github/workflows/scripts/verify-windows-payload.py"))
+        maximum = module["MAX_ZIP_MEMBERS"]
+        check = module["_check_zip_member_count"]
+        self.assertGreater(maximum, 50_000)
+        self.assertLessEqual(maximum, 250_000)
+        check(50_001)
+        check(maximum)
+        with self.assertRaisesRegex(ValueError, f"{maximum + 1:,}.*{maximum:,}"):
+            check(maximum + 1)
 
     def test_release_gate_rejects_symlink_and_empty_member(self) -> None:
         self.stage_release(overrides={"Cardinal.lv2/manifest.ttl": b""})
