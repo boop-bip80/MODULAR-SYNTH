@@ -1,6 +1,6 @@
 # MOD hardware build: Linaro GCC 7.5 source recovery
 
-**Status (2026-11-05): blocked on independently authenticated source.** This is a recovery procedure, **not** a claim that an uncached MOD target builds successfully. Do not skip the toolchain integrity gate, replace GCC source with a prebuilt cross-compiler, or mark a missing archive as optional.
+**Status (2026-11-06): blocked on independently authenticated source.** The GitHub Actions run **42150249873**, following the Windows workflow merge, again failed `mod-plugin-builder (modduox, modduox-static)` at **Bootstrap toolchain**. This is a recovery procedure, **not** a claim that an uncached MOD target builds successfully. Do not skip the toolchain integrity gate, replace GCC source with a prebuilt cross-compiler, or mark a missing archive as optional.
 
 ## What broke, and what source is required
 
@@ -37,6 +37,7 @@ The placeholder is deliberately **not** a guessed digest. The local original is 
 - Reject HTTP/FTP URLs, redirects to non-HTTPS, credential-bearing URLs, HTML redirects, digest mismatches and invalid XZ/tar data.
 - Reject archives lacking canonical GCC source files, traversal/escaping links, special members, duplicate paths or unbounded declared payloads.
 - Preserve existing cache content if a new candidate fails; do not mark an unavailable MOD toolchain as a passing build.
+- HTTP status failures report only the status (e.g. HTTP 404), and transport errors receive sanitized diagnostics instead of potentially leaking signed source URL query parameters in CI logs. Failed downloads leave no temporary archive behind.
 - Offline tests: `PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_ci_mod_toolchain_diagnostics -v`.
 
-**Remaining upstream dependency:** source archive authenticity, complete hosted bootstrap, target packaging and device audio smoke. Until independently verified evidence exists, the MOD hardware jobs are expected to fail closed.
+**Operator input needed to unblock:** an independently authenticated `gcc-linaro-7.5-2019.12.tar.xz` **GCC source** archive, plus its verified publisher/custodian SHA-256 and trusted HTTPS URL (or a trusted local source with that independent digest). Configure the two repository variables, rerun the hosted MOD matrix and check every target. **Remaining upstream dependency:** source archive authenticity, complete hosted bootstrap, target packaging and device audio smoke. Until independently verified evidence exists, the MOD hardware jobs are expected to fail closed.
