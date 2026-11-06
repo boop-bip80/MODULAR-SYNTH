@@ -15,6 +15,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from unittest import mock
 
 
@@ -127,6 +128,26 @@ class ModToolchainDiagnosticsTests(unittest.TestCase):
 
 
 class ModToolchainSourceArchiveTests(unittest.TestCase):
+    def test_transport_failures_are_actionable_and_do_not_disclose_signed_urls(self) -> None:
+        digest = hashlib.sha256(sample_source_archive()).hexdigest()
+        failures = (
+            (HTTPError("https://mirror.example.test/archive?token=not-for-logs", 404, "Not Found", None, None), "HTTP 404"),
+            (URLError("download failed; token=not-for-logs"), "unreachable or timed out"),
+            (TimeoutError("download timeout; token=not-for-logs"), "unreachable or timed out"),
+        )
+        for failure, expected in failures:
+            with self.subTest(failure=type(failure).__name__), tempfile.TemporaryDirectory() as temp:
+                cache = Path(temp)
+                with mock.patch.object(seeder, "urlopen", side_effect=failure):
+                    with self.assertRaises(seeder.SourceArchiveError) as caught:
+                        seeder.seed_archive(
+                            "https://mirror.example.test/" + seeder.ARCHIVE_NAME,
+                            digest, cache,
+                        )
+                self.assertIn(expected, str(caught.exception))
+                self.assertNotIn("not-for-logs", str(caught.exception))
+                self.assertEqual(tuple(cache.iterdir()), (), "Failed downloads must remove staged archives")
+
     def test_good_https_download_verified_and_reused_from_cache(self) -> None:
         content = sample_source_archive()
         digest = hashlib.sha256(content).hexdigest()

@@ -18,6 +18,7 @@ import sys
 import tarfile
 import tempfile
 from urllib.parse import urlsplit
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 
@@ -162,6 +163,19 @@ def seed_archive(url: str, expected_digest: str, destination: Path) -> str:
         validate_archive(staged, expected_digest)
         os.replace(staged, target)
         return "downloaded and verified source"
+    except HTTPError as exc:
+        # urllib's exception string contains the URL, which may include a
+        # short-lived signed query parameter. Report only the HTTP status.
+        raise SourceArchiveError(
+            f"Trusted HTTPS GCC Linaro source returned HTTP {exc.code}; "
+            "verify that the publisher-backed mirror serves the pinned source archive"
+        ) from None
+    except (URLError, TimeoutError):
+        # URLError.reason is arbitrary transport text and can embed secrets.
+        raise SourceArchiveError(
+            "Trusted HTTPS GCC Linaro source is unreachable or timed out; "
+            "check the mirror and GitHub Actions runner network"
+        ) from None
     finally:
         if staged is not None:
             staged.unlink(missing_ok=True)
