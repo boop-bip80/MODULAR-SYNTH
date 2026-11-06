@@ -121,7 +121,11 @@ class MacosReleasePayloadTests(unittest.TestCase):
     def populate_universal_bundles(self) -> Path:
         root = self.directory / "bin"
         for suffix in verifier.REQUIRED_BUNDLES:
-            executable = root / ("Cardinal." + suffix) / "Contents" / "MacOS" / "Cardinal"
+            bundle = root / ("Cardinal." + suffix)
+            if suffix == "lv2":
+                executable = bundle / "Cardinal.dylib"
+            else:
+                executable = bundle / "Contents" / "MacOS" / "Cardinal"
             executable.parent.mkdir(parents=True)
             executable.write_bytes(fat_binary())
         native = root / "CardinalNative.app" / "Contents" / "MacOS" / "CardinalNative"
@@ -213,6 +217,62 @@ class MacosReleasePayloadTests(unittest.TestCase):
         macos = root / "Cardinal.app" / "Contents" / "MacOS"
         (macos / "Cardinal").rename(macos / "OtherHealthyHelper")
         with self.assertRaisesRegex(verifier.VerificationError, "standalone executable"):
+            verifier.verify_binaries(root)
+
+    def test_healthy_unrelated_helper_cannot_replace_plugin_entrypoint(self) -> None:
+        root = self.populate_universal_bundles()
+        plugin_macos = root / "Cardinal.vst3" / "Contents" / "MacOS"
+        (plugin_macos / "Cardinal").unlink()
+        (plugin_macos / "TotallyUnrelatedHelper.dylib").write_bytes(fat_binary())
+        with self.assertRaisesRegex(verifier.VerificationError, "required macOS plugin image"):
+            verifier.verify_binaries(root)
+
+    def test_lv2_requires_its_actual_dsp_not_an_unrelated_library(self) -> None:
+        root = self.populate_universal_bundles()
+        bundle = root / "Cardinal.lv2"
+        (bundle / "Cardinal.dylib").unlink()
+        (bundle / "Unrelated.dylib").write_bytes(fat_binary())
+        with self.assertRaisesRegex(verifier.VerificationError, "Cardinal_dsp.dylib"):
+            verifier.verify_binaries(root)
+
+    def test_split_lv2_requires_both_real_dsp_and_ui_images(self) -> None:
+        root = self.populate_universal_bundles()
+        bundle = root / "CardinalMini.lv2"
+        bundle.mkdir()
+        (bundle / "CardinalMini_dsp.dylib").write_bytes(fat_binary())
+        (bundle / "CardinalMini_ui.dylib").write_bytes(fat_binary())
+        verifier.verify_binaries(root)
+        (bundle / "CardinalMini_ui.dylib").unlink()
+        (bundle / "Unrelated.dylib").write_bytes(fat_binary())
+        with self.assertRaisesRegex(verifier.VerificationError, "CardinalMini_ui.dylib"):
+            verifier.verify_binaries(root)
+
+    def test_pinned_loader_lv2_allows_its_intentionally_dsp_only_image(self) -> None:
+        root = self.populate_universal_bundles()
+        loader = root / "CardinalLoader.lv2"
+        loader.mkdir()
+        (loader / "CardinalLoader_dsp.dylib").write_bytes(fat_binary())
+        verifier.verify_binaries(root)
+        (loader / "CardinalLoader_dsp.dylib").unlink()
+        (loader / "CardinalLoader_ui.dylib").write_bytes(fat_binary())
+        with self.assertRaisesRegex(verifier.VerificationError, "CardinalLoader_dsp.dylib"):
+            verifier.verify_binaries(root)
+
+    def test_unknown_dsp_only_lv2_cannot_use_loader_exception(self) -> None:
+        root = self.populate_universal_bundles()
+        bundle = root / "OtherModule.lv2"
+        bundle.mkdir()
+        (bundle / "OtherModule_dsp.dylib").write_bytes(fat_binary())
+        with self.assertRaisesRegex(verifier.VerificationError, "OtherModule_ui.dylib"):
+            verifier.verify_binaries(root)
+
+    def test_bundle_contents_symlink_cannot_retarget_plugin_entrypoint(self) -> None:
+        root = self.populate_universal_bundles()
+        contents = root / "Cardinal.clap" / "Contents"
+        moved_contents = self.directory / "external-contents"
+        contents.rename(moved_contents)
+        contents.symlink_to(moved_contents, target_is_directory=True)
+        with self.assertRaisesRegex(verifier.VerificationError, "symlinked"):
             verifier.verify_binaries(root)
 
     def test_symlinked_bundle_or_binary_root_is_rejected(self) -> None:

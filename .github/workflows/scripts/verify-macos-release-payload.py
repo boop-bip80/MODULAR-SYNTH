@@ -22,10 +22,43 @@ PACKAGE_COMPONENTS = frozenset({
     "dpf-cardinal-vst3bundles.pkg", "dpf-cardinal-clapbundles.pkg",
 })
 REQUIRED_BUNDLES = ("app", "component", "lv2", "vst", "vst3", "clap")
+# `make loader` builds only the pinned CardinalLoader LV2 DSP target;
+# ordinary split LV2 plugins need both _dsp and _ui libraries.
+DSP_ONLY_LV2_NAMES = frozenset({"CardinalLoader"})
 REQUIRED_STANDALONES = {
     "Cardinal.app": "Cardinal",
     "CardinalNative.app": "CardinalNative",
 }
+
+
+def required_plugin_images(bundle: Path) -> tuple[Path, ...]:
+    """Return the actual binary targets of the pinned DPF macOS makefile.
+
+    DPF writes AU/VST2/VST3/CLAP images to Contents/MacOS/<bundle stem>.
+    LV2 uses <stem>.dylib at the bundle root, except its optional split
+    DSP/UI variant, which has *both* <stem>_dsp and <stem>_ui libraries.
+    The pinned `make loader` target builds only CardinalLoader_dsp.dylib.
+    An arbitrary universal helper is never evidence that the plugin loads.
+    """
+    stem = bundle.stem
+    if bundle.suffix == ".lv2":
+        combined = bundle / f"{stem}.dylib"
+        if combined.exists() or combined.is_symlink():
+            return (combined,)
+        if stem in DSP_ONLY_LV2_NAMES:
+            return (bundle / f"{stem}_dsp.dylib",)
+        return (bundle / f"{stem}_dsp.dylib", bundle / f"{stem}_ui.dylib")
+    return (bundle / "Contents" / "MacOS" / stem,)
+
+
+def safe_bundle_image(path: Path, bundle: Path) -> bool:
+    """Do not follow image or parent-directory symlinks outside a bundle."""
+    candidate = path
+    while candidate != bundle:
+        if candidate.is_symlink():
+            return False
+        candidate = candidate.parent
+    return path.is_file() and mach_arches(path) == EXPECTED_ARCHES
 
 
 class VerificationError(ValueError):
@@ -107,7 +140,7 @@ def verify_binaries(bin_dir: Path) -> None:
         if not app.is_dir() or app.is_symlink():
             raise VerificationError(f"required macOS standalone missing: {standalone}")
         executable = app / "Contents" / "MacOS" / executable_name
-        if not executable.is_file() or executable.is_symlink() or mach_arches(executable) != EXPECTED_ARCHES:
+        if not safe_bundle_image(executable, app):
             raise VerificationError(f"required macOS standalone executable is not universal: {executable}")
     for suffix in REQUIRED_BUNDLES:
         bundles = sorted(bin_dir.glob("*." + suffix))
@@ -116,6 +149,10 @@ def verify_binaries(bin_dir: Path) -> None:
         for bundle in bundles:
             if not bundle.is_dir() or bundle.is_symlink():
                 raise VerificationError(f"macOS .{suffix} bundle is not a directory: {bundle}")
+            for image in required_plugin_images(bundle):
+                if not safe_bundle_image(image, bundle):
+                    raise VerificationError(
+                        f"required macOS plugin image missing, symlinked or not universal: {image}")
             # Inspect only executable image candidates, not arbitrary resource
             # strings or Info.plist; nested helpers may be present too.
             candidates = [p for p in bundle.rglob("*")
