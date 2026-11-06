@@ -83,8 +83,12 @@ struct MS@@SLUG@@Module final : Module {
         activeChannels = voices;
         outputs[AUDIO_OUTPUT].setChannels(voices);
         const float requestedSampleRate = static_cast<float>(args.sampleRate);
+        // Reject finite but implausible host rates as well as NaN/Inf.
+        // At e.g. 1e30 Hz the tiny phase step effectively freezes audio;
+        // use the same supported 1k..384k range as the ADSR starter.
         const float sampleRate = (finite(requestedSampleRate)
-            && requestedSampleRate >= 1000.f)
+            && requestedSampleRate >= 1000.f
+            && requestedSampleRate <= 384000.f)
             ? requestedSampleRate : 48000.f;
 
         for (int voice = 0; voice < voices; ++voice) {

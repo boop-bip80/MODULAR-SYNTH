@@ -225,11 +225,15 @@ def _verify_existing_registration(makefile: str, loader: str, header: str,
 
     # Both registry pairs can agree internally yet describe different models.
     # Original first-party modules use model<Slug>; Module Forge exports
-    # modelMS<Slug>. Refuse ambiguous or unmatched identities before writing.
+    # modelMS<Slug>. An original module may instead export
+    # modelModularSynth<Slug> to avoid collisions with inherited collection
+    # symbols (notably ScaleQuantizer in AmalgamatedHarmonics). Refuse
+    # ambiguous or unmatched identities before writing.
     available = set(declarations)
     matched: list[str] = []
     for slug in manifest_slugs:
-        candidates = {f"model{slug}", f"modelMS{slug}"}
+        candidates = {f"model{slug}", f"modelMS{slug}",
+                      f"modelModularSynth{slug}"}
         hits = candidates.intersection(available)
         if len(hits) != 1:
             raise IntegrationError(

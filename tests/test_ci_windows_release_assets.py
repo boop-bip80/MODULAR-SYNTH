@@ -243,6 +243,30 @@ class WindowsReleaseAssetsTests(unittest.TestCase):
         self.stage_release(additions={"vendor/./shadow.dat": b"bad path"})
         self.assertIn("unsafe ZIP member", self.verify().stderr)
 
+    def test_release_gate_validates_unlisted_pe_members(self) -> None:
+        cases = (
+            ("vendor/utility.EXE", self.pe("win32"), "machine"),
+            ("vendor/bridge.DLL", self.pe("win32", dll=True), "machine"),
+            ("vendor/legacy.clap", b"not a PE binary", "DOS/PE"),
+            ("vendor/Extra.vst3", self.pe("win64", dll=False), "DLL/plugin"),
+        )
+        for name, data, diagnostic in cases:
+            with self.subTest(member=name):
+                self.stage_release(additions={name: data})
+                result = self.verify()
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn(name, result.stderr)
+                self.assertIn(diagnostic, result.stderr)
+
+        self.stage_release(additions={
+            "vendor/utility.EXE": self.pe(),
+            "vendor/bridge.DLL": self.pe(dll=True),
+            "vendor/legacy.clap": self.pe(dll=True),
+            "vendor/Extra.vst3": self.pe(dll=True),
+        })
+        result = self.verify()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_release_gate_rejects_duplicate_zip_members(self) -> None:
         self.stage_release()
         archive = self.cwd / "MODULAR-SYNTH-win64-v26.02.zip"

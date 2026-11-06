@@ -13,7 +13,7 @@ import tempfile
 import unittest
 
 from integrate import integration_plan
-from module_forge import check_module, generate
+from module_forge import check_module, generate, render_files
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -117,7 +117,7 @@ int main() {
     oscillator.params[MSForgeOrbitModule::COARSE_PARAM].setValue(0.f);
     oscillator.inputs[MSForgeOrbitModule::PITCH_INPUT].setVoltage(0.f, 0);
     for (double badRate : {0.0, -1.0, static_cast<double>(nan),
-                           static_cast<double>(plusInf)}) {
+                           static_cast<double>(plusInf), 1.0e30}) {
         oscillator.onReset();
         args.sampleRate = badRate;
         oscillator.process(args);
@@ -248,6 +248,13 @@ int main() {
 
 
 class GeneratedWrapperTests(unittest.TestCase):
+    def test_all_oscillator_waveforms_bound_implausible_host_sample_rates(self) -> None:
+        for waveform in ("sine", "saw", "pulse", "pwm", "triangle"):
+            with self.subTest(waveform=waveform):
+                source = render_files("RateGuard", "Rate Guard",
+                                      waveform=waveform)["RateGuard.cpp"]
+                self.assertIn("requestedSampleRate <= 384000.f", source)
+
     @staticmethod
     def _generate_pair(destination: Path) -> tuple[Path, Path]:
         oscillator = generate("ForgeOrbit", "Forge Orbit", destination)

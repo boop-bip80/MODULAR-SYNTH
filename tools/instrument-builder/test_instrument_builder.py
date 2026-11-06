@@ -1,6 +1,7 @@
 """Offline Instrument Builder roundtrip, schema, and hostile ZIP tests."""
 from contextlib import redirect_stdout
 from copy import deepcopy
+import hashlib
 from io import BytesIO, StringIO
 import json
 import os
@@ -14,7 +15,7 @@ import zipfile
 
 from instrument_builder import (
     FORMAT, FORMAT_VERSION, InstrumentError, MANIFEST_MEMBER, MAX_BUNDLE_BYTES,
-    MAX_PATCH_BYTES, PATCH_MEMBER, ZIP_TIMESTAMP, build_manifest, create_bundle,
+    MAX_PATCH_BYTES, PATCH_MEMBER, ZIP_TIMESTAMP, audit_bundle, build_manifest, create_bundle,
     _read_limited, inspect, main, pack, patch_performance, read_bundle, unpack,
 )
 
@@ -77,6 +78,66 @@ def valid_entries() -> list[tuple[str, bytes]]:
 
 
 class InstrumentBuilderTests(unittest.TestCase):
+    def test_audit_canonical_v1_and_v2_preserves_source_bytes(self):
+        for version in (1, 2):
+            with self.subTest(version=version):
+                source = create_bundle(patch_bytes(), "Synth", format_version=version)
+                pin = hashlib.sha256(source).hexdigest()
+                report = audit_bundle(
+                    source, expected_sha256=pin.upper(), require_reproducible=True)
+                self.assertEqual(report["status"], "PASS")
+                self.assertTrue(report["reproducible"])
+                self.assertTrue(report["expectedSha256Matches"])
+                self.assertEqual(report["bundleSha256"], pin)
+                self.assertEqual(report["formatVersion"], version)
+                self.assertEqual(report["patchSha256"],
+                                 hashlib.sha256(patch_bytes()).hexdigest())
+                self.assertEqual(report["routingStatus"], "not-checked")
+                self.assertEqual(source, create_bundle(
+                    patch_bytes(), "Synth", format_version=version))
+
+    def test_audit_distinguishes_valid_archive_from_reproducible_archive(self):
+        canonical = create_bundle(patch_bytes(), "Synth")
+        # Both the archive and manifest pass read_bundle; entry order differs.
+        reordered = custom_archive(list(reversed(valid_entries())))
+        self.assertNotEqual(reordered, canonical)
+        self.assertEqual(read_bundle(reordered), read_bundle(canonical))
+        self.assertEqual(audit_bundle(reordered)["status"], "PASS")
+        self.assertFalse(audit_bundle(reordered)["reproducible"])
+        self.assertEqual(audit_bundle(
+            reordered, require_reproducible=True)["status"], "FAIL")
+        self.assertEqual(audit_bundle(
+            canonical, expected_sha256="0" * 64)["status"], "FAIL")
+        self.assertFalse(audit_bundle(
+            canonical, expected_sha256="0" * 64)["expectedSha256Matches"])
+
+    def test_audit_rejects_invalid_input_and_malformed_pin(self):
+        bundle = create_bundle(patch_bytes(), "Synth")
+        with self.assertRaisesRegex(InstrumentError, "64 hex digits"):
+            audit_bundle(bundle, expected_sha256="not-a-hash")
+        with self.assertRaises(InstrumentError):
+            audit_bundle(b"not zip")
+        with self.assertRaises(InstrumentError):
+            audit_bundle(custom_archive([
+                (MANIFEST_MEMBER, b"{}"), (PATCH_MEMBER, patch_bytes())]))
+
+    def test_audit_cli_exit_codes_are_machine_readable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "source.msinstrument"
+            source = create_bundle(patch_bytes(), "Synth")
+            target.write_bytes(source)
+            with redirect_stdout(StringIO()) as out:
+                self.assertEqual(main(["audit", str(target),
+                                       "--require-reproducible",
+                                       "--expect-sha256",
+                                       hashlib.sha256(source).hexdigest()]), 0)
+            self.assertEqual(json.loads(out.getvalue())["status"], "PASS")
+            target.write_bytes(custom_archive(list(reversed(valid_entries()))))
+            with redirect_stdout(StringIO()) as out:
+                self.assertEqual(main(["audit", str(target),
+                                       "--require-reproducible"]), 1)
+            self.assertEqual(json.loads(out.getvalue())["status"], "FAIL")
+
     def test_manifest_represents_actual_macro8_state(self):
         patch = sample_patch()
         macro = patch["modules"][0]

@@ -52,6 +52,11 @@ def validate_https(url: str) -> None:
     parsed = urlsplit(url)
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
         raise SourceArchiveError("MOD_LINARO_SOURCE_URL must be an HTTPS URL without embedded credentials")
+    if parsed.path.rsplit("/", 1)[-1] != ARCHIVE_NAME:
+        raise SourceArchiveError(
+            f"MOD_LINARO_SOURCE_URL and its redirects must name {ARCHIVE_NAME}, "
+            "not an HTML page or another download"
+        )
 
 
 def sha256_file(path: Path) -> str:
@@ -142,7 +147,8 @@ def seed_archive(url: str, expected_digest: str, destination: Path) -> str:
             staged = Path(temp.name)
             with urlopen(url, timeout=45) as response:
                 validate_https(response.geturl())
-                if response.headers.get_content_type() == "text/html":
+                content_type = response.headers.get_content_type().lower()
+                if content_type in ("text/html", "application/xhtml+xml"):
                     raise SourceArchiveError("Mirror returned HTML, not GCC Linaro source")
                 total = 0
                 while True:
@@ -168,6 +174,8 @@ def seed_local_archive(source: Path, expected_digest: str, destination: Path) ->
     original and never overwrite a valid cache until the copy validates.
     """
     expected_digest = validate_sha256(expected_digest)
+    if source.name != ARCHIVE_NAME:
+        raise SourceArchiveError(f"Local GCC Linaro source must be named {ARCHIVE_NAME}")
     if not source.is_file():
         raise SourceArchiveError("Configured local GCC Linaro archive is not a regular file")
     if source.stat().st_size > MAX_SOURCE_BYTES:
@@ -208,15 +216,19 @@ def main() -> int:
             raise SourceArchiveError("Choose either --source-file or --source-url, not both")
         if args.source_file is not None:
             if not args.sha256:
-                raise SourceArchiveError("--source-file requires a verified --sha256 digest")
+                raise SourceArchiveError(
+                    "--source-file requires a verified --sha256 digest (64 hexadecimal characters); "
+                    f"use --source-file /path/to/{ARCHIVE_NAME} --sha256 <trusted-sha256>"
+                )
             result = seed_local_archive(args.source_file, args.sha256, args.cache_dir)
             print(f"MOD GCC Linaro 7.5 source: {result}")
             return 0
         if not args.source_url or not args.sha256:
             raise SourceArchiveError(
                 "The old Linaro GCC 7.5 source URL now redirects to an HTML page. "
-                "Configure repository variables MOD_LINARO_SOURCE_URL (verified HTTPS mirror) "
-                "and MOD_LINARO_SOURCE_SHA256 (independently verified archive digest). "
+                f"Configure repository variable MOD_LINARO_SOURCE_URL (trusted HTTPS URL ending in {ARCHIVE_NAME}) "
+                "and MOD_LINARO_SOURCE_SHA256 (independently verified 64-hex SHA-256 digest), "
+                f"or pass --source-file /path/to/{ARCHIVE_NAME} --sha256 <trusted-sha256>. "
                 "MOD hardware builds remain blocked until a trusted source is available."
             )
         result = seed_archive(args.source_url, args.sha256, args.cache_dir)

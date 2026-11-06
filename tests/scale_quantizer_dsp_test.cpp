@@ -75,6 +75,38 @@ void testChromaticOneVoltPerOctave() {
     expectNote(core, in, -10, "negative semitone uses true floor, not truncation");
 }
 
+void testZeroHysteresisBoundaryHistory() {
+    ScaleQuantizer q;
+    ScaleQuantizer::Input in;
+    in.hysteresisCents = 0.0;
+
+    // An exact tie must use the lower pitch regardless of the preceding note.
+    in.pitchVolts = 1.0 / 12.0;
+    expectNote(q, in, 1, "seed upper note for positive midpoint");
+    in.pitchVolts = 0.5 / 12.0;
+    expectNote(q, in, 0, "zero hysteresis resolves positive midpoint to lower note after upper note");
+
+    q.reset();
+    in.pitchVolts = 0.0;
+    expectNote(q, in, 0, "seed upper note for negative midpoint");
+    in.pitchVolts = -0.5 / 12.0;
+    expectNote(q, in, -1, "zero hysteresis resolves negative midpoint to lower note after upper note");
+
+    // Transpose and root CV are semitone quantities, including wrap at C.
+    q.reset();
+    in.scale = ScaleQuantizer::MajorPentatonic;
+    in.root = 11;
+    in.rootCvVolts = 1.0 / 12.0;
+    in.pitchVolts = 0.0;
+    expectNote(q, in, 0, "B tonic plus one semitone of root CV wraps to C");
+    in.transposeCvVolts = 1.0 / 12.0;
+    expectNote(q, in, 0, "one-semitone transpose CV re-quantizes to rooted pentatonic scale");
+    in.transposeCvVolts = 2.0 / 12.0;
+    expectNote(q, in, 2, "two-semitone transpose CV preserves scale-allowed pitch");
+    in.rootCvVolts = std::numeric_limits<double>::quiet_NaN();
+    expectNote(q, in, 1, "nonfinite root CV falls back to B tonic safely");
+}
+
 void testScaleRootsAndModes() {
     struct Mode {
         int scale;
@@ -211,6 +243,7 @@ void testUntrustedInputsAndSixteenLanes() {
 
 int main() {
     testChromaticOneVoltPerOctave();
+    testZeroHysteresisBoundaryHistory();
     testScaleRootsAndModes();
     testTransposeHysteresisAndChangePulse();
     testUntrustedInputsAndSixteenLanes();

@@ -720,7 +720,7 @@ int main() {
     try {
         require(modelMorphVCO && modelStateFilter && modelMacro8 && modelStereoEcho &&
                     modelClockedLFO && modelFMVoice && modelChanceHold && modelFoldDrive &&
-                    modelDualVCA && modelSlewGlide && modelScaleQuantizer,
+                    modelDualVCA && modelSlewGlide && modelModularSynthScaleQuantizer,
                 "Eleven shim-tested first-party models must instantiate");
         const rack::ProcessArgs args{};
         smokeMorph(args);

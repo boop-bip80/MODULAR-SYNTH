@@ -173,6 +173,34 @@ class FirstPartyRegistrationTests(unittest.TestCase):
             collections.Counter(manifest_symbols),
             "static loader contains a model not represented by the manifest")
 
+    def test_first_party_model_symbols_do_not_collide_with_other_loaders(self):
+        """A hosted WASM link exposed an inherited modelScaleQuantizer collision.
+
+        A valid first-party model slug does not imply a unique global C++
+        Model* symbol. All linked collections share one symbol namespace.
+        """
+        first_party = set(lines_matching(
+            r'\bp[ \t]*->[ \t]*addModel[ \t]*\([ \t]*'
+            r'(model[A-Za-z_][A-Za-z0-9_]*)[ \t]*\)[ \t]*;',
+            self.loader_body))
+        all_add_models = collections.Counter(lines_matching(
+            r'\bp[ \t]*->[ \t]*addModel[ \t]*\([ \t]*'
+            r'(model[A-Za-z_][A-Za-z0-9_]*)[ \t]*\)[ \t]*;',
+            self.loader_source))
+        for symbol in sorted(first_party):
+            with self.subTest(symbol=symbol):
+                self.assertEqual(
+                    all_add_models[symbol], 1,
+                    f"{symbol} is registered by another linked collection; "
+                    "use a first-party-specific global symbol")
+
+        third_party = function_body(
+            self.loader_source, "initStatic__AmalgamatedHarmonics")
+        self.assertIn("p->addModel(modelScaleQuantizer);", third_party,
+                      "third-party quantizer must remain available")
+        self.assertIn("modelModularSynthScaleQuantizer", first_party)
+        self.assertNotIn("modelScaleQuantizer", first_party)
+
     def test_module_svg_resources_exist_and_are_referenced(self):
         for entry in self.entries:
             slug = entry["slug"]

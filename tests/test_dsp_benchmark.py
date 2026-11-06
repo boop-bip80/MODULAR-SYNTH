@@ -68,6 +68,8 @@ class DSPBenchmarkTests(unittest.TestCase):
             self.assertNotIn(identifier, seen)
             seen.add(identifier)
             self.assertEqual(int(row["frames"]), frames)
+            self.assertEqual(int(row["warmup_frames"]), int(row["sample_rate_hz"]) // 12)
+            self.assertEqual(int(row["timed_voice_samples"]), frames * int(row["voices"]))
             self.assertEqual(int(row["cpp_new_calls"]), 0)
             self.assertGreater(int(row["prepared_bytes_hint"]), 0)
             # Real C++ new request sizes observed during engine construction;
@@ -77,6 +79,14 @@ class DSPBenchmarkTests(unittest.TestCase):
             self.assertGreater(float(row["elapsed_ms"]), 0.0)
             self.assertGreater(float(row["ns_per_voice_sample"]), 0.0)
             self.assertGreater(float(row["realtime_factor"]), 0.0)
+            self.assertTrue(math.isclose(
+                float(row["ns_per_voice_sample"]),
+                float(row["elapsed_ms"]) * 1e6 / int(row["timed_voice_samples"]),
+                rel_tol=1e-6))
+            self.assertTrue(math.isclose(
+                float(row["realtime_factor"]),
+                float(row["elapsed_ms"]) * int(row["sample_rate_hz"]) / (1000 * frames),
+                rel_tol=1e-6))
             energy = float(row["mean_output_energy"])
             self.assertTrue(math.isfinite(energy))
             self.assertGreater(energy, 0.0)
@@ -159,7 +169,8 @@ class DSPBenchmarkTests(unittest.TestCase):
         # deterministic for a single compiled executable.
         for left, right in zip(a, b):
             for field in (
-                "engine", "voices", "sample_rate_hz", "frames", "cpp_new_calls",
+                "engine", "voices", "sample_rate_hz", "frames", "warmup_frames",
+                "timed_voice_samples", "cpp_new_calls",
                 "prepared_bytes_hint", "prepared_cpp_new_bytes", "mean_output_energy",
             ):
                 self.assertEqual(left[field], right[field], (field, left, right))
@@ -216,6 +227,7 @@ class DSPBenchmarkTests(unittest.TestCase):
         result = self.invoke("production", "--help")
         self.assertEqual(result.returncode, 0)
         self.assertIn("no cardinal", result.stdout.lower())
+        self.assertIn("not host cpu usage or daw performance", result.stdout.lower())
 
 
 if __name__ == "__main__":

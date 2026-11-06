@@ -25,6 +25,7 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 | `MODULAR_-_Noir_Expressive_Lead.vcv` | Monophonic dark lead using MIDI channel aftertouch for oscillator timbre, mod wheel for Echo wet, and five Macro8 scene controls | Play single-note phrases, move aftertouch/mod wheel, then recall four Noir/Tension scenes; no host BPM sync |
 | `MODULAR_-_Fold_Drive_Cinematic_Motion.vcv` | Eight MIDI voices through MorphVCO → FoldDrive → StateFilter → ADSR/VCA, with slow sine/triangle LFO fold modulation and mod-wheel wet control | Hold chords, move CC1 and channel pressure; LFO is intentionally free-running at 0.25 Hz, not beat-locked |
 | `MODULAR_-_Major_Glow_Quantized_Performance.vcv` | MIDI pitch quantized to C major, note-change trigger retriggering a gated ADSR, DualVCA → StateFilter LP/HP stereo Echo, and four Macro8 delay/timbre scenes | Play a line that includes non-C-major notes, try SCALE/ROOT/HYST, and recall four echo scenes; requires MIDI, not transport |
+| `MODULAR_-_Moonlit_Harmonic_Minor_Motion.vcv` | Monophonic D-harmonic-minor quantized melody through exponential SlewGlide, with slow ClockedLFO-pulse-triggered ChanceHold filter/drive motion, envelope-gated MorphVCO and separate LP/HP echo-to-host paths | Play chromatic single-note phrases, vary all five Macro8 controls and recall four 1.2-second scenes; free-running chance movement requires MIDI but **not** host transport |
 
 ## Loading
 
@@ -33,6 +34,16 @@ These original patch arrangements are stored in `patches/examples/` for direct `
 3. Route MIDI notes to every example **except Clockwork Pulses**. Granular Veil is deliberately a primarily monophonic texture because Clouds processes the mixed voice. Polyphonic Motion Pad, Clocked Modulation Studio, Fold Drive Cinematic Motion, Aurora Glass Bells, Night Lanterns, Reed Chamber Organ and Luminous Portamento Duets save eight MIDI channels.
 4. For Clockwork Pulses, start the DAW transport; it uses **Host Time** without live MIDI notes. For Clocked Modulation Studio and Night Lanterns, use transport **and MIDI** if testing external beat lock (their LFOs free-run without transport). Cinematic Pulse Score needs **MIDI only**: its LFO CLOCK/RESET jacks are unplugged and it does not follow BPM. Noir Expressive Lead also needs MIDI notes; MIDI channel pressure and CC1 mod wheel are optional expressive controls, subject to the keyboard/DAW's MIDI routing.
 5. Begin with low speaker or headphone volume. The output gain is intentionally conservative, but patch signal levels are not yet perceptually validated.
+
+**Moonlit Harmonic Minor Motion:** The saved `ScaleQuantizer` selects D harmonic
+minor and 13-cent hysteresis before pitch enters `SlewGlide` (exponential
+output). Its note-change pulse retriggers the ADSR while MIDI gate sustains it;
+free-running `ClockedLFO` pulse at approximately 0.354 Hz clocks a 67%-chance
+`ChanceHold`. The gliding random CV moves filter cutoff, held CV changes drive,
+and Macro8's fifth output controls both rise and fall time for pitch glide.
+This is source-verified cable and parameter topology only. No generated WAV,
+DAW host audio capture, MIDI audition, preset roundtrip, or verified production
+sound is included.
 
 ## Scope and compatibility
 

@@ -157,6 +157,20 @@ This **does not contact the network**. It compares every root `.gitmodules` decl
 
 For a workspace that should already contain **all declared top-level submodules plus Rack's nested SpeexDSP dependency**, run `python3 -B tools/ci/preflight_submodules.py --require-populated`. Strict mode fails if any of those Gitlinks are uninitialized or checked out at the wrong commit. It **does not recursively inspect every other plugin's nested dependencies**; those still require normal recursive checkout and full build validation. Both modes are strictly local: they cannot prove a remote host is reachable or an application build succeeds. The CLI has network-free tests under `tests/test_ci_submodule_preflight.py`.
 
+For the large hosted build matrix, `actions/checkout` now initializes only the first
+submodule level; `tools/ci/update_pinned_submodules.sh` then runs the recursive
+Gitlink checkout with three bounded attempts. Its *explicit* Git URL rule directs
+the pinned Rack/SpeexDSP dependency to the official Xiph GitHub mirror even if
+checkout-action environment handling would otherwise reach GitLab (the November
+5 build's Linux i686 and Windows win32 checkout failed on GitLab HTTP 502).
+After a successful checkout, Git's recursive submodule status must report only
+exact initialized Gitlink commits, including Rack's nested SpeexDSP. This
+pre-bootstrap script intentionally requires Bash and Git, **not Python**,
+because minimal Linux build containers may not have Python installed yet.
+There is no branch floating, dependency bypass, unverified source substitute,
+or claim that a successful checkout proves a running audio plugin. Offline
+failure/retry and mis-pinning tests are in `tests/test_ci_git_mirror.py`.
+
 ## Run the fast gate locally
 
 From a checkout with Python 3 and a C++17 compiler:

@@ -299,6 +299,27 @@ class FactoryPatchCoverageTests(unittest.TestCase):
         self.assertTrue(any("expected HostMIDI 8-channel Reuse polyphony" in err
                             for err in report["errors"]), report["errors"])
 
+    def test_poly_motion_rejects_split_midi_pitch_and_gate_sources(self) -> None:
+        filename = "MODULAR_-_Polyphonic_Motion_Pad.vcv"
+
+        def split_midi(patch: dict) -> None:
+            midi = next(module for module in patch["modules"]
+                        if module["plugin"] == "Cardinal"
+                        and module["model"] == "HostMIDI")
+            clone = json.loads(json.dumps(midi))
+            clone["id"] = max(module["id"] for module in patch["modules"]) + 1
+            patch["modules"].append(clone)
+            for cable in patch["cables"]:
+                if (cable["outputModuleId"] == midi["id"]
+                        and cable["outputId"] == 0):
+                    cable["outputModuleId"] = clone["id"]
+
+        self.mutate(filename, split_midi)
+        report = self.inspect()
+        self.assertFalse(report["ok"])
+        self.assertTrue(any("polyphonic MIDI voice flow" in err
+                            for err in report["errors"]), report["errors"])
+
     def test_poly_motion_rejects_missing_keytracking_cable(self) -> None:
         filename = "MODULAR_-_Polyphonic_Motion_Pad.vcv"
 

@@ -203,6 +203,36 @@ class IntegrationTests(unittest.TestCase):
             self.assertIn("modelMSSecondOsc", header)
             self.assertIn("modelMSOrbitSine", header)
 
+    def test_namespaced_first_party_model_registration_is_accepted(self):
+        """First-party symbols can be namespaced to avoid collection collisions."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary), LOADER_BRACED)
+            header = root / "plugins/ModularSynth/src/plugin.hpp"
+            loader = root / "plugins/plugins.cpp"
+            header.write_text(header.read_text().replace(
+                "modelMorphVCO", "modelModularSynthMorphVCO"))
+            loader.write_text(loader.read_text().replace(
+                "modelMorphVCO", "modelModularSynthMorphVCO"))
+            before = registered_files(root)
+            plan = integration_plan(module, root)
+            self.assertIn("modelMSOrbitSine", plan_diff(plan, root))
+            self.assertEqual(registered_files(root), before)
+
+    def test_ambiguous_namespaced_first_party_registration_is_rejected(self):
+        """Do not silently accept two exported names for one manifest module."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root, module = fixture_root(Path(temporary), LOADER_BRACED)
+            header = root / "plugins/ModularSynth/src/plugin.hpp"
+            loader = root / "plugins/plugins.cpp"
+            header.write_text(header.read_text() +
+                              "extern Model* modelModularSynthMorphVCO;\n")
+            loader.write_text(loader.read_text().replace(
+                "        p->addModel(modelMorphVCO);",
+                "        p->addModel(modelMorphVCO);\n"
+                "        p->addModel(modelModularSynthMorphVCO);"))
+            with self.assertRaisesRegex(IntegrationError, "source/model identity drift"):
+                integration_plan(module, root)
+
     def test_duplicate_existing_loader_registration_blocks_integration(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, module = fixture_root(Path(temporary), LOADER_BRACED)

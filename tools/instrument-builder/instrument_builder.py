@@ -364,6 +364,11 @@ def create_bundle(patch_bytes: bytes, name: str, *,
     """Build a deterministic, two-entry, uncompressed source archive."""
     manifest = _canonical_json(build_manifest(
         patch_bytes, name, format_version=format_version))
+    return _serialize_bundle(manifest, patch_bytes)
+
+
+def _serialize_bundle(manifest: bytes, patch_bytes: bytes) -> bytes:
+    """Write the fixed ZIP envelope, including for valid historical manifests."""
     if len(manifest) > MAX_MANIFEST_BYTES:
         raise InstrumentError("performance manifest exceeds 128 KiB")
     stream = BytesIO()
@@ -461,6 +466,35 @@ def read_bundle(bundle_bytes: bytes) -> tuple[dict, bytes]:
     if manifest != expected:
         raise InstrumentError("instrument manifest does not match its patch")
     return manifest, patch
+
+
+def audit_bundle(bundle_bytes: bytes, *, expected_sha256: str | None = None,
+                 require_reproducible: bool = False) -> dict:
+    """Verify source integrity, optional SHA-256 pin and canonical ZIP bytes.
+
+    A legacy v2 mapping contract is preserved from the validated manifest;
+    recomputing it with today's default mapping would change its meaning.
+    """
+    if (expected_sha256 is not None
+            and re.fullmatch(r"[0-9a-fA-F]{64}", expected_sha256) is None):
+        raise InstrumentError("expected SHA-256 must contain exactly 64 hex digits")
+    manifest, patch = read_bundle(bundle_bytes)
+    actual_sha256 = hashlib.sha256(bundle_bytes).hexdigest()
+    reproducible = bundle_bytes == _serialize_bundle(
+        _canonical_json(manifest), patch)
+    pin_matches = (None if expected_sha256 is None else
+                   actual_sha256 == expected_sha256.lower())
+    passed = (pin_matches is not False
+              and (not require_reproducible or reproducible))
+    return {
+        "bundleSha256": actual_sha256,
+        "expectedSha256Matches": pin_matches,
+        "formatVersion": manifest["formatVersion"],
+        "patchSha256": hashlib.sha256(patch).hexdigest(),
+        "reproducible": reproducible,
+        "routingStatus": "not-checked",
+        "status": "PASS" if passed else "FAIL",
+    }
 
 
 def _read_limited(path: Path, maximum: int, description: str) -> bytes:
@@ -589,6 +623,16 @@ def inspect(bundle_path: Path) -> dict:
         raise InstrumentError("source bundle must end with .msinstrument")
     blob = _read_limited(bundle_path, MAX_BUNDLE_BYTES, "instrument bundle")
     return read_bundle(blob)[0]
+
+
+def audit(bundle_path: Path, *, expected_sha256: str | None = None,
+          require_reproducible: bool = False) -> dict:
+    """Audit a source archive without extracting or rewriting it."""
+    if bundle_path.suffix.lower() != ".msinstrument":
+        raise InstrumentError("source bundle must end with .msinstrument")
+    blob = _read_limited(bundle_path, MAX_BUNDLE_BYTES, "instrument bundle")
+    return audit_bundle(blob, expected_sha256=expected_sha256,
+                        require_reproducible=require_reproducible)
 
 
 def preview(bundle_path: Path, svg_path: Path, *,
@@ -736,6 +780,15 @@ def main(argv: list[str] | None = None) -> int:
         help="source checkout for opt-in stereo route verification")
     info = subs.add_parser("inspect", help="validate and print an instrument manifest")
     info.add_argument("bundle", type=Path)
+    provenance = subs.add_parser(
+        "audit", help="verify source ZIP integrity, reproducibility and SHA-256 pin")
+    provenance.add_argument("bundle", type=Path)
+    provenance.add_argument(
+        "--expect-sha256", metavar="HEX",
+        help="fail when the complete ZIP does not match this 64-digit SHA-256")
+    provenance.add_argument(
+        "--require-reproducible", action="store_true",
+        help="fail unless ZIP bytes match the deterministic source envelope")
     routes = subs.add_parser(
         "routes", help="explain saved direct Macro8 cable routes in musician terms")
     routes.add_argument("bundle", type=Path)
@@ -840,6 +893,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "unpack":
             unpack(args.bundle, args.out)
             print(f"Unpacked to {args.out} (manifest.json, patch/main.vcv)")
+        elif args.command == "audit":
+            report = audit(
+                args.bundle, expected_sha256=args.expect_sha256,
+                require_reproducible=args.require_reproducible)
+            print(_canonical_json(report).decode("utf-8"), end="")
+            return 1 if report["status"] == "FAIL" else 0
         elif args.command == "preview":
             preview(args.bundle, args.out, show_routes=args.show_routes)
             if args.show_routes:

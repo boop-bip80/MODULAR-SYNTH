@@ -816,6 +816,67 @@ EXAMPLES: dict[str, Example] = {
         morph_seconds=1.2,
         unipolar_macro_outputs=(0, 1, 2, 3),
     ),
+
+    "MODULAR_-_Moonlit_Harmonic_Minor_Motion.vcv": Example(
+        "D-harmonic-minor pitch quantizer, gliding melody, chance-clocked filter movement and stereo echo",
+        ("Cardinal/HostMIDI", "ModularSynth/ScaleQuantizer",
+         "ModularSynth/SlewGlide", "ModularSynth/MorphVCO",
+         "Fundamental/ADSR", "ModularSynth/DualVCA",
+         "ModularSynth/StateFilter", "ModularSynth/StereoEcho",
+         "ModularSynth/ClockedLFO", "ModularSynth/ChanceHold",
+         "ModularSynth/Macro8", "Cardinal/HostAudio2"),
+        (
+            Route("MIDI pitch to harmonic-minor quantizer", "Cardinal/HostMIDI",
+                  "ModularSynth/ScaleQuantizer", output=0, input=0),
+            Route("quantizer pitch into SlewGlide", "ModularSynth/ScaleQuantizer",
+                  "ModularSynth/SlewGlide", output=0, input=0),
+            Route("gliding exponential pitch to oscillator", "ModularSynth/SlewGlide",
+                  "ModularSynth/MorphVCO", output=1, input=0),
+            Route("quantized note CHANGE retriggers ADSR", "ModularSynth/ScaleQuantizer",
+                  "Fundamental/ADSR", output=1, input=5),
+            Route("MIDI gate sustains ADSR", "Cardinal/HostMIDI",
+                  "Fundamental/ADSR", output=1, input=4),
+            Route("oscillator to voice VCA", "ModularSynth/MorphVCO",
+                  "ModularSynth/DualVCA", output=0, input=0),
+            Route("ADSR into voice VCA control", "Fundamental/ADSR",
+                  "ModularSynth/DualVCA", output=0, input=1),
+            Route("enveloped audio to filter", "ModularSynth/DualVCA",
+                  "ModularSynth/StateFilter", output=0, input=0),
+            Route("LFO pulse clocks chance sampler", "ModularSynth/ClockedLFO",
+                  "ModularSynth/ChanceHold", output=3, input=1),
+            Route("chance glide moves filter cutoff", "ModularSynth/ChanceHold",
+                  "ModularSynth/StateFilter", output=1, input=1),
+            Route("chance held CV moves filter drive", "ModularSynth/ChanceHold",
+                  "ModularSynth/StateFilter", output=0, input=3),
+            Route("filter low pass to left echo", "ModularSynth/StateFilter",
+                  "ModularSynth/StereoEcho", output=0, input=0),
+            Route("filter high pass to right echo", "ModularSynth/StateFilter",
+                  "ModularSynth/StereoEcho", output=2, input=1),
+            Route("left echo to host left", "ModularSynth/StereoEcho",
+                  "Cardinal/HostAudio2", output=0, input=0),
+            Route("right echo to host right", "ModularSynth/StereoEcho",
+                  "Cardinal/HostAudio2", output=1, input=1),
+            Route("macro time to echo", "ModularSynth/Macro8",
+                  "ModularSynth/StereoEcho", output=0, input=2),
+            Route("macro feedback to echo", "ModularSynth/Macro8",
+                  "ModularSynth/StereoEcho", output=1, input=3),
+            Route("macro wet to echo", "ModularSynth/Macro8",
+                  "ModularSynth/StereoEcho", output=2, input=4),
+            Route("macro wave to oscillator", "ModularSynth/Macro8",
+                  "ModularSynth/MorphVCO", output=3, input=2),
+            Route("macro portamento rise", "ModularSynth/Macro8",
+                  "ModularSynth/SlewGlide", output=4, input=1),
+            Route("macro portamento fall", "ModularSynth/Macro8",
+                  "ModularSynth/SlewGlide", output=4, input=2),
+        ),
+        stereo=True,
+        snapshot_names=("Time", "Feedback", "Wet", "Wave", "Glide"),
+        snapshot_count=4,
+        morph_seconds=1.2,
+        unipolar_macro_outputs=(0, 1, 2, 3, 4),
+        midi_poly_mode=0,
+        free_lfo_rate_hz=2.0 ** -1.5,
+    ),
 }
 
 
@@ -839,6 +900,70 @@ def _claim_present(route: Route, routes: list[tuple[dict, dict, dict]]) -> bool:
         and (route.input is None or cable["inputId"] == route.input)
         for source, target, cable in routes
     )
+
+
+def _poly_midi_voice_flow_present(spec: Example,
+                                  routes: list[tuple[dict, dict, dict]]) -> bool:
+    """Require pitch and envelope triggers to originate at one poly MIDI instance.
+
+    Model-level cable claims alone can be satisfied by disconnected duplicate
+    HostMIDI/ADSR instances, even though no one voice path can play notes.
+    """
+    pitch_claims = [
+        claim for claim in spec.routes
+        if claim.source == "Cardinal/HostMIDI" and claim.output == 0
+    ]
+    gate_claims = [
+        claim for claim in spec.routes
+        if claim.source == "Cardinal/HostMIDI"
+        and claim.target == "Fundamental/ADSR"
+        and claim.output == 1 and claim.input == 4
+    ]
+    retrigger_claimed = any(
+        claim.source == "Cardinal/HostMIDI"
+        and claim.target == "Fundamental/ADSR"
+        and claim.output == 6 and claim.input == 5
+        for claim in spec.routes
+    )
+    if not pitch_claims or not gate_claims:
+        return False
+
+    for midi, _, _ in routes:
+        if _key(midi) != "Cardinal/HostMIDI":
+            continue
+        data = midi.get("data")
+        if not isinstance(data, dict) or (
+            data.get("channels") != spec.midi_channels
+            or data.get("polyMode") != spec.midi_poly_mode
+        ):
+            continue
+        midi_id = midi["id"]
+        pitch_connected = any(
+            source["id"] == midi_id
+            and _key(target) == claim.target
+            and cable["outputId"] == 0
+            and (claim.input is None or cable["inputId"] == claim.input)
+            for claim in pitch_claims
+            for source, target, cable in routes
+        )
+        if not pitch_connected:
+            continue
+        gate_adsrs = {
+            target["id"] for source, target, cable in routes
+            if source["id"] == midi_id
+            and _key(target) == "Fundamental/ADSR"
+            and cable["outputId"] == 1 and cable["inputId"] == 4
+        }
+        if any(
+            not retrigger_claimed or any(
+                source["id"] == midi_id and target["id"] == adsr_id
+                and cable["outputId"] == 6 and cable["inputId"] == 5
+                for source, target, cable in routes
+            )
+            for adsr_id in gate_adsrs
+        ):
+            return True
+    return False
 
 
 def _check_stereo(routes: list[tuple[dict, dict, dict]]) -> bool:
@@ -1147,6 +1272,10 @@ def analyze(root: Path = ROOT, examples_dir: Path | None = None) -> dict:
             else:
                 result["capabilities"].append(
                     f"{spec.midi_channels}-channel HostMIDI Reuse polyphony")
+            if not _poly_midi_voice_flow_present(spec, routes):
+                local_errors.append(
+                    "polyphonic MIDI voice flow requires one configured HostMIDI "
+                    "to feed pitch CV and gate/retrigger to one ADSR")
         if local_errors:
             errors.extend(f"{path.name}: {err}" for err in local_errors)
         result["ok"] = not local_errors
