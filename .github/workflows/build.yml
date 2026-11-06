@@ -508,6 +508,11 @@ jobs:
       - name: Complete pinned recursive submodule checkout (retry)
         shell: bash
         run: bash tools/ci/update_pinned_submodules.sh
+      - name: Preflight first-party model symbol collisions
+        shell: bash
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_first_party_registration.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_real_rack_headers.py' -v
       - name: Set up cache
         id: cache
         uses: actions/cache@v4
