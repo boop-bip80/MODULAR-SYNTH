@@ -168,6 +168,32 @@ def _midi_note_ons(path: Path) -> int:
 
 def _wave_stats(path: Path) -> dict:
     try:
+        # wave.open() stops at the first data chunk and can silently ignore
+        # bytes beyond the RIFF length, malformed later chunks or a second
+        # data chunk. Validate the whole bounded container before measuring
+        # samples; a matching manifest digest alone does not make it a WAV.
+        with path.open("rb") as source:
+            size = source.seek(0, os.SEEK_END)
+            source.seek(0)
+            header = source.read(12)
+            if (len(header) != 12 or header[:4] != b"RIFF"
+                    or header[8:12] != b"WAVE"
+                    or int.from_bytes(header[4:8], "little") + 8 != size):
+                raise CaptureError("WAV RIFF header, declared size or trailing bytes are invalid")
+            data_chunks = 0
+            while source.tell() < size:
+                if size - source.tell() < 8:
+                    raise CaptureError("WAV has a truncated RIFF chunk header")
+                chunk = source.read(8)
+                chunk_size = int.from_bytes(chunk[4:8], "little")
+                end = source.tell() + chunk_size + (chunk_size & 1)
+                if end > size:
+                    raise CaptureError("WAV has a truncated or oversized RIFF chunk")
+                if chunk[:4] == b"data":
+                    data_chunks += 1
+                source.seek(end)
+            if data_chunks != 1:
+                raise CaptureError("WAV must contain exactly one PCM data chunk")
         with wave.open(str(path), "rb") as stream:
             nch, width, rate, nframes, comp, _ = stream.getparams()
             if nch != 2 or width not in (2, 3, 4) or comp != "NONE":

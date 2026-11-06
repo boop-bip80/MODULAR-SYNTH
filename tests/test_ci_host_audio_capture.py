@@ -120,6 +120,33 @@ class HostCaptureTests(unittest.TestCase):
         with self.assertRaisesRegex(host.CaptureError, "cannot read evidence"):
             self.verify()
 
+    def test_wav_trailing_undeclared_bytes_rejected_even_with_matching_sha256(self):
+        with (self.base / "active.wav").open("ab") as stream:
+            stream.write(b"unaccounted trailing payload")
+        self.refresh("active.wav", "render")
+        with self.assertRaisesRegex(host.CaptureError, "declared size or trailing bytes"):
+            self.verify()
+
+    def test_wav_malformed_chunk_after_audio_rejected(self):
+        path = self.base / "active.wav"
+        raw = bytearray(path.read_bytes())
+        raw.extend(b"JUNK" + struct.pack("<I", 1000) + b"short")
+        struct.pack_into("<I", raw, 4, len(raw) - 8)
+        path.write_bytes(raw)
+        self.refresh("active.wav", "render")
+        with self.assertRaisesRegex(host.CaptureError, "oversized RIFF chunk"):
+            self.verify()
+
+    def test_wav_second_data_chunk_rejected(self):
+        path = self.base / "active.wav"
+        raw = bytearray(path.read_bytes())
+        raw.extend(b"data" + struct.pack("<I", 4) + b"fake")
+        struct.pack_into("<I", raw, 4, len(raw) - 8)
+        path.write_bytes(raw)
+        self.refresh("active.wav", "render")
+        with self.assertRaisesRegex(host.CaptureError, "exactly one PCM data chunk"):
+            self.verify()
+
     def test_absolute_path_and_traversal_rejected(self):
         for path in ("/tmp/capture.wav", "../capture.wav", "nested/../../escape.wav"):
             with self.subTest(path=path):
