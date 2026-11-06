@@ -60,6 +60,7 @@ python3 -B tools/ci/verify_host_audio_capture.py \
 A passing report establishes **within the provided evidence** (the ELF header check is only a basic file-format check; actual plugin loadability and provenance require separate proof):
 
 - Every included evidence file exists, is bounded, is a regular non-symlink file and hashes to the declared SHA-256.
+- Every PCM WAV has a consistent RIFF container length and complete chunk layout, with exactly one audio `data` chunk. The verifier rejects undeclared trailing bytes and malformed/duplicate chunks even when their full-file SHA-256 matches the manifest; legitimate extra RIFF metadata chunks remain supported.
 - Synth stimulus is a structurally valid MIDI file with actual Note On data, or an effect has audible stereo input.
 - Active/idle recordings have equal stereo PCM format, sample rate and length; output is audible on *both* channels (RMS/peak and active sample fractions measured), with no prolonged hard clipping.
 - Active output is at least 12 dB louder than the no-MIDI/no-input control, so the capture demonstrates a responsive signal path rather than merely an always-playing oscillator.
