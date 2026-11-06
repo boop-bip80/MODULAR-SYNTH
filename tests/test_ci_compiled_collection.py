@@ -277,20 +277,24 @@ class CompiledFirstPartyGateTests(unittest.TestCase):
         self.write_manifest()
         self.assertEqual(self.run_gate().returncode, 1)
 
-    def test_plugin_validation_invokes_gate_after_link_before_runtime_selftest(self) -> None:
+    def test_plugin_validation_uses_runtime_gate_after_successful_selftest(self) -> None:
         job = WORKFLOW.split("\n  plugin-validation:\n", 1)[1]
         compile_done = job.index("- name: Build Cardinal (final build stage)")
-        gate = job.index("- name: Verify linked first-party collection")
         selftest = job.index("- name: Run Cardinal self-tests")
-        self.assertLess(compile_done, gate)
-        self.assertLess(gate, selftest)
-        self.assertIn('python3 -B tools/ci/verify_compiled_collection.py --binary "$binary"', job)
+        gate = job.index("- name: Verify first-party runtime selftest inventory")
+        self.assertLess(compile_done, selftest)
+        self.assertLess(selftest, gate)
+        self.assertIn("set -euo pipefail", job[selftest:gate])
+        self.assertIn('2>&1 | tee "$RUNNER_TEMP/cardinal-selftest.log"', job[selftest:gate])
+        self.assertIn('python3 -B tools/ci/verify_first_party_selftest.py', job[gate:])
+        self.assertIn('--selftest-log "$RUNNER_TEMP/cardinal-selftest.log"', job[gate:])
+        self.assertNotIn("python3 -B tools/ci/verify_compiled_collection.py", job)
+        # Structural linked-ELF inspection remains available as diagnostics
+        # if the actual model-registration/instantiation gate fails.
+        self.assertIn("- name: Diagnose linked ELF collection on runtime inventory failure", job)
         for path in ("bin/Cardinal.lv2/Cardinal.so", "bin/CardinalFX.lv2/CardinalFX.so",
                      "bin/CardinalSynth.lv2/CardinalSynth.so"):
             self.assertIn(path, job)
-        # Previously, inspecting JACK standalone bin/Cardinal reported all
-        # nine first-party model markers absent despite successful LV2 TTL
-        # generation, linked plugin compilation and runtime plugin loading.
         self.assertIn("--candidate bin/Cardinal", job)
 
 
