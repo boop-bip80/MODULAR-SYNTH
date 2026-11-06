@@ -163,11 +163,8 @@ DEP_MAKE += MACHINE=$(MACHINE)$(MACHINE_SUFFIX)
 DEP_MAKE += VERBOSE=1
 
 ifeq ($(shell uname -s),Darwin)
-ifeq ($(CIBUILD),true)
-DEP_MAKE += SHA256SUM="shasum5.30 -a 256"
-else
-DEP_MAKE += SHA256SUM="shasum5.34 -a 256"
-endif
+# macOS provides unversioned shasum; preserve pinned SHA-256 verification.
+DEP_MAKE += SHA256SUM="shasum -a 256"
 endif
 
 DEP_MAKE2  = $(DEP_MAKE)

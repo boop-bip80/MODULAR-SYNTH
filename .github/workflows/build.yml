@@ -79,7 +79,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up build cache
         id: cache
         uses: actions/cache@v4
@@ -207,7 +210,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up dependencies
         run: |
           sudo apt-get update -qq
@@ -261,7 +267,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up cache
         id: cache
         uses: actions/cache@v4
@@ -374,7 +383,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up cache
         uses: actions/cache@v4
         id: mpb-cache
@@ -492,7 +504,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up cache
         id: cache
         uses: actions/cache@v4
@@ -609,7 +624,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up cache
         id: cache
         uses: actions/cache@v4
@@ -713,7 +731,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up dependencies
         run: |
           sudo apt-get update -qq
@@ -738,7 +759,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up dependencies
         run: |
           sudo apt-get update -qq
@@ -763,7 +787,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up dependencies
         run: |
           sudo apt-get update -qq
@@ -790,7 +817,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up dependencies
         run: |
           sudo apt-get update -qq
@@ -854,7 +884,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+      - name: Complete pinned recursive submodule checkout (retry)
+        shell: bash
+        run: bash tools/ci/update_pinned_submodules.sh
       - name: Set up cache
         id: cache
         uses: actions/cache@v4

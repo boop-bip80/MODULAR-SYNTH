@@ -140,7 +140,9 @@ public:
         const int nearest = nearestSemitone(pitchSemitone, root, scale);
         const double hysteresis = 0.01 * bounded(input.hysteresisCents, 12.0, 0.0, 50.0);
         int chosen = nearest;
-        if (hasLast_ && allowed(lastSemitone_, root, scale)) {
+        // A zero hysteresis setting must use the stateless lower-note tie rule,
+        // even when the voice previously selected the upper note.
+        if (hysteresis > 0.0 && hasLast_ && allowed(lastSemitone_, root, scale)) {
             const double oldDistance = std::abs(pitchSemitone - lastSemitone_);
             const double newDistance = std::abs(pitchSemitone - nearest);
             if (newDistance + hysteresis >= oldDistance)

@@ -24,6 +24,7 @@ MACHINES = {"win32": 0x014C, "win64": 0x8664}
 VST3_MODULES = ("Cardinal", "CardinalFX", "CardinalSynth")
 IMAGE_FILE_EXECUTABLE_IMAGE = 0x0002
 IMAGE_FILE_DLL = 0x2000
+PE_MEMBER_SUFFIXES = (".exe", ".dll", ".clap", ".vst3")
 MAX_ZIP_MEMBERS = 50_000
 MAX_MEMBER_UNCOMPRESSED = 512 * 1024 * 1024
 MAX_ZIP_UNCOMPRESSED = 2 * 1024 * 1024 * 1024
@@ -128,6 +129,7 @@ def verify_payload(archive: Path, installer: Path, target: str) -> None:
             names = set()
             windows_names: dict[str, str] = {}
             regular_file_names = set()
+            pe_members = set(required_pe)
             total_uncompressed = 0
             if len(zf.infolist()) > MAX_ZIP_MEMBERS:
                 raise ReleasePayloadError("ZIP contains too many members")
@@ -154,6 +156,9 @@ def verify_payload(archive: Path, installer: Path, target: str) -> None:
                 windows_names[canonical] = info.filename
                 if not info.is_dir():
                     regular_file_names.add(canonical)
+                    # Unlisted native helpers must match the release target too.
+                    if canonical.endswith(PE_MEMBER_SUFFIXES):
+                        pe_members.add(info.filename)
                 names.add(info.filename)
                 if info.file_size > MAX_MEMBER_UNCOMPRESSED:
                     raise ReleasePayloadError(f"oversized ZIP member: {info.filename!r}")
@@ -182,10 +187,10 @@ def verify_payload(archive: Path, installer: Path, target: str) -> None:
             if corrupt := zf.testzip():
                 raise ReleasePayloadError(f"ZIP member CRC/decompression failed: {corrupt}")
 
-            for name in sorted(required_pe):
+            for name in sorted(pe_members):
                 with zf.open(name) as stream:
                     _read_pe_header(stream, name, target,
-                                    expect_dll=not name.endswith(".exe"))
+                                    expect_dll=not name.casefold().endswith(".exe"))
     except (OSError, EOFError, zipfile.BadZipFile, zipfile.LargeZipFile, RuntimeError) as exc:
         raise ReleasePayloadError(f"invalid Windows ZIP {archive}: {exc}") from exc
 

@@ -1,0 +1,658 @@
+{
+  "version": "2.4.1",
+  "zoom": 0.72,
+  "modules": [
+    {
+      "id": 2,
+      "plugin": "Cardinal",
+      "model": "HostMIDI",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "pwRange": 0,
+        "smooth": false,
+        "channels": 1,
+        "polyMode": 0,
+        "lastPitch": 8192,
+        "lastMod": 0,
+        "inputChannel": 0,
+        "outputChannel": 0
+      },
+      "pos": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 980000000107,
+      "plugin": "ModularSynth",
+      "model": "Macro8",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.27
+        },
+        {
+          "id": 1,
+          "value": 0.21
+        },
+        {
+          "id": 2,
+          "value": 0.32
+        },
+        {
+          "id": 3,
+          "value": 0.34
+        },
+        {
+          "id": 4,
+          "value": 0.08
+        },
+        {
+          "id": 5,
+          "value": 0
+        },
+        {
+          "id": 6,
+          "value": 0
+        },
+        {
+          "id": 7,
+          "value": 0
+        },
+        {
+          "id": 8,
+          "value": 1.2
+        },
+        {
+          "id": 9,
+          "value": 0
+        },
+        {
+          "id": 10,
+          "value": 0
+        },
+        {
+          "id": 11,
+          "value": 0
+        },
+        {
+          "id": 12,
+          "value": 0
+        },
+        {
+          "id": 13,
+          "value": 0
+        },
+        {
+          "id": 14,
+          "value": 0
+        },
+        {
+          "id": 15,
+          "value": 0
+        },
+        {
+          "id": 16,
+          "value": 0
+        },
+        {
+          "id": 17,
+          "value": 0
+        },
+        {
+          "id": 18,
+          "value": 0
+        },
+        {
+          "id": 19,
+          "value": 0
+        },
+        {
+          "id": 20,
+          "value": 0
+        },
+        {
+          "id": 21,
+          "value": 0
+        },
+        {
+          "id": 22,
+          "value": 0
+        }
+      ],
+      "data": {
+        "macro8Version": 1,
+        "names": [
+          "Time",
+          "Feedback",
+          "Wet",
+          "Wave",
+          "Glide",
+          "Macro 6",
+          "Macro 7",
+          "Macro 8"
+        ],
+        "snapshots": [
+          [
+            0.07,
+            0.08,
+            0.16,
+            0.12,
+            0.025,
+            0,
+            0,
+            0
+          ],
+          [
+            0.22,
+            0.18,
+            0.28,
+            0.3,
+            0.08,
+            0,
+            0,
+            0
+          ],
+          [
+            0.43,
+            0.31,
+            0.36,
+            0.48,
+            0.14,
+            0,
+            0,
+            0
+          ],
+          [
+            0.68,
+            0.44,
+            0.45,
+            0.62,
+            0.21,
+            0,
+            0,
+            0
+          ]
+        ],
+        "selectedSlot": -1
+      },
+      "pos": [
+        9,
+        0
+      ]
+    },
+    {
+      "id": 980000000108,
+      "plugin": "ModularSynth",
+      "model": "ScaleQuantizer",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 2
+        },
+        {
+          "id": 1,
+          "value": 4
+        },
+        {
+          "id": 2,
+          "value": 0
+        },
+        {
+          "id": 3,
+          "value": 13
+        }
+      ],
+      "data": {},
+      "pos": [
+        29,
+        0
+      ]
+    },
+    {
+      "id": 980000000109,
+      "plugin": "ModularSynth",
+      "model": "SlewGlide",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.12
+        },
+        {
+          "id": 1,
+          "value": 0.18
+        }
+      ],
+      "pos": [
+        44,
+        0
+      ]
+    },
+    {
+      "id": 980000000101,
+      "plugin": "ModularSynth",
+      "model": "MorphVCO",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0
+        },
+        {
+          "id": 1,
+          "value": 0
+        },
+        {
+          "id": 2,
+          "value": 0.28
+        },
+        {
+          "id": 3,
+          "value": 0.5
+        },
+        {
+          "id": 4,
+          "value": 0
+        }
+      ],
+      "pos": [
+        57,
+        0
+      ]
+    },
+    {
+      "id": 980000000102,
+      "plugin": "Fundamental",
+      "model": "ADSR",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.04
+        },
+        {
+          "id": 1,
+          "value": 0.28
+        },
+        {
+          "id": 2,
+          "value": 0.62
+        },
+        {
+          "id": 3,
+          "value": 0.35
+        },
+        {
+          "id": 4,
+          "value": 0
+        },
+        {
+          "id": 5,
+          "value": 0
+        },
+        {
+          "id": 6,
+          "value": 0
+        },
+        {
+          "id": 7,
+          "value": 0
+        },
+        {
+          "id": 8,
+          "value": 0
+        }
+      ],
+      "pos": [
+        70,
+        0
+      ]
+    },
+    {
+      "id": 980000000103,
+      "plugin": "ModularSynth",
+      "model": "DualVCA",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.19
+        },
+        {
+          "id": 1,
+          "value": 0.08
+        },
+        {
+          "id": 2,
+          "value": 0
+        },
+        {
+          "id": 3,
+          "value": 0
+        }
+      ],
+      "pos": [
+        82,
+        0
+      ]
+    },
+    {
+      "id": 980000000104,
+      "plugin": "ModularSynth",
+      "model": "StateFilter",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": -0.85
+        },
+        {
+          "id": 1,
+          "value": 0.18
+        },
+        {
+          "id": 2,
+          "value": 0.035
+        }
+      ],
+      "pos": [
+        95,
+        0
+      ]
+    },
+    {
+      "id": 980000000105,
+      "plugin": "ModularSynth",
+      "model": "StereoEcho",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 185
+        },
+        {
+          "id": 1,
+          "value": 0.13
+        },
+        {
+          "id": 2,
+          "value": 0.16
+        },
+        {
+          "id": 3,
+          "value": 0.72
+        }
+      ],
+      "pos": [
+        110,
+        0
+      ]
+    },
+    {
+      "id": 1,
+      "plugin": "Cardinal",
+      "model": "HostAudio2",
+      "version": "2.0",
+      "params": [
+        {
+          "id": 0,
+          "value": 0.14
+        }
+      ],
+      "data": {
+        "dcFilter": true
+      },
+      "pos": [
+        125,
+        0
+      ]
+    },
+    {
+      "id": 980000000106,
+      "plugin": "Cardinal",
+      "model": "TextEditor",
+      "version": "2.0",
+      "params": [],
+      "data": {
+        "filepath": "",
+        "lang": "None",
+        "width": 34,
+        "etext": "MODULAR-SYNTH / ORIGINAL FIRST-PARTY PERFORMANCE\nMOONLIT HARMONIC MINOR -- CLOCKED CHANCE DRIFT\n\nPLAY: Host MIDI pitch -> ScaleQuantizer D harmonic\nminor (ROOT D=2, SCALE HARMONIC MINOR=4),\n13-cent hysteresis -> SlewGlide EXP -> MorphVCO\npitch 1V/oct. Quantizer CHANGE (+10V 2ms) ->\nFundamental ADSR RETRIG; MIDI gate -> ADSR GATE.\nThis is monophonic HostMIDI (channel 1), not\n8-voice/polyphonic. Play adjacent chromatic notes\nto hear the characteristic harmonic-minor pull.\n\nMorphVCO -> DualVCA (ADSR controls CV) ->\nStateFilter. Filter LP -> StereoEcho L; HP -> R.\nEcho left/right -> independent HostAudio2 L/R.\nLow monitor gain; warm, sparse single-line MIDI.\n\nSELF-RUNNING CONTROL CLOCK (NOT HOST TEMPO):\nClockedLFO PULSE at 0.35Hz/duty28% clocks the\nChanceHold CLOCK input. ChanceHold 67% chance\non each pulse; glide 0.85s; fixed-seed RNG.\nChanceHold GLIDE -> StateFilter cutoff 1V/oct.\nChanceHold HOLD -> StateFilter drive (+10V=100%).\nThese are free-running modulation CV paths;\nno transport synchronization is claimed.\n\nMacro8 unipolar outputs:\n0 TIME -> Echo time input2 (+100ms/V)\n1 FEEDBACK -> Echo feedback input3\n2 WET -> Echo wet input4\n3 WAVE -> MorphVCO wave shape input2\n4 GLIDE -> SlewGlide RISE & FALL CV (+5s/10V).\nGlide base rise 0.12s, fall 0.18s;\nmacro scenes add 0.125/0.4/0.7/1.05s.\n\nFour smoothly recalled manual scenes (1.2s):\nA VEIL   -- short delay, fast glide\nB REACH  -- warmer echo, moderate glide\nC SPELL  -- clear echo and long transitions\nD NOCTURNE -- ambient, longest portamento.\n\nManual scene recall only; neither real host\naudio, preset reopen nor host MIDI audition\nwas carried out for this source factory patch.\n"
+      },
+      "pos": [
+        167,
+        0
+      ]
+    },
+    {
+      "id": 980000000110,
+      "plugin": "ModularSynth",
+      "model": "ClockedLFO",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": -1.5
+        },
+        {
+          "id": 1,
+          "value": 2
+        },
+        {
+          "id": 2,
+          "value": 0
+        },
+        {
+          "id": 3,
+          "value": 0.28
+        }
+      ],
+      "pos": [
+        139,
+        0
+      ]
+    },
+    {
+      "id": 980000000111,
+      "plugin": "ModularSynth",
+      "model": "ChanceHold",
+      "version": "0.1.0",
+      "params": [
+        {
+          "id": 0,
+          "value": -0.5
+        },
+        {
+          "id": 1,
+          "value": 0.67
+        },
+        {
+          "id": 2,
+          "value": 0.85
+        },
+        {
+          "id": 3,
+          "value": 0
+        }
+      ],
+      "pos": [
+        153,
+        0
+      ]
+    }
+  ],
+  "cables": [
+    {
+      "id": 980000000201,
+      "outputModuleId": 2,
+      "outputId": 0,
+      "inputModuleId": 980000000108,
+      "inputId": 0,
+      "color": "#ff5252"
+    },
+    {
+      "id": 980000000202,
+      "outputModuleId": 2,
+      "outputId": 1,
+      "inputModuleId": 980000000102,
+      "inputId": 4,
+      "color": "#ffd452"
+    },
+    {
+      "id": 980000000203,
+      "outputModuleId": 980000000101,
+      "outputId": 0,
+      "inputModuleId": 980000000103,
+      "inputId": 0,
+      "color": "#a8ff52"
+    },
+    {
+      "id": 980000000204,
+      "outputModuleId": 980000000102,
+      "outputId": 0,
+      "inputModuleId": 980000000103,
+      "inputId": 1,
+      "color": "#f3b6ff"
+    },
+    {
+      "id": 980000000205,
+      "outputModuleId": 980000000103,
+      "outputId": 0,
+      "inputModuleId": 980000000104,
+      "inputId": 0,
+      "color": "#52ff7d"
+    },
+    {
+      "id": 980000000206,
+      "outputModuleId": 980000000104,
+      "outputId": 0,
+      "inputModuleId": 980000000105,
+      "inputId": 0,
+      "color": "#52beff"
+    },
+    {
+      "id": 980000000207,
+      "outputModuleId": 980000000104,
+      "outputId": 2,
+      "inputModuleId": 980000000105,
+      "inputId": 1,
+      "color": "#d5a8ff"
+    },
+    {
+      "id": 980000000208,
+      "outputModuleId": 980000000105,
+      "outputId": 0,
+      "inputModuleId": 1,
+      "inputId": 0,
+      "color": "#52beff"
+    },
+    {
+      "id": 980000000209,
+      "outputModuleId": 980000000105,
+      "outputId": 1,
+      "inputModuleId": 1,
+      "inputId": 1,
+      "color": "#d5a8ff"
+    },
+    {
+      "id": 980000000210,
+      "outputModuleId": 980000000107,
+      "outputId": 0,
+      "inputModuleId": 980000000105,
+      "inputId": 2,
+      "color": "#ff9f43"
+    },
+    {
+      "id": 980000000211,
+      "outputModuleId": 980000000107,
+      "outputId": 1,
+      "inputModuleId": 980000000105,
+      "inputId": 3,
+      "color": "#bf8bff"
+    },
+    {
+      "id": 980000000212,
+      "outputModuleId": 980000000107,
+      "outputId": 2,
+      "inputModuleId": 980000000105,
+      "inputId": 4,
+      "color": "#5bc3ff"
+    },
+    {
+      "id": 980000000213,
+      "outputModuleId": 980000000107,
+      "outputId": 3,
+      "inputModuleId": 980000000101,
+      "inputId": 2,
+      "color": "#a8ff52"
+    },
+    {
+      "id": 980000000214,
+      "outputModuleId": 980000000108,
+      "outputId": 0,
+      "inputModuleId": 980000000109,
+      "inputId": 0,
+      "color": "#52d7b2"
+    },
+    {
+      "id": 980000000215,
+      "outputModuleId": 980000000108,
+      "outputId": 1,
+      "inputModuleId": 980000000102,
+      "inputId": 5,
+      "color": "#ffb347"
+    },
+    {
+      "id": 980000000216,
+      "outputModuleId": 980000000109,
+      "outputId": 1,
+      "inputModuleId": 980000000101,
+      "inputId": 0,
+      "color": "#6cf9df"
+    },
+    {
+      "id": 980000000217,
+      "outputModuleId": 980000000110,
+      "outputId": 3,
+      "inputModuleId": 980000000111,
+      "inputId": 1,
+      "color": "#f3c56b"
+    },
+    {
+      "id": 980000000218,
+      "outputModuleId": 980000000111,
+      "outputId": 1,
+      "inputModuleId": 980000000104,
+      "inputId": 1,
+      "color": "#c28fff"
+    },
+    {
+      "id": 980000000219,
+      "outputModuleId": 980000000111,
+      "outputId": 0,
+      "inputModuleId": 980000000104,
+      "inputId": 3,
+      "color": "#ff9673"
+    },
+    {
+      "id": 980000000220,
+      "outputModuleId": 980000000107,
+      "outputId": 4,
+      "inputModuleId": 980000000109,
+      "inputId": 1,
+      "color": "#75e0ff"
+    },
+    {
+      "id": 980000000221,
+      "outputModuleId": 980000000107,
+      "outputId": 4,
+      "inputModuleId": 980000000109,
+      "inputId": 2,
+      "color": "#75e0ff"
+    }
+  ]
+}

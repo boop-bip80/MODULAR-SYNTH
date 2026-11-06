@@ -19,8 +19,9 @@ The executable checker is `tools/patches/factory_patch_coverage.py`. It imports 
 | `ClockedLFO` | `MODULAR_-_Clocked_Modulation_Studio.vcv`, `MODULAR_-_Cinematic_Pulse_Score.vcv` | One beat/reset-clocked eight-lane example; one MIDI mono **free-running** rhythmic envelope example |
 | `FMVoice` | `MODULAR_-_FM_Voice_Performance.vcv` | Saved MIDI pitch and gate route through the original two-operator voice and an ADSR/VCA to HostAudio2; no linked host/audio test | 
 | `DualVCA` | `MODULAR_-_Morph_VCO_Performance.vcv` | Both independent A/B audio and CV routes, two bounded outputs into host left/right; no host runtime guarantee |
-| `ChanceHold` | `MODULAR_-_Aurora_Glass_Bells.vcv` | Saved source modulation and chance/gate wiring; actual stochastic sound/playback remains a host test |
-| `SlewGlide` | `MODULAR_-_Luminous_Portamento_Duets.vcv` | Independent linear and exponential pitch glide control for octave-spaced oscillator voices, with verified stereo output wiring |
+| `ChanceHold` | `MODULAR_-_Aurora_Glass_Bells.vcv`, `MODULAR_-_Moonlit_Harmonic_Minor_Motion.vcv` | Saved seeded probability/drift, plus free-running ClockedLFO-PULSE → ChanceHold CLOCK → filter cutoff/drive routes; actual stochastic sound/playback remains a host test |
+| `SlewGlide` | `MODULAR_-_Luminous_Portamento_Duets.vcv`, `MODULAR_-_Moonlit_Harmonic_Minor_Motion.vcv` | Independent linear/exponential pitch-glide and monophonic quantized exponential portamento, source-verified into oscillator pitch, with stereo output wiring |
+| `ScaleQuantizer` | `MODULAR_-_Major_Glow_Quantized_Performance.vcv`, `MODULAR_-_Moonlit_Harmonic_Minor_Motion.vcv` | C-major and D-harmonic-minor saved pitch modes, MIDI→pitch quantizer→oscillator/SlewGlide, and quantization CHANGE retrigger routes |
 
 The analyzer obtains the model list from the manifest **at runtime**. If a new model is added without a first-party example instantiating it, the test fails until coverage is provided and reviewed.
 
