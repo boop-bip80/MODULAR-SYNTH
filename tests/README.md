@@ -21,17 +21,18 @@ For these tests, Git submodules do **not** need to be initialized. In a normal G
 - **First-party module manifests:** `plugins/Cardinal/plugin.json` is validated, plus `plugins/ModularSynth/plugin.json` when that original module collection exists. Each manifest has a matching plugin slug; module slugs/names must be nonempty, module slugs unique within their collection, and `tags` must be a list.
 - **Submodule consistency:** `.gitmodules` paths are unique, relative, and use HTTPS; when Git metadata is available, every declaration must correspond exactly to a committed submodule gitlink.
 - **First-party HEADLESS wrapper smoke:** `test_rack_wrapper_smoke.py` syntax-
-  compiles the five actual `plugins/ModularSynth/src/*.cpp` translation units
-  separately with Cardinal's `pluginInstance` preprocessor alias, then builds
-  one C++17 process harness exercising parameter/port configuration, bounded polyphony counts,
+  compiles all eleven first-party `plugins/ModularSynth/src/*.cpp` translation
+  units separately in GNU C++11 and C++17 with Cardinal's `pluginInstance`
+  preprocessor alias, then runs a shared harness across five compiler profiles
+  exercising parameter/port configuration, bounded polyphony counts,
   finite outputs, reset paths and Macro8's JSON method calls. It uses an
   **explicit test double**, `tests/rack_stub/rack.hpp`, in place of Rack.
   This test double is never part of the plugin build or distribution.
 - **Real Rack preflight's offline contract:** `test_real_rack_headers.py` checks
   exact Gitlink parsing, SpeexDSP template substitution, compile flags and
   clear failure on absent SDK headers. This test requires **no fetched SDK**;
-  the separate `tools/ci/check_real_rack_headers.py` tool performs five real
-  pinned-Rack translation-unit syntax checks when dependencies are available.
+  the separate `tools/ci/check_real_rack_headers.py` tool checks all eleven
+  first-party Rack translation units when pinned dependencies are available.
 
 Run that check by itself with:
 
@@ -50,7 +51,7 @@ host, that audio is glitch-free, or that plugins work on any platform. Continue
 using the upstream-derived `plugin-validation` job and cross-platform builds
 in `.github/workflows/build.yml` to establish those separate claims.
 
-The **optional real Rack header check** does prove that five HEADLESS wrapper
+The **optional real Rack header check** does prove that eleven HEADLESS wrapper
 translation units can be parsed by a Linux C++ compiler using exact pinned
 Rack/DPF API headers. It still **does not link a host binary**, verify the
 plugin ABI/GUI, load a patch or perform DAW/audio tests. See
