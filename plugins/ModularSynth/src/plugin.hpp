@@ -20,3 +20,4 @@ extern Model* modelFMVoice;
 extern Model* modelChanceHold;
 extern Model* modelDualVCA;
 extern Model* modelSlewGlide;
+extern Model* modelScaleQuantizer;

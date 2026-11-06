@@ -3,7 +3,7 @@
  * Copyright (C) 2026 boop-bip80 contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Seven source DSP cores, deterministic control/audio stimuli, no host/Rack.
+ * Eight source DSP cores, deterministic control/audio stimuli, no host/Rack.
  * Time is informational; functional and allocation checks are acceptance gates.
  */
 
@@ -14,6 +14,7 @@
 #include "../../plugins/ModularSynth/src/FoldDrive.hpp"
 #include "../../plugins/ModularSynth/src/ClockedLFO.hpp"
 #include "../../plugins/ModularSynth/src/ChanceHold.hpp"
+#include "../../plugins/ModularSynth/src/SlewGlide.hpp"
 
 #include <array>
 #include <algorithm>
@@ -204,6 +205,30 @@ struct ChanceStep {
         return static_cast<double>(output.held) * output.held
              + static_cast<double>(output.glide) * output.glide
              + static_cast<double>(output.trigger) * output.trigger;
+    }
+};
+
+struct SlewStep {
+    double operator()(dsp::SlewGlide& engine, int frame, int voice,
+                      double rate, float signal) const noexcept {
+        dsp::SlewGlide::Input input;
+        input.sampleRateHz = rate;
+        // Alternating bipolar targets drive both rise and fall paths, even
+        // during short 1024-frame smoke runs. Audio-rate ripple and a small
+        // per-voice offset keep simultaneous lanes distinct and nonconstant.
+        const bool risingTarget = ((frame / 768 + voice) & 1) != 0;
+        input.voltage = (risingTarget ? 4.25 : -3.75)
+                      + 0.65 * static_cast<double>(signal) + 0.07 * voice;
+        input.riseSeconds = 0.028 + 0.003 * (voice % 5);
+        input.fallSeconds = 0.049 + 0.004 * (voice % 5);
+        // Finite, changing control CV updates the real core's cached
+        // directional coefficients during the measured processing workload.
+        input.riseCvVolts = ((frame / 512 + voice) & 1) != 0 ? 0.07 : -0.018;
+        input.fallCvVolts = ((frame / 384 + voice) & 1) != 0 ? 0.05 : -0.028;
+        const dsp::SlewGlide::Output output = engine.process(input);
+        return static_cast<double>(output.linear) * output.linear
+             + static_cast<double>(output.exponential) * output.exponential
+             + 0.01 * static_cast<double>(output.movingGate) * output.movingGate;
     }
 };
 
@@ -398,7 +423,7 @@ int parseRepetitions(const char* text) {
 void usage(const char* command) {
     std::cout << "Usage: " << command << " [--frames 32768] [--repeats 1] [--json]\n"
               << "Runs MorphVCO, StateFilter, FMVoice, StereoEcho, FoldDrive, "
-                 "ClockedLFO and ChanceHold at 48/96 kHz, "
+                 "ClockedLFO, ChanceHold and SlewGlide at 48/96 kHz, "
                  "1/8/16 voices.\n"
               << "Source DSP timing only: no Cardinal, UI, drivers, host, or audio I/O.\n";
 }
@@ -450,6 +475,8 @@ int main(int argc, char** argv) {
                     "ClockedLFO", count, sr, frames, repeats));
                 rows.push_back(measure<dsp::ChanceHold, ChanceStep>(
                     "ChanceHold", count, sr, frames, repeats));
+                rows.push_back(measure<dsp::SlewGlide, SlewStep>(
+                    "SlewGlide", count, sr, frames, repeats));
             }
         }
         if (json)

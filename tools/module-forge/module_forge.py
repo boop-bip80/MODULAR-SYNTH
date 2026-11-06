@@ -327,8 +327,12 @@ struct MS@@SLUG@@Module final : Module {
     static constexpr int kMaxChannels = 16;
     enum Stage { Idle, Attack, Decay, Sustain, Release };
     struct Lane {
-        float level = 0.f;
-        float releaseStep = 0.f;
+        // Double precision keeps long 20 s ramps accurate at 384 kHz. A
+        // float accumulator loses measurable time to repeated ULP rounding.
+        double level = 0.0;
+        double releaseStartLevel = 0.0;
+        double releaseProgress = 0.0;
+        double releaseRate = 0.0; // 1 / captured duration in seconds
         bool gate = false;
         Stage stage = Idle;
     };
@@ -382,11 +386,13 @@ struct MS@@SLUG@@Module final : Module {
         const float sampleRate = finite(requestedRate) && requestedRate >= 1000.f
             && requestedRate <= 384000.f
             ? requestedRate : 48000.f;
-        const float attackStep = 1.f / (duration(params[ATTACK_PARAM].getValue(), 0.01f) * sampleRate);
+        const double samplePeriod = 1.0 / static_cast<double>(sampleRate);
+        const double attackStep = samplePeriod
+            / static_cast<double>(duration(params[ATTACK_PARAM].getValue(), 0.01f));
         const float sustain = sustainLevel(params[SUSTAIN_PARAM].getValue());
-        const float decayStep = (1.f - sustain)
-            / (duration(params[DECAY_PARAM].getValue(), 0.1f) * sampleRate);
-        const float releaseSamples = duration(params[RELEASE_PARAM].getValue(), 0.2f) * sampleRate;
+        const double decayStep = (1.0 - static_cast<double>(sustain)) * samplePeriod
+            / static_cast<double>(duration(params[DECAY_PARAM].getValue(), 0.1f));
+        const float releaseDuration = duration(params[RELEASE_PARAM].getValue(), 0.2f);
 
         for (int voice = 0; voice < voices; ++voice) {
             Lane& lane = lanes[voice];
@@ -400,18 +406,23 @@ struct MS@@SLUG@@Module final : Module {
                     lane.stage = Attack;
                 } else {
                     lane.stage = Release;
-                    lane.releaseStep = lane.level / releaseSamples;
+                    // Capture this gate-fall's level and knob duration. Track
+                    // elapsed seconds, not samples, so a live sample-rate
+                    // change cannot shorten or stretch the release.
+                    lane.releaseStartLevel = lane.level;
+                    lane.releaseProgress = 0.0;
+                    lane.releaseRate = 1.0 / static_cast<double>(releaseDuration);
                 }
                 lane.gate = gate;
             }
             switch (lane.stage) {
             case Attack:
-                lane.level = std::min(1.f, lane.level + attackStep);
-                if (lane.level >= 1.f)
+                lane.level = std::min(1.0, lane.level + attackStep);
+                if (lane.level >= 1.0)
                     lane.stage = Decay;
                 break;
             case Decay:
-                lane.level = std::max(sustain, lane.level - decayStep);
+                lane.level = std::max(static_cast<double>(sustain), lane.level - decayStep);
                 if (lane.level <= sustain)
                     lane.stage = Sustain;
                 break;
@@ -419,19 +430,20 @@ struct MS@@SLUG@@Module final : Module {
                 lane.level = sustain;
                 break;
             case Release:
-                lane.level = std::max(0.f, lane.level - lane.releaseStep);
-                if (lane.level <= 0.f)
+                lane.releaseProgress += samplePeriod * lane.releaseRate;
+                lane.level = lane.releaseStartLevel * std::max(0.0, 1.0 - lane.releaseProgress);
+                if (lane.level <= 0.0)
                     lane.stage = Idle;
                 break;
             case Idle:
             default:
-                lane.level = 0.f;
+                lane.level = 0.0;
                 break;
             }
-            if (!finite(lane.level))
+            if (!finite(static_cast<float>(lane.level)))
                 lane = Lane{};
-            lane.level = std::max(0.f, std::min(1.f, lane.level));
-            outputs[ENV_OUTPUT].setVoltage(10.f * lane.level, voice);
+            lane.level = std::max(0.0, std::min(1.0, lane.level));
+            outputs[ENV_OUTPUT].setVoltage(static_cast<float>(10.0 * lane.level), voice);
         }
     }
 };
@@ -493,7 +505,10 @@ The 16 independent lanes respond to a polyphonic gate: at or above 1 V enters
 attack; below or equal to 0.1 V enters release (hysteresis between). A/D/R
 are linear duration parameters from 1 ms to 20 s. Sustain is 0–100%,
 output is 0–10 V. Retrigger during release resumes from current level;
-release slope is captured at the gate-fall event. If the polyphonic gate
+release starting level and duration are captured at gate fall, and the
+release stays timed in seconds when the host changes sample rate. The
+double-precision stage accumulators preserve long 20 s ramps at 384 kHz.
+If the polyphonic gate
 contracts, dropped lanes retire and cannot leak old envelope state on reuse.
 Host reset requests are deferred through an atomic to the audio callback.
 

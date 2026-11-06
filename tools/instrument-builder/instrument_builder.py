@@ -36,6 +36,8 @@ from sequence_preview import (SequencePreviewError, build_sequence_preview,
                               text_sequence_preview)
 from automation_export import (AutomationExportError, build_automation_export,
                                text_automation_csv)
+from stereo_host_routes import (
+    stereo_host_route_report, text_stereo_host_route_report)
 
 FORMAT = "modular-synth-source-instrument"
 FORMAT_VERSION = 1
@@ -539,7 +541,9 @@ def _write_new(parent: Path, name: str, content: bytes,
 
 
 def pack(patch_path: Path, bundle_path: Path, name: str | None = None, *,
-         format_version: int = FORMAT_VERSION) -> dict:
+         format_version: int = FORMAT_VERSION,
+         require_verified_stereo_host_routes: bool = False,
+         repo_root: Path | None = None) -> dict:
     if patch_path.suffix.lower() != ".vcv":
         raise InstrumentError("source patch must have a .vcv extension")
     if bundle_path.suffix.lower() != ".msinstrument":
@@ -550,6 +554,16 @@ def pack(patch_path: Path, bundle_path: Path, name: str | None = None, *,
         format_version=format_version)
     bundle = create_bundle(
         patch, manifest["name"], format_version=format_version)
+    if require_verified_stereo_host_routes:
+        # Fail before creating the destination. Stereo terminal evidence is
+        # independent of v1/v2 Macro8 mapping-contract schema evolution.
+        root = repo_root if repo_root is not None else Path(__file__).resolve().parents[2]
+        routes = stereo_host_route_report(patch, root)
+        if routes["status"] != "PASS":
+            raise InstrumentError(
+                "stereo HostAudio2 source route gate failed: "
+                f"{routes['reason']}; run check --require-verified-stereo-host-routes "
+                "on an existing bundle for per-host diagnostics")
     with _safe_directory_fd(bundle_path.parent) as fd:
         _write_new(bundle_path.parent, bundle_path.name, bundle, fd)
     return manifest
@@ -605,13 +619,16 @@ def preview(bundle_path: Path, svg_path: Path, *,
 
 
 def check(bundle_path: Path, repo_root: Path | None = None, *,
-          require_verified_routes: bool = False) -> dict:
+          require_verified_routes: bool = False,
+          require_verified_stereo_host_routes: bool = False) -> dict:
     """Verify a source bundle, then check only first-party model declarations.
 
     External plugin/model availability is intentionally never inferred. The
     optional route gate requires a v2 source mapping contract and at least one
     direct Macro8 cable, then checks every destination's source port descriptor.
-    It never checks a DAW's automatable parameter or audio behavior.
+    It never checks a DAW's automatable parameter or audio behavior. The
+    independent stereo gate audits every saved HostAudio2 terminal's specific
+    first-party generator chain, never interpreting opaque modules as sound.
     """
     if bundle_path.suffix.lower() != ".msinstrument":
         raise InstrumentError("source bundle must end with .msinstrument")
@@ -633,6 +650,11 @@ def check(bundle_path: Path, repo_root: Path | None = None, *,
             routes = verified_routes_report(manifest)
             report["verifiedRoutes"] = routes
             if routes["status"] == "FAIL":
+                report["status"] = "FAIL"
+        if require_verified_stereo_host_routes:
+            stereo = stereo_host_route_report(source_patch, root)
+            report["verifiedStereoHostRoutes"] = stereo
+            if stereo["status"] == "FAIL":
                 report["status"] = "FAIL"
         return report
     except CompatibilityError as exc:
@@ -705,6 +727,13 @@ def main(argv: list[str] | None = None) -> int:
         "--format-version", type=int, choices=SUPPORTED_FORMAT_VERSIONS,
         default=FORMAT_VERSION,
         help="source manifest v1 (default) or v2 with verified Macro8 cable mappings")
+    create.add_argument(
+        "--require-verified-stereo-host-routes", action="store_true",
+        help="refuse export unless every HostAudio2 Left/M and Right input has "
+             "a source-verified first-party signal chain (not an audio test)")
+    create.add_argument(
+        "--repo-root", type=Path, default=None,
+        help="source checkout for opt-in stereo route verification")
     info = subs.add_parser("inspect", help="validate and print an instrument manifest")
     info.add_argument("bundle", type=Path)
     routes = subs.add_parser(
@@ -795,11 +824,18 @@ def main(argv: list[str] | None = None) -> int:
         "--require-verified-routes", action="store_true",
         help=("fail unless a v2 bundle has at least one direct Macro8 cable "
               "and every destination input port is source-verified"))
+    compatibility.add_argument(
+        "--require-verified-stereo-host-routes", action="store_true",
+        help=("fail unless every HostAudio2 Left/M and Right input has "
+              "a checked-in first-party generator-to-terminal signal chain; "
+              "never proof of audible/stereo output"))
     args = parser.parse_args(argv)
     try:
         if args.command == "pack":
             manifest = pack(
-                args.patch, args.out, args.name, format_version=args.format_version)
+                args.patch, args.out, args.name, format_version=args.format_version,
+                require_verified_stereo_host_routes=args.require_verified_stereo_host_routes,
+                repo_root=args.repo_root)
             print(f"Packed {args.out} ({len(manifest['performance']['macro8'])} Macro8)")
         elif args.command == "unpack":
             unpack(args.bundle, args.out)
@@ -859,11 +895,15 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "check":
             report = check(
                 args.bundle, args.repo_root,
-                require_verified_routes=args.require_verified_routes)
+                require_verified_routes=args.require_verified_routes,
+                require_verified_stereo_host_routes=args.require_verified_stereo_host_routes)
             if args.json or args.format == "json":
                 print(_canonical_json(report).decode("utf-8"), end="")
             else:
                 print(text_report(report), end="")
+                if args.require_verified_stereo_host_routes:
+                    print(text_stereo_host_route_report(
+                        report["verifiedStereoHostRoutes"]), end="")
             return 1 if report["status"] == "FAIL" else 0
         else:
             print(_canonical_json(inspect(args.bundle)).decode("utf-8"), end="")

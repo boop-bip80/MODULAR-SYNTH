@@ -22,9 +22,9 @@
         stroke="#F2C981" fill="none" stroke-width="2.4" stroke-linecap="round"/>
   <path d="M25 185 H54 C78 185 85 163 109 163 S145 185 157 185"
         stroke="#78DCCF" fill="none" stroke-width="2.4" stroke-linecap="round"/>
-  <rect x="13" y="212" width="154" height="69" rx="8"
+  <rect x="7" y="208" width="167" height="73" rx="8"
         fill="none" stroke="#78D5DB" stroke-width="1.5"/>
-  <rect x="13" y="301" width="154" height="71" rx="8"
+  <rect x="7" y="297" width="167" height="75" rx="8"
         fill="none" stroke="#E7B866" stroke-width="1.5"/>
   <g fill="#A0EEDB">
     <circle cx="18" cy="18" r="2"/>

@@ -383,6 +383,17 @@ struct ModularSynthMacro8Widget : ModuleWidget {
             const std::string label = macro
                 ? macro->nameAt(i)
                 : ("Macro " + std::to_string(i + 1));
+            // Editable names can contain twelve characters. At the default
+            // 10.5px mono size those can extend into adjacent 73px columns.
+            // Fit the *measured* NanoVG advance to a 65px text lane without
+            // changing the stored name, knob centers or module ID layout.
+            nvgFontSize(args.vg, 10.5f);
+            float bounds[4] = {};
+            nvgTextBounds(args.vg, 0.0f, 0.0f, label.c_str(), nullptr, bounds);
+            constexpr float maxLabelWidth = 65.0f;
+            const float measuredWidth = bounds[2] - bounds[0];
+            if (measuredWidth > maxLabelWidth)
+                nvgFontSize(args.vg, 10.5f * maxLabelWidth / measuredWidth);
             nvgText(args.vg, columns[i % 4], i < 4 ? 55.0f : 145.0f,
                     label.c_str(), nullptr);
         }

@@ -1,6 +1,6 @@
 # MODULAR-SYNTH Originals — musician's quick reference
 
-Ten first-party Rack models are **statically registered in source** and expected
+Eleven first-party Rack models are **statically registered in source** and expected
 under **MODULAR-SYNTH Originals** in the module browser after a successful build.
 This page is a patching cheat sheet for the models actually
 declared in [the collection manifest](../plugins/ModularSynth/plugin.json)
@@ -22,6 +22,7 @@ measured audio or a verified DAW session.
 | **Chance Hold** (`ChanceHold`) | Seeded 16-lane random S&H with chance, glide and stepped trigger | **5 in / 3 out** | Free clock 1 Hz; chance 75%; glide 0.15 s; quantize off |
 | **Dual VCA** (`DualVCA`) | Two independent 16-lane CV-controlled gains with A/B and bounded SUM | **4 in / 3 out** | A/B levels 100%; linear curves 0%; unplugged CV is full gain |
 | **Slew Glide** (`SlewGlide`) | 16-lane asymmetric pitch/control glide with simultaneous linear and exponential curves | **3 in / 3 out** | Rise 0.20 s; fall 0.30 s; zero time snaps |
+| **Scale Quantizer** (`ScaleQuantizer`) | Sixteen-lane scale-aware 1 V/oct pitch quantizer, with hysteresis and per-note trigger | **3 in / 2 out** | C chromatic; transpose 0 semitones; hysteresis 12 cents |
 
 ### Morph VCO (`MorphVCO`)
 
@@ -195,6 +196,26 @@ measured audio or a verified DAW session.
   Reset and retired polyphony lanes clear their prior slew. This is a source
   and test-shim implementation; live Rack/DAW CV behavior remains to verify.
 
+### Scale Quantizer (`ScaleQuantizer`)
+
+[Source/configuration](../plugins/ModularSynth/src/ScaleQuantizer.cpp) ·
+[Pitch, scale and trigger behavior](SCALE_QUANTIZER.md)
+
+- Send a **1 V/oct pitch CV** to **PITCH**. **QUANT** is the nearest permitted
+  semitone in the selected root/scale at the exact 1 V/oct output pitch;
+  **CHANGE** sends a **+10 V, 2 ms** pulse when the selected note changes.
+- **ROOT** selects the tonic **C…B** (0…11); **SCALE** selects chromatic,
+  major, natural minor, Dorian, harmonic minor, major pentatonic, minor
+  pentatonic or whole tone. **TRANS** shifts by −12…+12 semitones.
+  **HYST** is a 0…50-cent hold margin (12 cents default) to reduce
+  spurious note flapping around the decision boundary.
+- **TRANS CV** adds pitch at **1 V/oct** before note selection; **ROOT CV**
+  shifts the tonic by rounded 1/12 V semitone steps. All three inputs
+  and both outputs support 16 independent polyphonic lanes. Nonfinite inputs
+  are replaced with safe defaults and output is limited to ±10 V.
+- The source/HEADLESS tests check CV math, deterministic gating, reset and
+  allocation behavior. They do not establish actual Rack or DAW audition.
+
 ## Five suggested wiring recipes (host-unverified)
 
 1. **Keyboard subtractive voice:** `Host MIDI pitch → Morph VCO PITCH`;
@@ -234,11 +255,11 @@ oscillator morph. Those are saved signal/CV routes, not an audio audition.
 HostTime beat/reset routing and Clocked LFO modulation to VCO, filter,
 ADSR retrigger and Echo wet mix; it needs host transport for beat lock. **Cinematic Pulse Score** instead leaves HostTime/CLK disconnected, uses a free-running LFO PULSE to gate a second ADSR/VCA on its low-pass left path, and keeps high-pass right separate. Its four A–D Macro8 scenes are saved CV positions, not auditioned film-score audio.
 
-## Twenty factory patches
+## Twenty-one factory patches
 
-All twenty links below are actual `.vcv` files under
+All twenty-one links below are actual `.vcv` files under
 `patches/examples/`. **Bundled-only** means the patch uses Cardinal's
-existing plugin collection and does not require one of these ten first-party
+existing plugin collection and does not require one of these eleven first-party
 modules; **Originals** means it includes at least one `ModularSynth` model.
 
 | Patch | Models | Play/try this |
@@ -263,6 +284,7 @@ modules; **Originals** means it includes at least one `ModularSynth` model.
 | [Cinematic Pulse Score](../patches/examples/MODULAR_-_Cinematic_Pulse_Score.vcv) | Originals | Play MIDI over a **free-running** 0.8 Hz pulse-gated LP left channel, direct HP right, and four Macro8 tension/echo scenes; no host BPM sync |
 | [Noir Expressive Lead](../patches/examples/MODULAR_-_Noir_Expressive_Lead.vcv) | Originals | Mono MIDI voice; aftertouch moves wave morph, mod wheel raises Echo wet and Macro8 A–D recall dark-to-tense scenes |
 | [Fold Drive Cinematic Motion](../patches/examples/MODULAR_-_Fold_Drive_Cinematic_Motion.vcv) | Originals | Eight MIDI lanes; 0.25 Hz free-running LFO modulates FoldDrive drive/bias and MIDI CC1 controls wet mix |
+| [Major Glow Quantized Performance](../patches/examples/MODULAR_-_Major_Glow_Quantized_Performance.vcv) | Originals | MIDI pitch → C-major ScaleQuantizer → MorphVCO; note CHANGE retriggers ADSR, four echo scenes, verified stereo L/R cables |
 
 If the examples folder is included in the build, open a patch through
 **File → Open demo / example project**; otherwise load its `.vcv` directly.
@@ -275,7 +297,7 @@ and [offline patch checks](PATCH_WORKFLOW.md) provide more context.
 
 ## What is—and is not—verified
 
-The manifest, module C++ metadata and all twenty saved patch graphs can be
+The manifest, module C++ metadata and all twenty-one saved patch graphs can be
 checked offline with:
 
 ```sh

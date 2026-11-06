@@ -24,7 +24,7 @@ assert isinstance(entries, list) and entries, "empty or malformed module list"
 slugs = [entry.get("slug") if isinstance(entry, dict) else None for entry in entries]
 assert all(isinstance(s, str) and re.fullmatch(r"[A-Z][A-Za-z0-9]{1,39}", s) for s in slugs), "invalid module slug"
 assert len({s.casefold() for s in slugs}) == len(slugs), "duplicate module slug"
-assert {"ChanceHold", "ClockedLFO", "DualVCA", "FoldDrive", "FMVoice", "Macro8", "MorphVCO", "SlewGlide", "StateFilter", "StereoEcho"}.issubset(slugs), "lost original modules"
+assert {"ChanceHold", "ClockedLFO", "DualVCA", "FoldDrive", "FMVoice", "Macro8", "MorphVCO", "SlewGlide", "StateFilter", "StereoEcho", "ScaleQuantizer"}.issubset(slugs), "lost original modules"
 print(" ".join(sorted(slugs)))
 PY
 )"; then

@@ -14,7 +14,7 @@ CHECKER = REPO / "tools" / "ui-check" / "validate_panels.py"
 RAIL_CHECKER = REPO / "tools" / "ui-check" / "port_rail_audit.py"
 SCENE_CHECKER = REPO / "tools" / "ui-check" / "scene_rail_audit.py"
 MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho",
-           "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA", "SlewGlide")
+           "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA", "SlewGlide", "ScaleQuantizer")
 
 
 class PanelGeometryTests(unittest.TestCase):
@@ -56,8 +56,8 @@ class PanelGeometryTests(unittest.TestCase):
     def test_current_repository_panels_pass(self) -> None:
         result = self.run_checker(REPO)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        self.assertIn("PASS: 10 SVG panels", result.stdout)
-        self.assertIn("129 conservative candidate widget centers", result.stdout)
+        self.assertIn("PASS: 11 SVG panels", result.stdout)
+        self.assertIn("138 conservative candidate widget centers", result.stdout)
         self.assertIn("visual rendering/overlap not verified", result.stdout)
 
     def test_source_signal_rails_cover_real_ports_and_labels(self) -> None:
@@ -339,7 +339,7 @@ class PanelGeometryTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("center (400,", result.stderr)
 
-    def test_all_ten_modules_have_exact_control_callsite_cardinality(self) -> None:
+    def test_all_eleven_modules_have_exact_control_callsite_cardinality(self) -> None:
         changes = (
             ("MorphVCO", "createInputCentered<PJ301MPort>",
              "createOutputCentered<PJ301MPort>", "expected 4 Input centered callsites, found 3"),
@@ -349,6 +349,8 @@ class PanelGeometryTests(unittest.TestCase):
              "createInputCentered<SmallLight<GreenLight>>", "expected 3 Light centered callsites, found 2"),
             ("SlewGlide", "createParamCentered<RoundBlackKnob>",
              "createOutputCentered<RoundBlackKnob>", "expected 2 Param centered callsites, found 1"),
+            ("ScaleQuantizer", "createInputCentered<PJ301MPort>",
+             "createOutputCentered<PJ301MPort>", "expected 3 Input centered callsites, found 2"),
         )
         for model, before, after, message in changes:
             with self.subTest(model=model):

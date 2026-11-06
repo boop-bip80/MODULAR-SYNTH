@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 # checked before its registration/packaging PR lands.
 PANELS = {"MorphVCO": 12, "StateFilter": 14, "FoldDrive": 12,
           "Macro8": 20, "StereoEcho": 16, "ClockedLFO": 16, "FMVoice": 12,
-          "ChanceHold": 16, "DualVCA": 12, "SlewGlide": 12}
+          "ChanceHold": 16, "DualVCA": 12, "SlewGlide": 12, "ScaleQuantizer": 12}
 # This widget uses literal create*Centered() sites, so it can be checked for
 # exact source callsite cardinality as well as in-bounds center coordinates.
 EXPECTED_SITES = {"MorphVCO": {"Param": 5, "Input": 4, "Output": 2},
@@ -34,7 +34,8 @@ EXPECTED_SITES = {"MorphVCO": {"Param": 5, "Input": 4, "Output": 2},
                   "FMVoice": {"Param": 5, "Input": 4, "Output": 2},
                   "ChanceHold": {"Param": 4, "Input": 5, "Output": 3, "Light": 1},
                   "DualVCA": {"Param": 4, "Input": 4, "Output": 3},
-                  "SlewGlide": {"Param": 2, "Input": 3, "Output": 3}}
+                  "SlewGlide": {"Param": 2, "Input": 3, "Output": 3},
+                  "ScaleQuantizer": {"Param": 4, "Input": 3, "Output": 2}}
 SVG_NS = "{http://www.w3.org/2000/svg}svg"
 GRID_PX_PER_HP = 15.0
 GRID_HEIGHT_PX = 380.0

@@ -82,7 +82,7 @@ class SourceReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("tar --lzma", checker)
         self.assertIn('root="cardinal-${version}"', checker)
         self.assertIn('required["plugins/ModularSynth/src/plugin.hpp"]', checker)
-        self.assertGreaterEqual(len(MODULE_SLUGS), 10)
+        self.assertGreaterEqual(len(MODULE_SLUGS), 11)
         self.assertIn('module_count = split(module_names, slugs, " ")', checker)
         self.assertIn('-v module_names="$module_slugs"', checker)
         self.assertIn('Path("plugins/ModularSynth/plugin.json")', checker)

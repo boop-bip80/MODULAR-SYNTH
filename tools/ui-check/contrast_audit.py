@@ -18,7 +18,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 MODULES = ("MorphVCO", "StateFilter", "FoldDrive", "Macro8", "StereoEcho",
-           "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA", "SlewGlide")
+           "ClockedLFO", "FMVoice", "ChanceHold", "DualVCA", "SlewGlide", "ScaleQuantizer")
 TEXT_ADVISORY = 4.5
 OUTLINE_ADVISORY = 3.0
 COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")

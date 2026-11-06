@@ -17,14 +17,18 @@ external DSP dependency or sample content.
 | `FALL CV` | +10 V adds 5 s to fall; negative CV shortens it; final time limited to 0…5 s |
 | `LINEAR` | Slews at a constant **10 V / time** (a 20 V excursion takes twice the knob time) |
 | `EXP` | One-pole low pass approaching **99%** of a fixed target after configured time |
-| `MOVING` | +10 V while LINEAR or EXP differs from target by >0.0001 V; otherwise 0 V |
+| `MOVING` | +10 V while either slew remains in progress. Schmitt thresholds open above 0.0002 V deviation and close at or below 0.0001 V, preventing gate chatter from tiny CV jitter |
 
 At zero time, both outputs track CV IN immediately. If the source changes
 continuously, neither the linear 10 V traversal time nor the exponential
 99%-settling reference guarantees a fixed note-to-note transition duration:
 both definitions assume a held, fixed target. The exponential output snaps
 exactly to target once the remaining difference is at most 0.000001 V, avoiding
-denormal tails. The MOVING gate goes low at a slightly wider 0.0001 V threshold.
+denormal tails. The MOVING gate uses a 0.0001–0.0002 V hysteresis band: when
+already open it stays high until both outputs are within 0.0001 V; when closed
+it ignores changes of 0.0002 V or less. This is a CV-activity indicator, not
+an end-of-cycle trigger. Exact linear/exponential outputs are unchanged by
+this gate-only stability fix.
 
 The Rack wrapper carries no files, dynamic allocations, thread locks or
 network I/O into `process()`. The host's `onReset()` callbacks only publish an
@@ -55,11 +59,14 @@ automation/audio audition or true host CPU measurements are yet available.
 
 - `tests/slew_glide_dsp_test.cpp` exercises exact rise/fall traversal, CV
   overrides, exponential 99% approach, zero-time bypass, signed 10 V bounds,
-  reset replay, extreme input values, 16-lane deterministic stress and zero
-  heap allocations across compiler profiles.
+  reset replay, extreme/subnormal input values, 48-to-96 kHz wall-clock
+  continuity, Schmitt activity-gate noise rejection, 16-lane deterministic
+  stress and zero heap allocations across compiler profiles.
 - `tests/rack_wrapper_smoke.cpp` exercises real wrapper source with a **test
-  Rack shim**, including host reset and channel retirement. The genuine
-  header/link gate is configured separately against pinned Rack/DPF/Jansson.
+  Rack shim**, including host reset and channel retirement. The wrapper smoke
+  additionally proves retired lane 15 restarts from a fresh DSP state after
+  polyphony shrinks then returns. The genuine header/link gate is configured
+  separately against pinned Rack/DPF/Jansson.
 - The SVG passes source geometry/asset checks; a rendered Rack visual check,
   audible host signal, actual DAW save/reopen and production plugin binary
   remain separate acceptance requirements.

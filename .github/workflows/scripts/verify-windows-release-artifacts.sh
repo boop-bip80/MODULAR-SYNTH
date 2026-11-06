@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Source-only pre-upload gate for Windows release tags. This does not certify an installed plugin.
+# Source-only pre-upload gate for Windows artifacts on main and release tags.
+# An artifact slug is SHA8 on ordinary main pushes or a tag on releases.
+# This does not certify an installed plugin.
 set -euo pipefail
 
 if [[ "$#" -ne 3 ]]; then

@@ -28,6 +28,12 @@ MACRO8_DOCUMENTED_FIELDS = frozenset(("macro8Version", "selectedSlot", "names", 
 # conservatively treated as potential state, because Rack/module formats vary.
 VIEW_ONLY_PATCH_FIELDS = frozenset(("zoom", "offset"))
 VIEW_ONLY_MODULE_FIELDS = frozenset(("pos",))
+# Saved state is compared recursively after validation. Bound adversarial
+# depth/size here so a malformed file cannot exhaust a process stack or cause
+# a raw traceback. The limits are intentionally far above ordinary patch data.
+MAX_JSON_NESTING = 192
+MAX_JSON_NODES = 250_000
+MAX_INTEGER_BITS = 4096
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -50,7 +56,7 @@ def load_patch(path: Path) -> dict[str, Any]:
             value = json.load(
                 stream, object_pairs_hook=_unique_object, parse_constant=_no_constants
             )
-    except (OSError, UnicodeError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise PatchComparisonError(f"{path}: {exc}") from exc
     if not isinstance(value, dict):
         raise PatchComparisonError(f"{path}: patch root must be an object")
@@ -64,14 +70,52 @@ def _natural_id(value: Any, description: str) -> int:
 
 
 def _finite_recursive(value: Any, path: str) -> None:
-    if isinstance(value, float) and not math.isfinite(value):
-        raise PatchComparisonError(f"{path}: non-finite number")
-    if isinstance(value, dict):
-        for key, item in value.items():
-            _finite_recursive(item, f"{path}.{key}")
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            _finite_recursive(item, f"{path}[{index}]")
+    """Validate a bounded JSON tree, including direct in-memory API inputs.
+
+    JSON cannot represent cycles or Python-only types; rejecting them before
+    matching makes the error actionable and avoids recursive identity hashing.
+    Sharing a nested object across siblings is valid and is *not* a cycle.
+    """
+    active: set[int] = set()
+    # Each entry is (node, location, depth, exiting). Explicit exit events
+    # track ancestors rather than rejecting harmless repeated references.
+    pending: list[tuple[Any, str, int, bool]] = [(value, path, 0, False)]
+    nodes = 0
+    while pending:
+        node, location, depth, exiting = pending.pop()
+        if exiting:
+            active.remove(id(node))
+            continue
+        nodes += 1
+        if nodes > MAX_JSON_NODES:
+            raise PatchComparisonError(f"{path}: saved state exceeds {MAX_JSON_NODES} JSON nodes")
+        if depth > MAX_JSON_NESTING:
+            raise PatchComparisonError(f"{location}: saved state exceeds nesting depth {MAX_JSON_NESTING}")
+        if node is None or type(node) in (str, bool):
+            continue
+        if type(node) is int:
+            if node.bit_length() > MAX_INTEGER_BITS:
+                raise PatchComparisonError(f"{location}: integer exceeds {MAX_INTEGER_BITS} bits")
+            continue
+        if type(node) is float:
+            if not math.isfinite(node):
+                raise PatchComparisonError(f"{location}: non-finite number")
+            continue
+        if type(node) not in (dict, list):
+            raise PatchComparisonError(f"{location}: not a JSON-compatible value")
+        identity = id(node)
+        if identity in active:
+            raise PatchComparisonError(f"{location}: cyclic saved state")
+        active.add(identity)
+        pending.append((node, location, depth, True))
+        if type(node) is dict:
+            for key, item in reversed(tuple(node.items())):
+                if type(key) is not str:
+                    raise PatchComparisonError(f"{location}: JSON object keys must be strings")
+                pending.append((item, f"{location}.{key}", depth + 1, False))
+        else:
+            for index in range(len(node) - 1, -1, -1):
+                pending.append((node[index], f"{location}[{index}]", depth + 1, False))
 
 
 def _parse_patch(patch: dict[str, Any]) -> tuple[dict[int, dict[str, Any]], list[dict[str, int]]]:

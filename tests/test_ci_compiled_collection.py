@@ -27,9 +27,8 @@ class CompiledFirstPartyGateTests(unittest.TestCase):
         self.binary = self.root / "Cardinal"
         self.manifest = self.root / "plugin.json"
         self.data = json.loads(MANIFEST.read_text(encoding="utf-8"))
-        # This source-hardening branch was cut before the independently built
-        # SlewGlide module landed. Validate the new ten-module release contract
-        # with the same fixture both before and after integration.
+        # Retain a backwards-compatible fixture if a historical branch omits
+        # SlewGlide; the current source manifest declares all eleven modules.
         if not any(entry.get("slug") == "SlewGlide"
                    for entry in self.data["modules"]):
             self.data["modules"].append({"slug": "SlewGlide"})
@@ -219,7 +218,7 @@ class CompiledFirstPartyGateTests(unittest.TestCase):
         self.assertEqual(checked.returncode, 0, checked.stderr)
 
     def test_new_original_modules_are_required_even_if_manifest_omits_them(self) -> None:
-        for missing in ("DualVCA", "SlewGlide"):
+        for missing in ("DualVCA", "SlewGlide", "ScaleQuantizer"):
             with self.subTest(missing=missing):
                 retained = list(self.data["modules"])
                 self.data["modules"] = [
@@ -285,7 +284,14 @@ class CompiledFirstPartyGateTests(unittest.TestCase):
         selftest = job.index("- name: Run Cardinal self-tests")
         self.assertLess(compile_done, gate)
         self.assertLess(gate, selftest)
-        self.assertIn("python3 -B tools/ci/verify_compiled_collection.py --binary bin/Cardinal", job)
+        self.assertIn('python3 -B tools/ci/verify_compiled_collection.py --binary "$binary"', job)
+        for path in ("bin/Cardinal.lv2/Cardinal.so", "bin/CardinalFX.lv2/CardinalFX.so",
+                     "bin/CardinalSynth.lv2/CardinalSynth.so"):
+            self.assertIn(path, job)
+        # Previously, inspecting JACK standalone bin/Cardinal reported all
+        # nine first-party model markers absent despite successful LV2 TTL
+        # generation, linked plugin compilation and runtime plugin loading.
+        self.assertIn("--candidate bin/Cardinal", job)
 
 
 if __name__ == "__main__":

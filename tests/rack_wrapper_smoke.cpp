@@ -17,6 +17,7 @@
 #include "../plugins/ModularSynth/src/ChanceHold.cpp"
 #include "../plugins/ModularSynth/src/DualVCA.cpp"
 #include "../plugins/ModularSynth/src/SlewGlide.cpp"
+#include "../plugins/ModularSynth/src/ScaleQuantizer.cpp"
 
 #include <cmath>
 #include <atomic>
@@ -540,10 +541,69 @@ void smokeSlew(const rack::ProcessArgs& args) {
     module.process(args);
     outputsFinite(module, ModularSynthSlewGlide::NUM_OUTPUTS, 1,
                   "SlewGlide retired lanes");
+    // A resurrected polyphonic channel must start at zero, not resume a stale
+    // pitch/glide from before the host reduced the polyphony count.
+    ModularSynthSlewGlide fresh;
+    module.inputs[ModularSynthSlewGlide::SIGNAL_INPUT].setChannels(16);
+    fresh.inputs[ModularSynthSlewGlide::SIGNAL_INPUT].setChannels(16);
+    for (int c = 0; c < 16; ++c) {
+        const float pitch = c % 2 ? -7.0f : 7.0f;
+        module.inputs[ModularSynthSlewGlide::SIGNAL_INPUT].setVoltage(pitch, c);
+        fresh.inputs[ModularSynthSlewGlide::SIGNAL_INPUT].setVoltage(pitch, c);
+    }
+    module.process(args);
+    fresh.process(args);
+    for (int output = 0; output < ModularSynthSlewGlide::NUM_OUTPUTS; ++output)
+        require(module.outputs[output].getVoltage(15)
+                    == fresh.outputs[output].getVoltage(15),
+                "SlewGlide reintroduced high lane restarts from fresh state");
+    outputsFinite(module, ModularSynthSlewGlide::NUM_OUTPUTS, 16,
+                  "SlewGlide reintroduced lanes");
     module.onReset();
     module.process(args);
-    outputsFinite(module, ModularSynthSlewGlide::NUM_OUTPUTS, 1,
+    outputsFinite(module, ModularSynthSlewGlide::NUM_OUTPUTS, 16,
                   "SlewGlide reset");
+}
+
+void smokeQuantizer(const rack::ProcessArgs& args) {
+    ModularSynthScaleQuantizer module;
+    require(module.params.size() == ModularSynthScaleQuantizer::NUM_PARAMS,
+            "ScaleQuantizer param declarations");
+    require(module.inputs.size() == ModularSynthScaleQuantizer::NUM_INPUTS,
+            "ScaleQuantizer input declarations");
+    module.params[ModularSynthScaleQuantizer::SCALE_PARAM].setValue(1.0f); // major
+    module.params[ModularSynthScaleQuantizer::HYST_PARAM].setValue(0.0f);
+    module.inputs[ModularSynthScaleQuantizer::PITCH_INPUT].setChannels(16);
+    for (int c = 0; c < 16; ++c)
+        module.inputs[ModularSynthScaleQuantizer::PITCH_INPUT].setVoltage(
+            c / 12.0f, c);
+    module.process(args);
+    outputsFinite(module, ModularSynthScaleQuantizer::NUM_OUTPUTS, 16,
+                  "ScaleQuantizer first frame");
+    require(module.outputs[ModularSynthScaleQuantizer::PITCH_OUTPUT].getVoltage(1)
+                == 0.0f,
+            "ScaleQuantizer C major rejects C-sharp via lower tie");
+    require(module.outputs[ModularSynthScaleQuantizer::CHANGE_OUTPUT].getVoltage(0)
+                == 10.0f,
+            "ScaleQuantizer starts pitch-change trigger");
+    const auto before = heapAllocations.load(std::memory_order_relaxed);
+    for (int n = 0; n < 512; ++n)
+        module.process(args);
+    const auto after = heapAllocations.load(std::memory_order_relaxed);
+    require(before == after, "ScaleQuantizer process must never allocate");
+    outputsFinite(module, ModularSynthScaleQuantizer::NUM_OUTPUTS, 16,
+                  "ScaleQuantizer steady state");
+    require(module.outputs[ModularSynthScaleQuantizer::CHANGE_OUTPUT].getVoltage(0)
+                == 0.0f,
+            "ScaleQuantizer change trigger ends after 2 ms");
+    module.inputs[ModularSynthScaleQuantizer::PITCH_INPUT].setChannels(1);
+    module.process(args);
+    outputsFinite(module, ModularSynthScaleQuantizer::NUM_OUTPUTS, 1,
+                  "ScaleQuantizer retired lanes");
+    module.onReset();
+    module.process(args);
+    outputsFinite(module, ModularSynthScaleQuantizer::NUM_OUTPUTS, 1,
+                  "ScaleQuantizer reset");
 }
 
 template <typename ModuleT>
@@ -649,6 +709,9 @@ void regressionDeferredHostResets(const rack::ProcessArgs& args) {
     verifyDeferredHostReset<ModularSynthSlewGlide>(
         args, ModularSynthSlewGlide::SIGNAL_INPUT,
         ModularSynthSlewGlide::NUM_OUTPUTS, "SlewGlide host reset");
+    verifyDeferredHostReset<ModularSynthScaleQuantizer>(
+        args, ModularSynthScaleQuantizer::PITCH_INPUT,
+        ModularSynthScaleQuantizer::NUM_OUTPUTS, "ScaleQuantizer host reset");
 }
 
 } // namespace
@@ -657,8 +720,8 @@ int main() {
     try {
         require(modelMorphVCO && modelStateFilter && modelMacro8 && modelStereoEcho &&
                     modelClockedLFO && modelFMVoice && modelChanceHold && modelFoldDrive &&
-                    modelDualVCA && modelSlewGlide,
-                "Ten shim-tested first-party models must instantiate");
+                    modelDualVCA && modelSlewGlide && modelScaleQuantizer,
+                "Eleven shim-tested first-party models must instantiate");
         const rack::ProcessArgs args{};
         smokeMorph(args);
         smokeFilter(args);
@@ -672,8 +735,9 @@ int main() {
         smokeChance(args);
         smokeDual(args);
         smokeSlew(args);
+        smokeQuantizer(args);
         regressionDeferredHostResets(args);
-        std::cout << "PASS: 10 HEADLESS wrapper compile/process/port/reset smokes "
+        std::cout << "PASS: 11 HEADLESS wrapper compile/process/port/reset smokes "
                      "and four-scene Macro8 JSON/shim deferred reset regressions (test shim)\n";
         return 0;
     } catch (const std::exception& error) {

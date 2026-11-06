@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+import random
 import subprocess
 import sys
 import tempfile
@@ -57,6 +58,146 @@ def fixture() -> dict:
 
 
 class PatchCompareTests(unittest.TestCase):
+    def test_reordered_feedback_cycle_and_same_model_remaps_are_stable(self) -> None:
+        # Directed cycles are legal source patch topology, and saved-state
+        # fingerprints, not new canvas positions or cable array order, pair
+        # distinct instances of one model across Rack ID regeneration.
+        before = patch([
+            module(1, "ModularSynth", "MorphVCO", {1: 0.25}),
+            module(2, "Fundamental", "VCA-1", {0: 0.2}),
+            module(3, "Fundamental", "VCA-1", {0: 0.8}),
+            module(4, "ModularSynth", "StateFilter", {0: 0.3}),
+        ], [cable(10, 1, 0, 2, 1), cable(11, 2, 0, 4, 0),
+            cable(12, 4, 0, 3, 1), cable(13, 3, 0, 1, 2)])
+        remap = {1: 401, 2: 402, 3: 403, 4: 404}
+        rng = random.Random(0x5EED)
+        expected = None
+        for _ in range(48):
+            after = copy.deepcopy(before)
+            rng.shuffle(after["modules"])
+            rng.shuffle(after["cables"])
+            for entry in after["modules"]:
+                entry["id"] = remap[entry["id"]]
+                entry["pos"] = [rng.randint(-1000, 1000), rng.randint(-1000, 1000)]
+                rng.shuffle(entry["params"])
+            for wire in after["cables"]:
+                wire["id"] += 1000
+                wire["outputModuleId"] = remap[wire["outputModuleId"]]
+                wire["inputModuleId"] = remap[wire["inputModuleId"]]
+                wire["color"] = "#010101"
+            report = compare_patches(before, after)
+            self.assertFalse(report["summary"]["changed"])
+            self.assertEqual(report["summary"]["id_remaps_ignored"], 4)
+            serialized = json.dumps(report, sort_keys=True)
+            if expected is None:
+                expected = serialized
+            else:
+                self.assertEqual(serialized, expected)
+
+    def test_nested_non_json_and_cycles_fail_closed(self) -> None:
+        bad: list[object] = []
+        cycle: dict[str, object] = {}
+        cycle["self"] = cycle
+        bad.append(cycle)
+        bad.extend(({"nested": {1: "invalid JSON key"}},
+                    {"nested": {"opaque": {1, 2}}},
+                    {"nested": {"complex": 1 + 2j}},
+                    {"oversized_integer": 10**2000}))
+        for payload in bad:
+            with self.subTest(kind=str(type(payload))):
+                original = fixture()
+                original["modules"][0]["data"] = payload
+                with self.assertRaises(PatchComparisonError):
+                    compare_patches(original, fixture())
+
+        # Shared Python objects are not cycles and serialize as normal JSON.
+        shared = {"steps": [0, 7, 12]}
+        reused = fixture()
+        reused["modules"][0]["data"] = {"first": shared, "second": shared}
+        self.assertFalse(compare_patches(reused, copy.deepcopy(reused))["summary"]["changed"])
+
+    def test_extreme_nested_state_and_file_decoder_fail_without_tracebacks(self) -> None:
+        nested: object = 1
+        for _ in range(300):
+            nested = {"state": nested}
+        before = fixture()
+        before["modules"][0]["data"] = nested
+        with self.assertRaisesRegex(PatchComparisonError, "nesting depth"):
+            compare_patches(before, fixture())
+
+        script = ROOT / "tools" / "patches" / "patch_compare.py"
+        with tempfile.TemporaryDirectory() as directory:
+            p1, p2 = Path(directory) / "deep.vcv", Path(directory) / "plain.vcv"
+            huge = '[' * 1200 + '0' + ']' * 1200
+            p1.write_text('{"modules":[{"id":1,"plugin":"Cardinal",'
+                          '"model":"HostMIDI","data":' + huge + '}],"cables":[]}',
+                          encoding="utf-8")
+            p2.write_text(json.dumps(fixture()), encoding="utf-8")
+            result = subprocess.run([sys.executable, str(script), str(p1), str(p2)],
+                                    cwd=ROOT, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("ERROR:", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_generated_invalid_port_ids_and_id_collisions_fail_closed(self) -> None:
+        # The comparator does not know a third-party module's *port range*,
+        # but cable endpoints themselves must be nonnegative integer IDs.
+        rng = random.Random(0xD3ADBEEF)
+        invalid = ([], [0], {"id": 0}, "0", -1, True,
+                   float("nan"), float("inf"), 1.5, None)
+        cable_keys = ("inputId", "outputId", "inputModuleId", "outputModuleId")
+        for key in cable_keys:
+            for replacement in invalid:
+                with self.subTest(field=key, value=repr(replacement)):
+                    bad = fixture()
+                    rng.choice(bad["cables"])[key] = replacement
+                    with self.assertRaises(PatchComparisonError):
+                        compare_patches(bad, fixture())
+
+        for field in ("module", "parameter", "cable"):
+            for _ in range(16):
+                bad = fixture()
+                if field == "module":
+                    victim, duplicate = rng.sample(bad["modules"], 2)
+                    victim["id"] = duplicate["id"]
+                elif field == "parameter":
+                    entry = bad["modules"][1]["params"]
+                    entry.append(copy.deepcopy(rng.choice(entry)))
+                else:
+                    victim, duplicate = rng.sample(bad["cables"], 2)
+                    victim["id"] = duplicate["id"]
+                with self.subTest(field=field):
+                    with self.assertRaises(PatchComparisonError):
+                        compare_patches(bad, fixture())
+
+    def test_same_model_reidentification_preserves_one_real_parameter_edit(self) -> None:
+        before = patch([module(1, "Fundamental", "VCA-1", {0: 0.2}),
+                        module(2, "Fundamental", "VCA-1", {0: 0.8}),
+                        module(3, "Cardinal", "HostAudio2")],
+                       [cable(10, 1, 0, 3, 0), cable(11, 2, 0, 3, 1)])
+        rng = random.Random(0x600D)
+        for _ in range(48):
+            after = copy.deepcopy(before)
+            remap = {1: rng.randrange(100, 100000),
+                     2: rng.randrange(100000, 200000),
+                     3: rng.randrange(200000, 300000)}
+            for mod in after["modules"]:
+                if mod["id"] == 2:
+                    mod["params"][0]["value"] = 0.75
+                mod["id"] = remap[mod["id"]]
+            for wire in after["cables"]:
+                wire["outputModuleId"] = remap[wire["outputModuleId"]]
+                wire["inputModuleId"] = remap[wire["inputModuleId"]]
+            rng.shuffle(after["modules"])
+            rng.shuffle(after["cables"])
+            report = compare_patches(before, after)
+            self.assertEqual(report["summary"]["parameters_changed"], 1)
+            self.assertEqual(report["summary"]["modules_added"], 0)
+            self.assertEqual(report["summary"]["modules_removed"], 0)
+            self.assertEqual(report["summary"]["cables_added"], 0)
+            self.assertEqual(report["summary"]["cables_removed"], 0)
+            self.assertTrue(report["summary"]["changed"])
+
     def test_array_order_layout_cable_id_and_color_do_not_change_semantics(self) -> None:
         before = fixture()
         after = copy.deepcopy(before)

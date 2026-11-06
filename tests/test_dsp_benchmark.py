@@ -6,6 +6,7 @@ import json
 import math
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,9 +14,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "tools/dsp-bench/main.cpp"
+COMPARE = ROOT / "tools/dsp-bench/compare.py"
 ENGINE_NAMES = {
     "MorphVCO", "StateFilter", "FMVoice", "StereoEcho",
-    "FoldDrive", "ClockedLFO", "ChanceHold",
+    "FoldDrive", "ClockedLFO", "ChanceHold", "SlewGlide",
 }
 
 
@@ -54,7 +56,7 @@ class DSPBenchmarkTests(unittest.TestCase):
         )
 
     def assert_valid_rows(self, rows, frames: int) -> None:
-        self.assertEqual(len(rows), 42)
+        self.assertEqual(len(rows), 48)
         self.assertEqual({row["engine"] for row in rows}, ENGINE_NAMES)
         self.assertEqual({int(row["voices"]) for row in rows}, {1, 8, 16})
         self.assertEqual({int(row["sample_rate_hz"]) for row in rows}, {48000, 96000})
@@ -101,7 +103,7 @@ class DSPBenchmarkTests(unittest.TestCase):
                     for row in json.loads(first.stdout)}
             right = {(row["engine"], row["voices"], row["sample_rate_hz"]): row
                      for row in json.loads(second.stdout)}
-            for engine in ("FoldDrive", "ClockedLFO", "ChanceHold"):
+            for engine in ("FoldDrive", "ClockedLFO", "ChanceHold", "SlewGlide"):
                 for voices in (1, 8, 16):
                     for rate in (48000, 96000):
                         key = (engine, voices, rate)
@@ -110,6 +112,32 @@ class DSPBenchmarkTests(unittest.TestCase):
                                          right[key]["mean_output_energy"])
                         self.assertEqual(left[key]["cpp_new_calls"], 0)
                         self.assertGreater(left[key]["mean_output_energy"], 0.0)
+
+    def test_slew_glide_directional_cv_stimulus_and_voice_scaling(self) -> None:
+        # The alternating bipolar targets and changing rise/fall CV are driven
+        # in the timed loop. Long enough to cross multiple target/control
+        # transitions at both rates; different polyphony exercises independent
+        # voice states, not a single engine replayed N times.
+        for profile in self.binaries:
+            result = self.invoke(profile, "--frames", "4096", "--repeats", "2", "--json")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = [row for row in json.loads(result.stdout)
+                    if row["engine"] == "SlewGlide"]
+            self.assertEqual(len(rows), 6)
+            for rate in (48000, 96000):
+                by_voice = {row["voices"]: row for row in rows
+                            if row["sample_rate_hz"] == rate}
+                self.assertEqual(set(by_voice), {1, 8, 16})
+                for voices, row in by_voice.items():
+                    with self.subTest(profile=profile, rate=rate, voices=voices):
+                        self.assertEqual(row["cpp_new_calls"], 0)
+                        self.assertEqual(row["repetitions"], 2)
+                        self.assertGreater(row["prepared_cpp_new_bytes"], 0)
+                        self.assertGreater(row["mean_output_energy"], 0)
+                        self.assertEqual(row["prepared_bytes_hint"],
+                                         voices * by_voice[1]["prepared_bytes_hint"])
+                self.assertNotEqual(by_voice[1]["mean_output_energy"],
+                                    by_voice[16]["mean_output_energy"])
 
     def test_cpp11_debug_and_production_csv(self) -> None:
         for profile in self.binaries:
@@ -148,6 +176,24 @@ class DSPBenchmarkTests(unittest.TestCase):
         # For three samples nearest-rank p90 selects the maximum observation.
         self.assertTrue(all(row["p90_elapsed_ms"] == row["max_elapsed_ms"]
                             for row in rows))
+
+    def test_actual_48_scenario_capture_passes_strict_comparator(self) -> None:
+        capture = self.invoke("production", "--frames", "2048", "--repeats", "2", "--json")
+        self.assertEqual(capture.returncode, 0, capture.stderr)
+        with tempfile.TemporaryDirectory(prefix="modular-bench-profile-") as temp:
+            first = Path(temp) / "first.json"
+            second = Path(temp) / "second.json"
+            first.write_text(capture.stdout, encoding="utf-8")
+            second.write_text(capture.stdout, encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(COMPARE), str(first), str(second), "--json"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["scenario_profile"], "extended-48")
+            self.assertEqual(len(report["scenarios"]), 48)
+            self.assertAlmostEqual(report["equal_weight_geometric_speedup"], 1.0)
 
     def test_cli_rejects_invalid_frames(self) -> None:
         for arguments in (

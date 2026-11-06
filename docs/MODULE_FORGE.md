@@ -58,9 +58,13 @@ checked under C++17). Generation alone does not establish host compatibility:
   envelope with polyphonic gate input and 0–10 V output. Four panel knobs set
   attack, decay, sustain and release; A/D/R range from 1 ms to 20 s,
   sustain from 0 to 100%. Hysteresis treats gate ≥1 V as on and gate ≤0.1 V
-  as off. Retriggered attack continues from the current level, while release
-  captures its linear slope at gate fall; zero-input output is one silent
-  channel. Voice retirement clears stale state on polyphony contraction.
+  as off. Retriggered attack continues from the current level. Each gate fall
+  captures the current level and release duration; its countdown advances in
+  **elapsed seconds**, so changing the host sample rate mid-release cannot
+  compress or extend that release, and changing the release knob does not
+  retroactively retime it. Stage accumulators use double precision to avoid
+  audible/temporal drift across 20-second ramps at 384 kHz. Zero-input output
+  is one silent channel; voice retirement clears stale state on contraction.
   These are sample-rate-aware **linear** envelope stages—not exponential
   emulation, analog accuracy, or evidence of audio quality inside a DAW.
 - **Audio-thread-safe reset requests:** all generated oscillator, effect and ADSR

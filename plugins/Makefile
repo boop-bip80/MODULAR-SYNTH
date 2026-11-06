@@ -233,6 +233,7 @@ PLUGIN_FILES += ModularSynth/src/FMVoice.cpp
 PLUGIN_FILES += ModularSynth/src/ChanceHold.cpp
 PLUGIN_FILES += ModularSynth/src/DualVCA.cpp
 PLUGIN_FILES += ModularSynth/src/SlewGlide.cpp
+PLUGIN_FILES += ModularSynth/src/ScaleQuantizer.cpp
 
 # --------------------------------------------------------------
 # Cardinal (built-in)
