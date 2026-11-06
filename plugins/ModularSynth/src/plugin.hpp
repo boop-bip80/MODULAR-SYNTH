@@ -20,4 +20,7 @@ extern Model* modelFMVoice;
 extern Model* modelChanceHold;
 extern Model* modelDualVCA;
 extern Model* modelSlewGlide;
-extern Model* modelScaleQuantizer;
+// Globally unique: the inherited AmalgamatedHarmonics collection also exports
+// modelScaleQuantizer. Keep this C++ symbol distinct while preserving the
+// public Rack model slug "ScaleQuantizer" in saved patches.
+extern Model* modelModularSynthScaleQuantizer;

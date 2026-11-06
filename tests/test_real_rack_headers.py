@@ -210,6 +210,17 @@ class RealRackHeaderCheckTests(unittest.TestCase):
         # avoiding a link-smoke that succeeds while the host never registers it.
         real_rack.check_registration_contract()
 
+    def test_quantizer_link_symbol_is_unique_without_changing_saved_patch_slug(self) -> None:
+        self.assertEqual(real_rack.model_symbol("ScaleQuantizer"),
+                         "modelModularSynthScaleQuantizer")
+        real_rack.validate_linked_model_symbols(
+            "00000000 D modelModularSynthScaleQuantizer\n", "",
+            ("ScaleQuantizer",))
+        with self.assertRaisesRegex(real_rack.PreflightError, "Missing or duplicate"):
+            real_rack.validate_linked_model_symbols(
+                "00000000 D modelScaleQuantizer\n", "",
+                ("ScaleQuantizer",))
+
     def test_link_symbol_gate_rejects_missing_duplicate_and_undefined_models(self) -> None:
         modules = ("MorphVCO", "FMVoice")
         good = "00000000 D modelMorphVCO\n00000008 D modelFMVoice\n"

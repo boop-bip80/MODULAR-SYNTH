@@ -156,5 +156,5 @@ struct ModularSynthScaleQuantizerWidget : ModuleWidget {
 };
 #endif
 
-Model* modelScaleQuantizer = createModel<ModularSynthScaleQuantizer,
+Model* modelModularSynthScaleQuantizer = createModel<ModularSynthScaleQuantizer,
     ModularSynthScaleQuantizerWidget>("ScaleQuantizer");

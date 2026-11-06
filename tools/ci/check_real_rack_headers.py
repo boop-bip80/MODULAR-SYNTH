@@ -179,6 +179,18 @@ def module_sources(source_dir: Path = MODULE_DIR, modules: tuple[str, ...] = MOD
     return paths
 
 
+def model_symbol(module: str) -> str:
+    """Strong exported Model* symbol for an original Rack slug.
+
+    Model slugs are namespaced by plugin; global C++ symbols are not. Inherited
+    AmalgamatedHarmonics also exports modelScaleQuantizer, so the first-party
+    pointer must have a distinct identifier despite preserving the patch slug.
+    """
+    if module == "ScaleQuantizer":
+        return "modelModularSynthScaleQuantizer"
+    return f"model{module}"
+
+
 def validate_registration_contract(
     manifest: dict, makefile: str, header: str, loader: str,
     modules: tuple[str, ...] = MODULES,
@@ -208,7 +220,7 @@ def validate_registration_contract(
         r"(model[A-Za-z][A-Za-z0-9]*)[ \t]*;",
         header,
     )
-    expected_symbols = [f"model{module}" for module in modules]
+    expected_symbols = [model_symbol(module) for module in modules]
     if collections.Counter(declarations) != collections.Counter(expected_symbols):
         raise PreflightError("First-party model header declarations mismatch")
 
@@ -257,7 +269,7 @@ def validate_linked_model_symbols(
         fields[-1] for line in undefined_output.splitlines()
         if (fields := line.split())
     }
-    expected = {f"model{module}" for module in modules}
+    expected = {model_symbol(module) for module in modules}
     invalid = {symbol: defined[symbol] for symbol in expected if defined[symbol] != 1}
     if invalid:
         raise PreflightError(f"Missing or duplicate linked first-party model definitions: {invalid!r}")
